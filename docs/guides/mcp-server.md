@@ -1,3 +1,10 @@
+---
+title: MCP server
+parent: Guides
+nav_order: 5
+description: "Use Valem as the structured-state backend for an agent session over MCP."
+---
+
 # MCP server
 
 `valem-mcp` exposes Valem over the [Model Context Protocol](https://modelcontextprotocol.io)
@@ -9,7 +16,7 @@ and this server is the doorway to it.
 
 | | |
 |---|---|
-| Module | [`valem-mcp`](../../valem-mcp) |
+| Module | [`valem-mcp`](https://github.com/vlad-public-code/org.json-kula.valem/blob/main/valem-mcp) |
 | Transport | MCP over **stdio** — newline-delimited JSON-RPC 2.0 |
 | Runtime deps | `valem-service` + `valem-cli-common` + `jackson-databind` (no Spring, no MCP SDK) |
 | Storage | in-memory for the process lifetime by default; durable/shared with `--url` (see [Modes](#modes-embedded-vs-remote)) |

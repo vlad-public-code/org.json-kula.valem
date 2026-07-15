@@ -9,7 +9,8 @@ constraints, and effects react live.
 
 ## Documentation
 
-Full docs live under [`docs/`](docs/README.md) — an audience-keyed index. Canonical references
+Full docs live under [`docs/`](docs/README.md) — a task-keyed index, also published as a
+[documentation site](https://vlad-public-code.github.io/org.json-kula.valem/). Canonical references
 (this README is a quickstart; the detail lives in these docs and is deliberately not duplicated here):
 
 - [ModelSpec format](docs/reference/model-spec-format.md) — the spec format, single source of truth
@@ -17,7 +18,7 @@ Full docs live under [`docs/`](docs/README.md) — an audience-keyed index. Cano
 - [Configuration](docs/reference/configuration.md) — every `valem.*` property
 - [Security model](docs/reference/security-model.md) — auth, effect egress/SSRF, limits
 - [Architecture](docs/architecture/overview.md) — component map, data flow, design decisions
-- [Third-party libraries](docs/README.md#third-party-libraries) — what Valem builds on (Apache-2.0)
+- [Third-party libraries](docs/libraries.md) — what Valem builds on (Apache-2.0)
 
 ## Prerequisites
 

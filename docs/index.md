@@ -54,8 +54,17 @@ ModelSpec, then mutate fields and see derivations, constraints, and effects reac
 | Run the REST / WebSocket backend | [Running the API]({% link running-the-api.md %}) |
 | Drive a model from an AI agent | [Running the MCP server]({% link running-the-mcp-server.md %}) |
 | Understand the spec format | [Model spec]({% link model-spec.md %}) |
+| Start from a working example | [Examples gallery]({% link guides/examples-gallery.md %}) |
+| Look up an endpoint or property | [API reference]({% link reference/api-reference.md %}) · [Configuration]({% link reference/configuration.md %}) |
+| See how it works inside | [Architecture]({% link architecture/index.md %}) |
 | See what Valem is built on | [Third-party libraries]({% link libraries.md %}) |
 
 ---
 
 **Requirements:** Java 21+ · Maven 3.9+ · Node.js 20+ (for the UI only). Licensed under Apache-2.0.
+
+## See also
+- [Valem sandbox](https://valem.onrender.com/)
+- [Valem source code](https://github.com/vlad-public-code/org.json-kula.valem)
+- [tracked-json](https://vlad-public-code.github.io/org.json-kula.tracked-json/) — Jackson JsonNode wrapper that tracks each node's location (JsonPointer) and document root through every navigation — get, path, at, parent(), and JSONPath (RFC 9535). Includes JSON Patch (RFC 6902).
+- [jsonata-jvm-compiler](https://vlad-public-code.github.io/org.json-kula.jsonata-jvm-compiler/) — A Java library that compiles [JSONata](https://jsonata.org) expressions into native Java classes at runtime

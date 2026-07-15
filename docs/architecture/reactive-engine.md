@@ -1,3 +1,10 @@
+---
+title: Reactive engine
+parent: Architecture
+nav_order: 2
+description: "Dependency graph, reactive algorithm, and state-layer internals."
+---
+
 # Reactive Engine — Internals
 
 How the runtime turns a compiled model + a mutation into settled, derived, constraint-checked

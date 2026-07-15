@@ -1,3 +1,10 @@
+---
+title: Composition & branching
+parent: Guides
+nav_order: 6
+description: "Links between models, branching from templates, and promotion."
+---
+
 # Composition & Branching
 
 How models reference each other, how a model is branched from a template, how effects inherited

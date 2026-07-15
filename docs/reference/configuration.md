@@ -1,3 +1,10 @@
+---
+title: Configuration
+parent: Reference
+nav_order: 3
+description: "Single source of truth for every valem.* property."
+---
+
 # Configuration Reference
 
 Single source of truth for every `valem.*` property. Other docs link here rather than

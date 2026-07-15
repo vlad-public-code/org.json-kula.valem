@@ -1,3 +1,10 @@
+---
+title: Generating specs with an LLM
+parent: Guides
+nav_order: 3
+description: "Have an LLM compile a plain-text domain description into a runnable ModelSpec."
+---
+
 # Generating Specs with an LLM
 
 Valem can have an LLM compile a plain-text domain description into a runnable `ModelSpec`,

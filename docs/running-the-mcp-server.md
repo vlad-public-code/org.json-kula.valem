@@ -1,6 +1,7 @@
 ---
 title: Running the MCP server
 nav_order: 4
+description: "Expose Valem over the Model Context Protocol so an AI agent can create, mutate, and verify models."
 ---
 
 # Running the MCP server
@@ -73,3 +74,6 @@ the console); durable, shared, multi-tenant state is the REST path — see
 
 Because the pure core is deterministic and side-effect-free, the agent can dry-run freely without
 touching the outside world.
+
+For the full tool-by-tool reference and workflow patterns, see the
+[MCP server guide]({% link guides/mcp-server.md %}).

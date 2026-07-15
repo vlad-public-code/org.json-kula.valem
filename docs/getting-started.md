@@ -1,6 +1,7 @@
 ---
 title: Use Valem in your project
 nav_order: 2
+description: "Embed the pure-Java engine, wrap it in your own Spring app, or talk to a running server from Java or TypeScript."
 ---
 
 # Using Valem in your project
@@ -18,10 +19,27 @@ own Spring app, or talk to a running server from Java or TypeScript.
 ## Prerequisites
 
 - **Java 21+** and **Maven 3.9+**
-- Two snapshot dependencies must be in your local Maven repo (`~/.m2`):
-  - `io.github.vlad-public-code:tracked-json:1.0.0`
-  - `io.github.vlad-public-code:jsonata-jvm-compiler:1.0.3`
 - **Node.js 20+ / npm 9+** — only if you build the management UI.
+
+## Install the artifacts
+
+The artifacts are not yet published to Maven Central — install them into your local Maven repo
+(`~/.m2`) by building each repository once, in this order (the two JSON libraries are dependencies
+of Valem):
+
+```bash
+git clone https://github.com/vlad-public-code/org.json-kula.tracked-json.git
+mvn -f org.json-kula.tracked-json install -DskipTests
+
+git clone https://github.com/vlad-public-code/org.json-kula.jsonata-jvm-compiler.git
+mvn -f org.json-kula.jsonata-jvm-compiler install -DskipTests
+
+git clone https://github.com/vlad-public-code/org.json-kula.valem.git
+mvn -f org.json-kula.valem install -DskipTests -Dskip.frontend=true
+```
+
+(Drop `-DskipTests` to run the test suites; drop `-Dskip.frontend=true` to also build the
+management UI, which needs Node.js.)
 
 ## Pick the module you need
 
@@ -46,12 +64,12 @@ Add the core and service modules:
 <dependency>
   <groupId>io.github.vlad-public-code</groupId>
   <artifactId>valem-core</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.0-SNAPSHOT</version>
 </dependency>
 <dependency>
   <groupId>io.github.vlad-public-code</groupId>
   <artifactId>valem-service</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.0-SNAPSHOT</version>
 </dependency>
 ```
 
@@ -79,7 +97,7 @@ See [Model spec]({% link model-spec.md %}) for the full spec format.
 <dependency>
   <groupId>io.github.vlad-public-code</groupId>
   <artifactId>valem-client</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.0-SNAPSHOT</version>
 </dependency>
 ```
 
@@ -126,3 +144,4 @@ echo '{"cmd":"list-models"}' | java -jar valem-console/target/valem-console-1.0.
 - [Running the API]({% link running-the-api.md %}) — REST + WebSocket + LLM generation
 - [Running the MCP server]({% link running-the-mcp-server.md %}) — drive models from an AI agent
 - [Model spec]({% link model-spec.md %}) — the declarative format Valem compiles
+- [Examples gallery]({% link guides/examples-gallery.md %}) — ready-to-run specs to start from

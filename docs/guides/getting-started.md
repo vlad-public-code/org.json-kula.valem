@@ -1,3 +1,10 @@
+---
+title: Getting started
+parent: Guides
+nav_order: 1
+description: "Run Valem three ways: the console, the backend API, and the developer UI."
+---
+
 # Getting Started
 
 Run Valem three ways: the console (fastest, no server), the backend API, and the developer
@@ -41,7 +48,7 @@ mvn spring-boot:run -pl valem-web      # REST API + management UI at http://loca
 
 `valem-web` also builds and serves the management SPA (`valem-ui`) at `/`. Add
 `-Dskip.frontend=true` for a REST-only, backend-fast build. (For live UI development with hot reload,
-run the SPA separately — see [Running the developer UI](../../README.md#running-the-developer-ui).)
+run the SPA separately — see [Running the developer UI](https://github.com/vlad-public-code/org.json-kula.valem/blob/main/README.md#running-the-developer-ui).)
 
 Storage defaults to in-memory (lost on restart). Persistence is à-la-carte: `memory` and `filesystem`
 work out of the box, and every other backend is a separate adapter jar discovered at runtime. Build a

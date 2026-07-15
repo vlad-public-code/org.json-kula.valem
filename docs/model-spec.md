@@ -1,6 +1,7 @@
 ---
 title: Model spec
 nav_order: 5
+description: "The declarative JSON document — usually LLM-generated — that Valem compiles into a live reactive model."
 ---
 
 # The ModelSpec format
@@ -65,6 +66,18 @@ Two distinct dialects, and Valem keeps them separate:
 
 Every `mutate` runs a fixed pipeline under a per-model lock:
 
+```mermaid
+flowchart LR
+    A["Validate<br>(schema, 422)"] --> B["Apply<br>mutations"]
+    B --> C["Default<br>new containers"]
+    C --> D["Propagate<br>dirtiness"]
+    D --> E["Derive<br>(topological)"]
+    E --> F["Meta-derive"]
+    F --> G{"Constraints"}
+    G -- "rollback" --> H["Abort +<br>restore snapshot"]
+    G -- "ok / flag" --> I["Dispatch effects,<br>commit, broadcast"]
+```
+
 1. **Validate** each mutation against the effective schema (HTTP 422 before any transaction).
 2. **Apply** the mutations to the base document.
 3. **Default** newly-created containers (`defaultValues`).
@@ -84,5 +97,4 @@ rejected (422).
 ---
 
 The full, authoritative field-by-field reference (including the view component catalog and every
-effect option) ships in the repository under
-[`docs/reference/model-spec-format.md`]({{ site.gh_repo }}/blob/main/docs/reference/model-spec-format.md).
+effect option) is the [Model spec format]({% link reference/model-spec-format.md %}) reference.

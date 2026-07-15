@@ -1,7 +1,14 @@
+---
+title: Examples gallery
+parent: Guides
+nav_order: 2
+description: "Ready-to-run ModelSpec documents that double as demos and starting points."
+---
+
 # Example gallery
 
 Ready-to-run `ModelSpec` documents that double as demos, integration fixtures, and starting points
-for your own models. The canonical copies live in [`valem-ui/src/examples/`](../../valem-ui/src/examples/)
+for your own models. The canonical copies live in [`valem-ui/src/examples/`](https://github.com/vlad-public-code/org.json-kula.valem/blob/main/valem-ui/src/examples/)
 and on the console test classpath. Load one into a running backend with:
 
 ```bash
@@ -36,7 +43,7 @@ project. It exercises every pillar of the runtime on one realistic domain:
 expected premiums are hand-derived from the rate table** — an *independent oracle*, not assertions
 the LLM wrote about its own formula. The suite runs through the full
 `ModelService` reactive pipeline in
-[`InsuranceQuoteGoldenTest`](../../valem-console/src/test/java/org/json_kula/valem/console/InsuranceQuoteGoldenTest.java),
+[`InsuranceQuoteGoldenTest`](https://github.com/vlad-public-code/org.json-kula.valem/blob/main/valem-console/src/test/java/org/json_kula/valem/console/InsuranceQuoteGoldenTest.java),
 which is the concrete shape of the **draft → review → certify → promote** governance lifecycle: a
 model is not trusted until an independent golden suite passes.
 
@@ -51,7 +58,7 @@ whose federal-poverty-line threshold scales with household size (constants), who
 ratio drives an eligibility tier and monthly benefit (chained derivations), with a positive-household
 rollback invariant plus an over-max **soft flag**, an external income-verification `server` effect, a
 caller notification, and a submission-expiry `timer`. Its golden suite
-([`BenefitsEligibilityGoldenTest`](../../valem-console/src/test/java/org/json_kula/valem/console/BenefitsEligibilityGoldenTest.java))
+([`BenefitsEligibilityGoldenTest`](https://github.com/vlad-public-code/org.json-kula.valem/blob/main/valem-console/src/test/java/org/json_kula/valem/console/BenefitsEligibilityGoldenTest.java))
 is hand-derived from the poverty table — e.g. a household of 4 earning $45,000 → poverty line
 `15000 + 3×5000 = 30000`, ratio `1.5` ⟹ **partial tier, $300/mo**.
 
@@ -75,7 +82,7 @@ and household-driven threshold scaling.
 Each spec ships its own `tests`; the console module runs them through the real pipeline in
 `ConsoleExamplesIntegrationTest`, so the gallery is also a regression suite. `world-clock.json`
 additionally has its own end-to-end test,
-[`WorldClockExampleTest`](../../valem-api/src/test/java/org/json_kula/valem/api/effects/WorldClockExampleTest.java),
+[`WorldClockExampleTest`](https://github.com/vlad-public-code/org.json-kula.valem/blob/main/valem-api/src/test/java/org/json_kula/valem/api/effects/WorldClockExampleTest.java),
 which drives it through the real REST API — creating the model, evaluating its `viewDefinition` form via
 `GET /models/{id}/view`, picking a country as a form mutation would, and confirming both the initial
 time fetch and the recurring re-fetch driven by the timer (the http lookup re-firing each tick).

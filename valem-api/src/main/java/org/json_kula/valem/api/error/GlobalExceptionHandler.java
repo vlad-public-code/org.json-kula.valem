@@ -177,6 +177,21 @@ public class GlobalExceptionHandler {
         return ProblemDetail.forStatusAndDetail(ex.getStatusCode(), ex.getReason());
     }
 
+    @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
+    public ProblemDetail handleNoResourceFound(
+            org.springframework.web.servlet.resource.NoResourceFoundException ex) {
+        // Unknown path / static resource — a client-side 404, not a server error.
+        log.debug("No resource: {}", ex.getResourcePath());
+        return ProblemDetail.forStatusAndDetail(NOT_FOUND, "Not found");
+    }
+
+    @ExceptionHandler(org.springframework.web.servlet.NoHandlerFoundException.class)
+    public ProblemDetail handleNoHandlerFound(
+            org.springframework.web.servlet.NoHandlerFoundException ex) {
+        log.debug("No handler: {} {}", ex.getHttpMethod(), ex.getRequestURL());
+        return ProblemDetail.forStatusAndDetail(NOT_FOUND, "Not found");
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ProblemDetail handleIllegalArgument(IllegalArgumentException ex) {
         log.warn("Bad request: {}", ex.getMessage());

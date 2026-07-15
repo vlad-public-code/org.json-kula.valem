@@ -1,3 +1,10 @@
+---
+title: LLM prompts
+parent: Reference
+nav_order: 6
+description: "Exactly what is sent to the LLM on every spec-generation call."
+---
+
 # Valem — AI / LLM Prompt Reference
 
 This document describes what is sent to the LLM on every call.

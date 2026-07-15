@@ -1,3 +1,10 @@
+---
+title: Security model
+parent: Reference
+nav_order: 5
+description: "Authentication, authorization, and network-egress surfaces — and their limits."
+---
+
 # Security Model
 
 How authentication, authorization, and the network-egress surfaces work in the as-built system —

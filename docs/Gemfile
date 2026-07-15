@@ -2,6 +2,8 @@ source "https://rubygems.org"
 
 gem "jekyll", "~> 4.3"
 gem "just-the-docs", "~> 0.10"
+gem "jekyll-sitemap", "~> 1.4"
+gem "jekyll-relative-links", "~> 0.7"
 
 # Needed to serve the site locally on Ruby 3.x (webrick left stdlib in 3.0).
 gem "webrick", "~> 1.9"

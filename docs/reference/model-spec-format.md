@@ -1,3 +1,10 @@
+---
+title: Model spec format
+parent: Reference
+nav_order: 1
+description: "The authoritative field-by-field ModelSpec reference."
+---
+
 # Valem Model Spec Format
 
 A **ModelSpec** is the declarative JSON document that describes a Valem model. It is

@@ -1,3 +1,10 @@
+---
+title: Deployment & operations
+parent: Guides
+nav_order: 7
+description: "Running Valem durably and safely: run modes, persistence, blobs."
+---
+
 # Deployment & Operations
 
 Running Valem durably and safely. Full property list:

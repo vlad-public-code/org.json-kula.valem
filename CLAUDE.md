@@ -238,7 +238,7 @@ property tables here or elsewhere. Operational notes an agent commonly needs:
 
 ## Reference documentation
 
-Documentation is organized under `docs/` — start at [docs/README.md](docs/README.md) (audience-keyed index).
+Documentation is organized under `docs/` — start at [docs/README.md](docs/README.md) (task-keyed index; also the Jekyll source of the published docs site).
 Conventions: `reference/` + `architecture/` = as-built. One topic, one home — link, don't duplicate.
 (Design proposals, ADRs, audits, and business docs live in the private `Valem-internal` repo.)
 

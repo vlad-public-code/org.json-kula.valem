@@ -10,6 +10,15 @@ baseurl: /org.json-kula.valem
 
 theme: just-the-docs
 
+plugins:
+  # sitemap.xml for Search Console; relative .md links (used throughout docs/) become page links.
+  - jekyll-sitemap
+  - jekyll-relative-links
+
+relative_links:
+  enabled: true
+  collections: false
+
 # --- Project-wide links (referenced from pages as {{ site.<name> }}) ---------
 gh_repo: https://github.com/vlad-public-code/org.json-kula.valem
 # The hosted public sandbox on Render.
@@ -21,6 +30,18 @@ heading_anchors: true
 back_to_top: true
 back_to_top_text: "Back to top"
 color_scheme: light
+
+# "Edit this page on GitHub" link on every page.
+gh_edit_link: true
+gh_edit_link_text: "Edit this page on GitHub"
+gh_edit_repository: https://github.com/vlad-public-code/org.json-kula.valem
+gh_edit_branch: main
+gh_edit_source: docs
+gh_edit_view_mode: edit
+
+# Render ```mermaid fences (loaded from jsDelivr by the theme).
+mermaid:
+  version: "10.9.1"
 
 # Callout boxes used with {: .note } / {: .warning } in the pages.
 callouts:

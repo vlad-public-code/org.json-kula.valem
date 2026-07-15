@@ -1,6 +1,7 @@
 ---
 title: Running the API
 nav_order: 3
+description: "Run the Spring Boot backend: REST + WebSocket, LLM spec generation, durable storage, and the management UI."
 ---
 
 # Running the API
@@ -71,6 +72,9 @@ mvn -Pweb-postgres -pl valem-web package
 java -jar valem-web/target/valem-web-1.0.0-SNAPSHOT.jar --valem.storage.type=postgres
 ```
 
+Every `valem.*` property is documented in the [Configuration reference]({% link reference/configuration.md %});
+for hardening and run modes see [Deployment & operations]({% link guides/deployment-and-operations.md %}).
+
 ## REST API at a glance
 
 | Method | Path | Description |
@@ -90,6 +94,9 @@ java -jar valem-web/target/valem-web-1.0.0-SNAPSHOT.jar --valem.storage.type=pos
 | `POST` | `/blobs` · `GET /blobs/{id}` | Content-addressed binary storage |
 | `WS` | `/models/{id}/subscribe` | Push a `ChangeEvent` after each mutation |
 | `POST` | `/models/generate/preview` · `/generate` | Build a prompt / generate a validated spec |
+
+Full request/response shapes, the WebSocket protocol, and the console command reference are in the
+[API reference]({% link reference/api-reference.md %}).
 
 ## Example: create and mutate
 

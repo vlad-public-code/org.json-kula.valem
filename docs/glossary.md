@@ -1,3 +1,9 @@
+---
+title: Glossary
+nav_order: 10
+description: "Canonical definitions of the core Valem terms."
+---
+
 # Glossary
 
 Canonical definitions of the core Valem terms. Other docs link here instead of redefining

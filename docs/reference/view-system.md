@@ -1,3 +1,10 @@
+---
+title: View system
+parent: Reference
+nav_order: 4
+description: "The view evaluation engine, ViewDefinition format, and React renderer."
+---
+
 # Pluggable Model Web Renderer — View System Reference
 
 > This describes the **shipped, as-built** view system: the `valem-view` evaluation engine, the

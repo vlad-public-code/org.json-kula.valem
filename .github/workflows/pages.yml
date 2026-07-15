@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "site/**"
+      - "docs/**"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -34,11 +34,16 @@ jobs:
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: "3.3"
-          bundler-cache: true
-          working-directory: site
+
+      # No Gemfile.lock is committed, so resolve fresh each run (bundler-cache
+      # requires a lockfile). Commit docs/Gemfile.lock and switch back to
+      # bundler-cache: true for cached, reproducible builds.
+      - name: Install gems
+        working-directory: docs
+        run: bundle install
 
       - name: Build with Jekyll
-        working-directory: site
+        working-directory: docs
         env:
           JEKYLL_ENV: production
         # base_path from configure-pages keeps links correct for a project page.
@@ -47,7 +52,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: site/_site
+          path: docs/_site
 
   deploy:
     needs: build

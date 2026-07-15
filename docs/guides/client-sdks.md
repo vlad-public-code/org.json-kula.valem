@@ -1,3 +1,10 @@
+---
+title: Client SDKs
+parent: Guides
+nav_order: 4
+description: "Typed TypeScript and Java clients: REST, reconnecting subscribe, audit."
+---
+
 # Client SDKs
 
 Typed clients so integrators don't hand-roll HTTP + JSON-Patch + WebSocket-reconnect plumbing per
@@ -6,8 +13,8 @@ subscription + the durable audit trail — and both throw a typed error carrying
 
 | SDK | Location | Runtime deps | Tests |
 |---|---|---|---|
-| **TypeScript / JavaScript** (isomorphic) | [`clients/valem-sdk-ts`](../../clients/valem-sdk-ts) | none (uses global `fetch`; `WebSocket` injectable) | `node --test` (mock HTTP server + fake WebSocket) |
-| **Java** | [`valem-client`](../../valem-client) module | `jackson-databind` + JDK `java.net.http` | JUnit (JDK `HttpServer` + fake connector) |
+| **TypeScript / JavaScript** (isomorphic) | [`clients/valem-sdk-ts`](https://github.com/vlad-public-code/org.json-kula.valem/blob/main/clients/valem-sdk-ts) | none (uses global `fetch`; `WebSocket` injectable) | `node --test` (mock HTTP server + fake WebSocket) |
+| **Java** | [`valem-client`](https://github.com/vlad-public-code/org.json-kula.valem/blob/main/valem-client) module | `jackson-databind` + JDK `java.net.http` | JUnit (JDK `HttpServer` + fake connector) |
 
 ## Installation
 
@@ -58,7 +65,7 @@ const sub = client.subscribe('insurance-quote', { onEvent: e => console.log(e.de
 ```
 
 (In Node, `npm install ws` and pass `webSocketCtor: WebSocket`.) See the
-[package README](../../clients/valem-sdk-ts/README.md).
+[package README](https://github.com/vlad-public-code/org.json-kula.valem/blob/main/clients/valem-sdk-ts/README.md).
 
 ## Java quick start
 
@@ -69,4 +76,4 @@ try (var client = new ValemClient("http://localhost:8080", apiKey)) {
 }
 ```
 
-See the [module README](../../valem-client/README.md).
+See the [module README](https://github.com/vlad-public-code/org.json-kula.valem/blob/main/valem-client/README.md).

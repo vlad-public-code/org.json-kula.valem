@@ -1,3 +1,10 @@
+---
+title: Overview
+parent: Architecture
+nav_order: 1
+description: "Component map, data flow, and key design decisions."
+---
+
 # Valem — Architectural Overview
 
 ## System Overview

@@ -1,3 +1,10 @@
+---
+title: API reference
+parent: Reference
+nav_order: 2
+description: "Every Valem access surface: REST, WebSocket, and the console JSON protocol."
+---
+
 # API Reference
 
 Canonical reference for every Valem access surface: REST, WebSocket, and the console
