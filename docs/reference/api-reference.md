@@ -8,6 +8,10 @@ Related: [model-spec-format.md](model-spec-format.md) (request bodies),
 [configuration.md](configuration.md) (server config),
 [security-model.md](security-model.md) (auth).
 
+> **Live OpenAPI spec.** A running `valem-web` also serves a generated OpenAPI 3 document at
+> `/v3/api-docs` and an interactive Swagger UI at `/swagger-ui.html` (springdoc; behind the API
+> key when one is configured).
+
 ---
 
 ## 1. REST endpoints
@@ -49,7 +53,7 @@ Related: [model-spec-format.md](model-spec-format.md) (request bodies),
 | `POST` | `/models/{id}/spec/evolve/ai` | Natural-language spec evolution: the LLM drafts a `SpecEvolution` from `{description}` and it's applied immediately. Returns `{version, spec}`. 503 if no LLM configured, 400 if `description` missing/blank or over 5,000 characters, 502 on LLM failure, 422 if the evolved spec is invalid. |
 | `POST` | `/models/{id}/spec/evolve/ai/stream` | SSE version of the above: streams `event: progress` frames then a terminal `event: done` frame with `{version, spec}`, or `event: error`. Body `{description}`. |
 | `GET` | `/llm/interactions` | All recorded `LlmInteractionRecord` (prompt + response) pairs. Content is redacted when `valem.llm.log.capture-content=false`. |
-| `POST` | `/admin/blobs/gc` | Mark-and-sweep unreferenced blobs (audit MEM-6). `?apply=false` (default) is a dry run reporting orphans; `?apply=true` deletes them. Only backends implementing `EnumerableBlobStore` (memory, filesystem) are swept; others report `supported:false`. `apply=true` requires a configured `valem.api.key` (403 in open mode). The mark set covers current state **and** retained history snapshots. |
+| `POST` | `/admin/blobs/gc` | Mark-and-sweep unreferenced blobs. `?apply=false` (default) is a dry run reporting orphans; `?apply=true` deletes them. Only backends implementing `EnumerableBlobStore` (memory, filesystem) are swept; others report `supported:false`. `apply=true` requires a configured `valem.api.key` (403 in open mode). The mark set covers current state **and** retained history snapshots. |
 
 ### Request / response shapes
 

@@ -9,7 +9,7 @@ LLM property see [../reference/configuration.md](../reference/configuration.md).
 
 ```bash
 # Anthropic (default)
-export ANTHROPIC_API_KEY=sk-ant-...
+export VALEM_LLM_API_KEY=sk-ant-...
 mvn spring-boot:run -pl valem-web
 
 # OpenAI
@@ -19,6 +19,9 @@ VALEM_LLM_PROVIDER=openai VALEM_LLM_MODEL=gpt-4o \
 # Ollama (local, no key)
 VALEM_LLM_PROVIDER=ollama VALEM_LLM_MODEL=llama3 mvn spring-boot:run -pl valem-web
 ```
+
+The key is always read from `valem.llm.api-key` (env `VALEM_LLM_API_KEY`) — there is no
+provider-specific fallback such as an implicit `ANTHROPIC_API_KEY` read.
 
 Supported providers: `anthropic`, `openai`, `ollama`, `openrouter`, `groq`, `mistral`, `gemini`,
 `cerebras`. Set `valem.llm.base-url` to target any OpenAI-compatible server (LM Studio,

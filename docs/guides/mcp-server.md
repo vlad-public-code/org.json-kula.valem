@@ -4,8 +4,8 @@
 so any MCP-compatible agent — Claude Code, Claude Desktop, and others — can use Valem as the
 **structured-state backend for a session**: the agent creates a model from a declarative spec,
 mutates base fields, reads the reactively-computed merged state, and traces *why* any value is what
-it is. It is the natural counterpart to the pitch's "agents have no standard way to maintain
-structured world state" — MCP is that standard way, and this server is the doorway to it.
+it is. Agents have no standard way to maintain structured world state — MCP is that standard way,
+and this server is the doorway to it.
 
 | | |
 |---|---|

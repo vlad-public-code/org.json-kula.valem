@@ -55,14 +55,33 @@ guarded I/O the operator has enabled. See [security-model.md](reference/security
 
 ---
 
+## 60-second start
+
+No server, no config — the console app runs a model straight from stdin:
+
+```bash
+mvn install -pl valem-core,valem-service -q && mvn package -pl valem-console -q
+printf '%s\n' \
+  '{"cmd":"create-model","spec":{"id":"order","version":"1.0.0","schema":{},"derivations":[{"path":"$.total","expr":"subtotal + tax"}]}}' \
+  '{"cmd":"mutate","id":"order","mutations":{"$.subtotal":100,"$.tax":8}}' \
+  '{"cmd":"get-state","id":"order"}' \
+  | java -jar valem-console/target/valem-console-1.0.0-SNAPSHOT.jar
+# → {"ok":true,"result":{"subtotal":100,"tax":8,"total":108}}   (total derived reactively)
+```
+
+From here: [guides/getting-started.md](guides/getting-started.md) for the REST API and UI.
+
+---
+
 ## Start here by audience
 
 **New user / integrator** — calling the API or driving the console:
 - [guides/getting-started.md](guides/getting-started.md) — run the console, backend, and UI
-- [guides/examples-gallery.md](guides/examples-gallery.md) — ready-to-run model specs (start with the insurance-quote wedge model)
+- [guides/examples-gallery.md](guides/examples-gallery.md) — ready-to-run model specs (start with the insurance-quote model)
 - [reference/api-reference.md](reference/api-reference.md) — REST, WebSocket, console protocol
 - [guides/client-sdks.md](guides/client-sdks.md) — typed TypeScript + Java clients (REST + reconnecting subscribe + audit)
 - [guides/mcp-server.md](guides/mcp-server.md) — drive a model from an agent session over MCP (Claude Code / Desktop)
+- [guides/composition-and-branching.md](guides/composition-and-branching.md) — links between models, branching from templates, promotion
 - [reference/model-spec-format.md](reference/model-spec-format.md) — the ModelSpec format (canonical)
 - [glossary.md](glossary.md) — core terms
 
@@ -94,6 +113,7 @@ docs/
     examples-gallery.md
     client-sdks.md
     mcp-server.md
+    composition-and-branching.md
     generating-specs-with-llm.md
     deployment-and-operations.md
 

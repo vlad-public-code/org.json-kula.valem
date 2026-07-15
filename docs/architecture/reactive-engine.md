@@ -77,7 +77,7 @@ class ModelState {
 - `getValue(path)` checks `derivedCache` first, then `baseDoc.at(JsonPointer)`.
 - `mergedDocument()` **deep-copies** `baseDoc` and splices all `derivedCache` values in — used by
   constraint and effect evaluators so they can reference derived fields. A mutation cycle now
-  performs **exactly one** full materialization (B-T1): `DerivationEvaluator.evaluateAndMerge`
+  performs **exactly one** full materialization: `DerivationEvaluator.evaluateAndMerge`
   builds one merged document on the first level with work and carries it forward, splicing each
   level's results in via `ModelState.spliceDerived` before the next level reads it (instead of
   re-deep-copying per level). It hands that same document back to `ModelRuntime.mutate`, which

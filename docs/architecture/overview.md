@@ -150,7 +150,7 @@ In-memory state container. Three layers:
 - **Derived cache** (`Map<String, JsonNode>`) — computed values keyed by `$.path`
 - **Meta cache** (`Map<String, JsonNode>`) — keyed by `$.path#property` (e.g. `$.loan.principal#maximum`)
 
-`getValue(path)` checks derived cache first, then `baseDoc.at(JsonPointer)`. `mergedDocument()` deep-copies base and splices in all derived values — used by constraint/effect evaluators. A mutation cycle materializes it **once** and carries it across derivation levels and the meta/constraint/effect phases (B-T1), so the deep-copy count is O(1) per cycle.
+`getValue(path)` checks derived cache first, then `baseDoc.at(JsonPointer)`. `mergedDocument()` deep-copies base and splices in all derived values — used by constraint/effect evaluators. A mutation cycle materializes it **once** and carries it across derivation levels and the meta/constraint/effect phases, so the deep-copy count is O(1) per cycle.
 
 Transaction model: `beginTransaction()` takes a `Snapshot`; `commit()` discards it; `rollback()` calls `restore(snapshot)`.
 
@@ -205,7 +205,7 @@ Exceptions thrown by `ModelService` (`ModelNotFoundException`, `ModelAlreadyExis
 
 **Spring Boot REST** (`ModelController`) — thin HTTP adapter over `ModelService`:
 - Delegates to the service, maps results (and domain exceptions) to `ResponseEntity`
-- After mutations: broadcasts `ChangeEvent` to WebSocket subscribers, and (when a durable backend is configured) appends the RFC 6902 mutation patch to the incremental log **inside the model lock** (F-T2)
+- After mutations: broadcasts `ChangeEvent` to WebSocket subscribers, and (when a durable backend is configured) appends the RFC 6902 mutation patch to the incremental log **inside the model lock**
 - After create: persists spec
 - After spec evolve: persists evolved spec
 - After delete: removes persisted data

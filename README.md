@@ -9,59 +9,27 @@ constraints, and effects react live.
 
 ## Documentation
 
-Full docs live under [`docs/`](docs/README.md) — an audience-keyed index. Canonical references:
-[API](docs/reference/api-reference.md) · [ModelSpec format](docs/reference/model-spec-format.md) ·
-[Configuration](docs/reference/configuration.md) · [Security model](docs/reference/security-model.md) ·
-[Architecture](docs/architecture/overview.md). This README is a quickstart; the canonical detail
-lives in those docs.
+Full docs live under [`docs/`](docs/README.md) — an audience-keyed index. Canonical references
+(this README is a quickstart; the detail lives in these docs and is deliberately not duplicated here):
 
-## Third-party libraries
-
-Valem is Apache-2.0 and stands on a small, deliberately chosen set of libraries. The pure core
-(`valem-core` / `valem-service`) depends only on Jackson plus the two JSON libraries below — no
-framework; everything else is à-la-carte, pulled in only by the module that needs it. See
-[docs/README.md](docs/README.md#third-party-libraries) for the fuller list.
-
-**Java**
-
-| Library | Version | Used for |
-|---|---|---|
-| [Jackson](https://github.com/FasterXML/jackson) | 2.21.2 | JSON tree (`JsonNode`) and (de)serialization — the substrate for all model state. |
-| [tracked-json](https://github.com/vlad-public-code/org.json-kula.tracked-json) | 1.0.0 | `JsonPointer`-tracking `JsonNode` wrapper + RFC 6902 JSON Patch + RFC 9535 JSONPath. |
-| [jsonata-jvm-compiler](https://github.com/vlad-public-code/org.json-kula.jsonata-jvm-compiler) | 1.0.3 | Compiles and evaluates the JSONata in derivations, constraints, and effects. |
-| [json-schema-validator](https://github.com/networknt/json-schema-validator) | 1.4.3 | Validates base documents and mutations against a model's JSON Schema. |
-| [Caffeine](https://github.com/ben-manes/caffeine) | — | In-memory caching on hot paths. |
-| [Spring Boot](https://spring.io/projects/spring-boot) | 3.3.5 | REST, WebSocket, actuator, and security layers (`valem-api` / `valem-web`). |
-| [springdoc-openapi](https://springdoc.org/) · [Micrometer](https://micrometer.io/) · [HikariCP](https://github.com/brettwooldridge/HikariCP) · [jsoup](https://jsoup.org/) | — | OpenAPI/Swagger UI, metrics, JDBC pooling, and LLM `web_fetch` text extraction. |
-| [PostgreSQL JDBC](https://jdbc.postgresql.org/) · [MongoDB Driver](https://www.mongodb.com/docs/drivers/java/sync/) · [Lettuce](https://lettuce.io/) · [AWS SDK v2](https://github.com/aws/aws-sdk-java-v2) | — | Optional persistence adapters, loaded only when their backend is selected. |
-| [JUnit 5](https://junit.org/junit5/) · [AssertJ](https://assertj.github.io/doc/) · [JMH](https://github.com/openjdk/jmh) | 5.11.4 / 3.26.3 / — | Tests, fluent assertions, and micro-benchmarks. |
-
-**TypeScript & React**
-
-| Library | Version | Used for |
-|---|---|---|
-| [React](https://react.dev/) + [react-dom](https://react.dev/) | 18 | The management SPA (`valem-ui`) and the `EvaluatedView` renderer (`valem-view-react`). |
-| [TypeScript](https://www.typescriptlang.org/) | 5.5 | Types across the UI, the view renderer, and the TypeScript SDK. |
-| [Vite](https://vitejs.dev/) + [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react) | 5 | Dev server and build tooling for the front-end modules. |
-| [Recharts](https://recharts.org/) | 2.15 | Chart components in the `valem-view-react` renderer. |
-| [jsonata](https://github.com/jsonata-js/jsonata) (JS) | 2.0.5 | Client-side JSONata evaluation in the view renderer. |
-| [Playwright](https://playwright.dev/) | 1.48 | End-to-end browser tests (`valem-e2e`). |
-
-The isomorphic TypeScript SDK (`clients/valem-sdk-ts`) has **zero runtime dependencies** — it uses
-only the platform `fetch` and `WebSocket`.
+- [ModelSpec format](docs/reference/model-spec-format.md) — the spec format, single source of truth
+- [API reference](docs/reference/api-reference.md) — REST, WebSocket, and console protocol
+- [Configuration](docs/reference/configuration.md) — every `valem.*` property
+- [Security model](docs/reference/security-model.md) — auth, effect egress/SSRF, limits
+- [Architecture](docs/architecture/overview.md) — component map, data flow, design decisions
+- [Third-party libraries](docs/README.md#third-party-libraries) — what Valem builds on (Apache-2.0)
 
 ## Prerequisites
 
 - Java 21+
 - Maven 3.9+
-- Node.js 20+ and npm 9+
-- Local Maven snapshot dependencies installed in `~/.m2`:
-  - `io.github.vlad-public-code:tracked-json:1.0.0`
-  - `io.github.vlad-public-code:jsonata-jvm-compiler:1.0.3`
+- Node.js 20+ and npm 9+ (UI only)
 
 ## Running the console app (no HTTP server required)
 
-The console app is the fastest way to use Valem from a script or an AI agent. It reads one JSON command per line from `stdin` and writes one JSON response per line to `stdout`. No HTTP, no browser, no server process.
+The console app is the fastest way to use Valem from a script or an AI agent. It reads one JSON
+command per line from `stdin` and writes one JSON response per line to `stdout`. No HTTP, no
+browser, no server process. All state is held in memory for the lifetime of the process.
 
 ```bash
 # Build the fat jar (first time)
@@ -75,50 +43,21 @@ java -jar valem-console/target/valem-console-1.0.0-SNAPSHOT.jar
 echo '{"cmd":"list-models"}' | java -jar valem-console/target/valem-console-1.0.0-SNAPSHOT.jar
 ```
 
-All state is held in memory for the lifetime of the process.
-
-### Console command reference
-
-Every request is a JSON object with a `"cmd"` field. Every response has `"ok": true` and a `"result"` field, or `"ok": false` and an `"error"` string.
-
-| Command | Required fields | Optional fields |
-|---|---|---|
-| `list-models` | — | — |
-| `create-model` | `spec` (full ModelSpec object) | — |
-| `get-spec` | `id` | — |
-| `get-info` | `id` | — |
-| `get-state` | `id` | `at` (ISO-8601) |
-| `get-field` | `id`, `path` (`$.`-prefixed) | — |
-| `mutate` | `id`, `mutations` (path→value map) | — |
-| `patch-mutate` | `id`, `patch` (RFC 6902 array) | — |
-| `get-history` | `id` | — |
-| `get-schema` | `id`, `path` | — |
-| `explain` | `id`, `path` | — |
-| `snapshot` | `id` | — |
-| `restore` | `id`, `snapshot` (Snapshot object) | — |
-| `evolve-spec` | `id`, `evolution` (SpecEvolution object) | — |
-| `delete-model` | `id` | — |
-| `upload-blob` | `data` (base64), `mediaType` | — |
-| `get-blob` | `blobId` | — |
-| `get-model-blob` | `id`, `blobId` | — |
-| `help` | — | — |
-| `exit` | — | — |
-
-### Console example
+Example session:
 
 ```jsonc
 // stdin
-{"cmd":"create-model","spec":{"id":"order","version":"1","schema":{},"derivations":[{"path":"$.total","expr":"subtotal + tax"}],"constraints":[],"actions":[],"metaDerivations":[],"tests":[],"initialState":{}}}
-{"cmd":"mutate","id":"order","mutations":{"subtotal":100,"tax":8}}
+{"cmd":"create-model","spec":{"id":"order","version":"1.0.0","schema":{},"derivations":[{"path":"$.total","expr":"subtotal + tax"}]}}
+{"cmd":"mutate","id":"order","mutations":{"$.subtotal":100,"$.tax":8}}
 {"cmd":"get-state","id":"order"}
 
 // stdout
 {"ok":true,"result":{"id":"order","status":"created"}}
-{"ok":true,"result":{"success":true,"mutatedPaths":["subtotal","tax"],"derivedUpdated":["$.total"],...}}
+{"ok":true,"result":{"success":true,"mutatedPaths":["$.subtotal","$.tax"],"derivedUpdated":["$.total"],...}}
 {"ok":true,"result":{"subtotal":100,"tax":8,"total":108}}
 ```
 
----
+Full command list: [console JSON protocol](docs/reference/api-reference.md#3-console-json-protocol).
 
 ## Running the backend
 
@@ -129,35 +68,32 @@ mvn install -pl valem-core,valem-service -q
 mvn spring-boot:run -pl valem-web
 ```
 
-The API is now available at `http://localhost:8080`. Storage is in-memory by default; other backends
-are à-la-carte adapter jars (`mvn -Pweb-postgres -pl valem-web package`, then
-`--valem.storage.type=postgres`) — see
-[docs/reference/configuration.md](docs/reference/configuration.md#persistence-model-spec--state).
+The API is now available at `http://localhost:8080`, with the management UI served at `/`. Storage
+is in-memory by default; other backends are à-la-carte adapter jars
+(`mvn -Pweb-postgres -pl valem-web package`, then `--valem.storage.type=postgres`) — see
+[configuration.md](docs/reference/configuration.md#persistence-model-spec--state). For durable
+setups, persistence layout, and the hardening checklist see
+[deployment-and-operations.md](docs/guides/deployment-and-operations.md).
 
-To enable LLM-powered spec generation, configure an LLM provider before starting.
+To enable LLM-powered spec generation, configure a provider before starting (the key is read from
+`valem.llm.api-key`, settable as `VALEM_LLM_API_KEY`; there is no provider-specific env fallback):
 
-**Anthropic (default)**
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+# Anthropic (default provider)
+export VALEM_LLM_API_KEY=sk-ant-...
 mvn spring-boot:run -pl valem-web
-```
 
-**OpenAI**
-```bash
-export OPENAI_API_KEY=sk-...
+# OpenAI
 VALEM_LLM_PROVIDER=openai VALEM_LLM_MODEL=gpt-4o \
-  VALEM_LLM_API_KEY=$OPENAI_API_KEY \
-  mvn spring-boot:run -pl valem-web
+  VALEM_LLM_API_KEY=$OPENAI_API_KEY mvn spring-boot:run -pl valem-web
+
+# Ollama (local, no API key needed; start `ollama serve` first)
+VALEM_LLM_PROVIDER=ollama VALEM_LLM_MODEL=llama3 mvn spring-boot:run -pl valem-web
 ```
 
-**Ollama (local, no API key needed)**
-```bash
-# Start Ollama first: ollama serve
-VALEM_LLM_PROVIDER=ollama VALEM_LLM_MODEL=llama3 \
-  mvn spring-boot:run -pl valem-web
-```
-
-Without any provider configured the server starts normally; the `/models/generate` endpoints return 503.
+Without any provider configured the server starts normally; the `/models/generate*` endpoints
+return 503. All LLM knobs (providers, tool budgets, retries, temperatures):
+[configuration.md](docs/reference/configuration.md#llm-integration).
 
 ## Running the developer UI
 
@@ -171,91 +107,50 @@ npm run dev
 
 Open `http://localhost:5173` in your browser.
 
-The UI proxies all `/models` and `/blobs` requests to the backend, including WebSocket connections. The backend must be running for the UI to work.
+The UI proxies all `/models` and `/blobs` requests (including WebSocket connections) to the
+backend, which must be running.
 
-## Generating a model spec with Claude
+## Generating a model spec with an LLM
 
-The UI has a **✦ Generate** button in the sidebar that drives a full human-in-the-loop workflow:
+The UI's **✦ Generate** button drives a human-in-the-loop workflow: enter a model ID and a
+plain-text domain description → **Preview Prompt** (editable) → send to the LLM → review/edit the
+generated spec → **Register Model**. The same workflow is available over REST
+(`POST /models/generate/preview` → `/models/generate` → `/models`).
 
-1. Enter a model ID and a plain-text description of the domain.
-2. Click **Preview Prompt** — the exact text that will be sent to Claude is shown in an editable textarea.
-3. Tweak the prompt if needed, then click **Send to Claude**.
-4. Review the generated spec JSON (also editable). If the result is wrong, click **← Re-generate** to go back and refine the prompt.
-5. Click **Register Model** to create the model and navigate to its state panel.
+See [generating-specs-with-llm.md](docs/guides/generating-specs-with-llm.md) for the workflow and
+provider setup, and [llm-prompts.md](docs/reference/llm-prompts.md) for the exact prompts and the
+validate-and-repair loop.
 
-The same workflow is also available via REST:
+## Example: create and mutate a model over REST
 
 ```bash
-# 1. Preview the prompt (no LLM call)
-curl -s -X POST http://localhost:8080/models/generate/preview \
-  -H 'Content-Type: application/json' \
-  -d '{"modelId":"order","domainDescription":"E-commerce order with line items, subtotal, 8% tax, and total"}'
-
-# 2. Send the (optionally edited) prompt to Claude
-curl -s -X POST http://localhost:8080/models/generate \
-  -H 'Content-Type: application/json' \
-  -d '{"modelId":"order","prompt":"<prompt from step 1>"}'
-
-# 3. Register the returned spec
+# Create a model
 curl -s -X POST http://localhost:8080/models \
   -H 'Content-Type: application/json' \
-  -d '<spec from step 2>'
+  -d '{
+    "id": "order",
+    "version": "1.0.0",
+    "schema": {},
+    "derivations": [
+      { "path": "$.order.total", "expr": "order.subtotal + order.tax" }
+    ],
+    "constraints": [
+      { "id": "max-order", "expr": "order.total <= 5000",
+        "message": "Order exceeds the cap", "policy": "rollback" }
+    ]
+  }'
+
+# Mutate base fields — total is derived automatically
+curl -s -X POST http://localhost:8080/models/order/mutations \
+  -H 'Content-Type: application/json' \
+  -d '{ "$.order.subtotal": 200, "$.order.tax": 20 }'
+
+# Read merged state
+curl -s http://localhost:8080/models/order/state | python -m json.tool
 ```
 
-### Configuration
-
-| Property | Default | Description |
-|---|---|---|
-| `valem.llm.provider` | `anthropic` | LLM provider: `anthropic`, `openai`, or `ollama` |
-| `valem.llm.api-key` | *(env `ANTHROPIC_API_KEY`)* | API key for the chosen provider; not required for `ollama` |
-| `valem.llm.model` | `claude-sonnet-4-6` | Model name (e.g. `gpt-4o` for OpenAI, `llama3` for Ollama) |
-| `valem.llm.max-tokens` | `8192` | Max tokens in the LLM response |
-| `valem.llm.max-retries` | `3` | Retries for the automated `SpecGenerator` feedback loop |
-| `valem.llm.base-url` | *(provider default)* | Override the API endpoint URL (e.g. a self-hosted OpenAI-compatible server) |
-
-Provider defaults: Anthropic uses `https://api.anthropic.com/v1/messages`; OpenAI uses `https://api.openai.com/v1`; Ollama uses `http://localhost:11434/v1`. Set `base-url` to point at any OpenAI-compatible service (LM Studio, vLLM, etc.).
-
-## Storage
-
-### Model persistence
-
-By default all model state is held in memory and lost on restart. Set `valem.persistence-dir` to enable durable storage:
-
-```yaml
-valem:
-  persistence-dir: /var/valem/data
-```
-
-When set, the directory layout is:
-
-```
-{persistence-dir}/
-  {modelId}/
-    spec.json       — ModelSpec (written on create and spec evolve)
-    snapshot.json   — latest committed state (written after every mutation and restore)
-```
-
-Writes are atomic (write to `.tmp` then rename), so a crash mid-write leaves the previous version intact. All models are reloaded automatically at startup.
-
-### Blob storage
-
-Binary data uploaded via `POST /blobs` is stored separately:
-
-| `valem.blob-store` | Behaviour |
-|---|---|
-| `memory` (default) | In-process `ConcurrentHashMap`, keyed by SHA-256; lost on restart |
-| `filesystem` | Files under `valem.blob-store-path` (default: `~/.valem/blobs`) |
-
-### Production-ready configuration
-
-To survive restarts, set both stores:
-
-```yaml
-valem:
-  persistence-dir: /var/valem/data
-  blob-store: filesystem
-  blob-store-path: /var/valem/blobs
-```
+Every endpoint (audit, snapshots, views, blobs, spec evolution, composition, …):
+[api-reference.md](docs/reference/api-reference.md).
 
 ## Running tests
 
@@ -271,7 +166,9 @@ mvn test -pl valem-core
 
 The `valem-e2e` module contains Playwright browser tests that drive the full stack (backend + UI).
 
-**Prerequisites:** the backend must be running on port 8080 (see [Running the backend](#running-the-backend)). The UI dev server is started automatically by Playwright.
+**Prerequisites:** the backend must be running on port 8080 (see
+[Running the backend](#running-the-backend)). The UI dev server is started automatically by
+Playwright.
 
 ```bash
 cd valem-e2e
@@ -284,51 +181,6 @@ npm run test:ui          # Playwright interactive UI mode
 npm run report           # open the last HTML report
 ```
 
-## API quick reference
+## License
 
-| Method | Path | Description |
-|---|---|---|
-| GET | `/models` | List all registered model IDs |
-| POST | `/models` | Create model from spec |
-| GET | `/models/{id}` | Model info (version, counts) |
-| POST | `/models/{id}/mutations` | Apply field mutations |
-| GET | `/models/{id}/state` | Full merged state (base + derived) |
-| GET | `/models/{id}/schema/{path}` | Effective JSON Schema for a field |
-| GET | `/models/{id}/explain/{path}` | Constraint evaluation traces |
-| POST | `/models/{id}/snapshot` | Capture state snapshot |
-| POST | `/models/{id}/restore` | Restore from snapshot |
-| POST | `/models/{id}/spec/evolve` | Incremental spec evolution |
-| DELETE | `/models/{id}` | Remove model |
-| POST | `/blobs` | Upload binary (multipart `file` field) |
-| GET | `/blobs/{blobId}` | Stream stored binary |
-| WS | `/models/{id}/subscribe` | Receive `ChangeEvent` after each mutation |
-| POST | `/models/generate/preview` | Build prompt from domain description (no LLM call) |
-| POST | `/models/generate` | Send prompt to Claude, return validated spec |
-
-## Example: create and mutate a model
-
-```bash
-# Create a model
-curl -s -X POST http://localhost:8080/models \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "id": "order",
-    "version": "1.0.0",
-    "schema": {},
-    "derivations": [
-      { "path": "$.order.total", "expr": "order.subtotal + order.tax" }
-    ],
-    "constraints": [
-      { "id": "max-order", "expr": "order.total <= 5000", "policy": "ROLLBACK" }
-    ],
-    "actions": [], "metaDerivations": [], "tests": []
-  }'
-
-# Mutate base fields — total is derived automatically
-curl -s -X POST http://localhost:8080/models/order/mutations \
-  -H 'Content-Type: application/json' \
-  -d '{ "$.order.subtotal": 200, "$.order.tax": 20 }'
-
-# Read merged state
-curl -s http://localhost:8080/models/order/state | python -m json.tool
-```
+Apache-2.0 — see [LICENSE](LICENSE).

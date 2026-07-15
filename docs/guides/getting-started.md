@@ -7,9 +7,6 @@ for every config knob see [../reference/configuration.md](../reference/configura
 ## Prerequisites
 - Java 21+, Maven 3.9+
 - Node.js 20+ and npm 9+ (UI only)
-- Local Maven snapshots in `~/.m2`:
-  - `io.github.vlad-public-code:tracked-json:1.0.0`
-  - `io.github.vlad-public-code:jsonata-jvm-compiler:1.0.3`
 
 ## Console app (no HTTP server)
 Reads one JSON command per line from stdin, writes one JSON response per line. Ideal for agents

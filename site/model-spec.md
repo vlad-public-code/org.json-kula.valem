@@ -23,16 +23,16 @@ a live runtime.
   "id": "order",
   "version": "1.0.0",
   "schema": { "type": "object" },
-  "constants":      [ { "name": "taxRate", "value": 0.08 } ],
+  "constants":      { "taxRate": 0.08 },
   "defaultValues":  [ { "path": "$", "expr": "{ 'currency': 'USD' }" } ],
   "derivations":    [ { "path": "$.tax",   "expr": "subtotal * $const.taxRate" },
                       { "path": "$.total", "expr": "subtotal + tax" } ],
-  "metaDerivations":[ { "path": "$.subtotal", "key": "min", "expr": "0" } ],
-  "constraints":    [ { "id": "max-order", "expr": "total <= 5000", "policy": "ROLLBACK" } ],
-  "effects":        [ { "executor": "caller", "trigger": "total > 1000",
+  "metaDerivations":[ { "path": "$.subtotal", "property": "minimum", "expr": "0" } ],
+  "constraints":    [ { "id": "max-order", "expr": "total <= 5000",
+                        "message": "Order exceeds the cap", "policy": "rollback" } ],
+  "effects":        [ { "id": "large-order-alert", "executor": "caller", "trigger": "total > 1000",
                         "emit": "large-order", "payload": { "total": "total" } } ],
-  "tests":          [ ],
-  "viewDefinition": { }
+  "tests":          [ ]
 }
 ```
 
@@ -46,7 +46,7 @@ a live runtime.
 | `defaultValues` | `(path, expr)` rules that deep-merge into a **newly-created** container (array element, object, or root `$`), filling only caller-absent fields. A `$` rule seeds the root at creation. |
 | `derivations` | Read-only computed fields. Evaluated in topological level order so a later level can read an earlier one. Wildcard paths (`$.items[*].lineTotal`) evaluate once per element with `$parent` bound. |
 | `metaDerivations` | Live per-field metadata (min / max / required / …) that overlays the effective schema. |
-| `constraints` | Boolean invariants with a `ROLLBACK` (reject the mutation) or `FLAG` (record a violation) policy. |
+| `constraints` | Boolean invariants with a `rollback` (reject the mutation) or `flag` (record a violation) policy. |
 | `effects` | Requests the pure core emits as **data** — executed post-commit by a shell: `caller` (returned inline), `server` (HTTP with SSRF guard), `llm` (calls the configured model), `timer` (scheduled). Replay never re-runs I/O. |
 | `tests` | Embedded spec-level test cases the runtime can execute. |
 | `viewDefinition` | An optional renderer-agnostic UI component tree, evaluated by `valem-view`. |
@@ -71,7 +71,7 @@ Every `mutate` runs a fixed pipeline under a per-model lock:
 4. **Propagate** dirtiness through the dependency graph (only reachable nodes).
 5. **Derive** dependent fields in topological order.
 6. **Meta-derive** per-field metadata.
-7. **Check constraints** against the merged document; `ROLLBACK` aborts, `FLAG` records.
+7. **Check constraints** against the merged document; `rollback` aborts, `flag` records.
 8. **Dispatch effects**, then **commit** and broadcast a `ChangeEvent`.
 
 ## Evolving a spec

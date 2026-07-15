@@ -50,7 +50,9 @@ new model's owner differs from `lineage`'s `fromOwner`) quarantines any inherite
 until approved — see [security-model.md](security-model.md) and
 `valem.authz.inherited-effects` in [configuration.md](configuration.md). Models can also be
 **promoted** between repositories (`POST /models/{id}/promote`) and queried for cross-model topology
-(`GET /composition/graph`).
+(`GET /composition/graph`). The end-to-end lifecycle (branch → approve inherited effects → promote,
+plus links between models) is walked through in the
+[composition & branching guide](../guides/composition-and-branching.md).
 
 > **No per-field access control.** Valem has no `fieldAccess`/roles. Any caller with model
 > access reads/mutates/evolves every field; access is a single coarse gate (`valem.api.key`).
@@ -387,8 +389,94 @@ section** — a spec that still carries a non-empty `actions` array is rejected 
 }
 ```
 
-The effect schema covers `executor`/`target`/`body`/`request`/`requests` fan-out/`response.set`/
-`dedupeKey`/`statusPath`/`policy`, the egress/SSRF model, and the retry/reconciler semantics.
+### Effect field reference
+
+**Common fields (all executors):**
+
+| Field | Required | Description |
+|---|---|---|
+| `id` | yes | Unique effect identifier. |
+| `executor` | no (default `"server"`) | Which shell runs the effect: `caller`, `server`, `llm`, `timer`, or a plugin kind name. |
+| `trigger` | yes | JSONata boolean over the merged document; the effect is considered when it evaluates `true` after a mutation. |
+| `dedupeKey` | no | JSONata expression producing the effect's **edge key**: the effect re-fires only when this value *transitions* (edge-triggered, not level-triggered). Also the key for the fold-back compare-and-swap — an in-flight effect whose key changed is superseded or cancelled rather than applied stale. |
+| `statusPath` | no | Canonical address of the I/O status sub-document the runtime maintains for this effect (`{phase, key, at, error}`), driving the `pending → in_flight → applied \| failed \| cancelled` state machine and the in-flight guard. |
+| `response.set` | server/llm/timer | Map of canonical JSON Path target → JSONata expression; how the executor's result **folds back** into state as an ordinary mutation. For `server` and `llm`, `$response` is bound to the parsed response/completion; for `timer`, the expressions are evaluated at fire time against current state. |
+
+**`executor: "caller"`** — pure, no egress; surfaced as `dispatchedEffects` in the mutation response:
+
+| Field | Required | Description |
+|---|---|---|
+| `emit` | yes | Event name surfaced to the client. |
+| `payload` | no | Map of payload field → JSONata expression over the merged document. |
+
+**`executor: "server"`** — an outbound HTTP request behind the SSRF egress guard. Exactly **one**
+locator must be present: `request.url`, a `requests` fan-out, or a composition `target`.
+
+| Field | Required | Description |
+|---|---|---|
+| `request.method` | no (default `GET`) | HTTP method. |
+| `request.url` | one locator | Absolute URL; `{ expr }` segments interpolate JSONata over the merged document. |
+| `request.headers` | no | Header map; values interpolate `{ expr }` segments. |
+| `request.body` | no | A whole JSONata expression producing the JSON request body. |
+| `requests` | one locator | JSONata expression producing an **array** of request descriptors — a fan-out of multiple HTTP calls from one trigger. |
+| `target` | one locator | Composition link to another **model** (by coordinate, not URL): write-link `{ ref, path }` plus a sibling `body` (JSONata for the value written at `target.path`), or read-link `{ ref, read }` (no mutation of the target). See the [composition & branching guide](../guides/composition-and-branching.md). |
+| `body` | with write-link `target` | JSONata → the value written at `target.path`. |
+| `policy` | no | `{ timeoutMs (default 5000), retries (default 0), backoff, egressProfile }` — execution policy for the HTTP call. |
+
+**`executor: "llm"`** — calls the configured `LlmClient` and folds the completion back:
+
+| Field | Required | Description |
+|---|---|---|
+| `prompt` | yes | JSONata expression producing the prompt text from state. |
+| `responseSchema` | no | JSON Schema for structured output; the parsed completion is bound as `$response` in `response.set`. |
+| `policy.model` / `policy.temperature` | no | Per-effect override of the configured LLM model/temperature. |
+
+**`executor: "timer"`** — schedules the fold-back; the clock lives in the shell:
+
+| Field | Required | Description |
+|---|---|---|
+| `at` | one of | JSONata → absolute fire time (epoch millis or ISO-8601), typically read from state. |
+| `afterMs` | one of | JSONata → relative delay in milliseconds. |
+
+A spec that names an executor kind that is unknown, or disabled via `valem.effects.kinds.enabled`,
+is rejected at validation. Inherited effects carry a read-only, materializer-written `origin`
+(`{fromRef, fromOwner}`) recording which ancestor contributed them — the basis for cross-owner
+approval (see [security-model.md](security-model.md)).
+
+### Worked `server` + `timer` example
+
+From the bundled `insurance-quote.json`: fetch a live regional rate multiplier whenever the region
+changes, and expire a priced quote after 15 minutes.
+
+```json
+[
+  {
+    "id": "fetch-region-rate",
+    "executor": "server",
+    "trigger": "quote.applicant.region != null",
+    "dedupeKey": "quote.applicant.region",
+    "request": {
+      "method": "GET",
+      "url": "https://rates.example.com/regional?region={ quote.applicant.region }"
+    },
+    "response": { "set": { "$.quote.regionMultiplier": "$response.multiplier" } },
+    "statusPath": "$.quote.ioRegionRate"
+  },
+  {
+    "id": "expire-quote",
+    "executor": "timer",
+    "trigger": "quote.decision = 'quoted' and quote.state = 'quoted'",
+    "dedupeKey": "quote.state",
+    "afterMs": "900000",
+    "response": { "set": { "$.quote.state": "'expired'" } },
+    "statusPath": "$.quote.ioExpiry"
+  }
+]
+```
+
+The egress/SSRF controls for `server` effects (`valem.effects.allowed-hosts`,
+`allow-private-ips`, `max-response-bytes`, …) are documented in
+[security-model.md](security-model.md) and [configuration.md](configuration.md#effects-egress--pluggable-kinds).
 
 ---
 
@@ -1326,7 +1414,7 @@ Demonstrates:
 
 ## Path notation
 
-There are **two** notations, and which one applies depends on where the path appears (DEC-6):
+There are **two** notations, and which one applies depends on where the path appears:
 
 **Addresses — JSON Path (RFC 9535).** Anywhere a path is used as *data* — spec `path` fields
 (derivations, metaDerivations, defaultValues), mutation/patch keys, the path portion of a meta
@@ -1344,7 +1432,7 @@ JSONata view fields), use whatever navigation JSONata accepts; the `$.` prefix i
 dot-notation is used directly (e.g. `items.(price * qty)`). Expression bodies are **never** rewritten
 or constrained — only compiled.
 
-> **Address dialect is enforced (DEC-6).** The validator **rejects** non-canonical addresses as
+> **Address dialect is enforced.** The validator **rejects** non-canonical addresses as
 > errors: the legacy dot-index form (`$.items.0.name`) and unrooted forms (`items.0.name`) are not
 > accepted — use the bracket form (`$.items[0].name`). The error message includes the canonical
 > rewrite. Expression bodies are unaffected (any JSONata navigation is allowed).

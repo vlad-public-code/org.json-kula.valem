@@ -11,7 +11,7 @@ listing partial, divergent subsets.
 |---|---|---|
 | `valem.mutation-queue-size` | `10` | Max concurrent mutations per model (executing + waiting); excess returns HTTP 429. |
 | `valem.max-models` | `1000` | Max number of models the registry will hold; excess `POST /models` returns HTTP 429. |
-| `valem.history.max-entries` | `50` | Retained per-model temporal-history snapshots — the source for `GET /models/{id}/history` and point-in-time `?at=` reads (audit MEM-1). `0` disables temporal history. **JVM system property** (see below), not a Spring property. |
+| `valem.history.max-entries` | `50` | Retained per-model temporal-history snapshots — the source for `GET /models/{id}/history` and point-in-time `?at=` reads. `0` disables temporal history. **JVM system property** (see below), not a Spring property. |
 
 ### Core safety limits (JVM system properties)
 
@@ -21,10 +21,10 @@ from `application.yml`. They apply process-wide.
 
 | Property | Default | Description |
 |---|---|---|
-| `valem.limits.max-array-index` | `1000000` | Hard ceiling on the array index a single write may target, capping the null-padding one mutation can force (audit SEC-1/MEM-3). A write beyond it is rejected with a typed `StateLimitExceededException` → HTTP 422, before any allocation. Covers live mutate, defaults, and mutation-log replay. |
-| `valem.limits.regex-max-input` | `100000` | Max input-string length a schema `pattern` keyword will validate; longer values are rejected up front rather than fed to the regex engine (ReDoS amplification guard, audit SEC-2/CPU-6). |
+| `valem.limits.max-array-index` | `1000000` | Hard ceiling on the array index a single write may target, capping the null-padding one mutation can force. A write beyond it is rejected with a typed `StateLimitExceededException` → HTTP 422, before any allocation. Covers live mutate, defaults, and mutation-log replay. |
+| `valem.limits.regex-max-input` | `100000` | Max input-string length a schema `pattern` keyword will validate; longer values are rejected up front rather than fed to the regex engine (ReDoS amplification guard). |
 | `valem.limits.regex-timeout-ms` | `1000` | Wall-clock budget for a single `pattern` match; a catastrophic-backtracking match is aborted past the deadline instead of pinning a CPU under the model lock. |
-| `valem.limits.expression-cache-size` | `10000` | Max compiled-JSONata-expression entries per `ExpressionCache` (bounded LRU, audit MEM-2). Eviction is safe — an evicted expression recompiles on next use. |
+| `valem.limits.expression-cache-size` | `10000` | Max compiled-JSONata-expression entries per `ExpressionCache` (bounded LRU). Eviction is safe — an evicted expression recompiles on next use. |
 | `valem.history.max-entries` | `50` | (Listed above.) Retained temporal-history snapshots per model. |
 
 ## Security / auth
@@ -32,12 +32,12 @@ from `application.yml`. They apply process-wide.
 | Property | Default | Description |
 |---|---|---|
 | `valem.api.key` | *(unset)* | When set, every request must carry `Authorization: Bearer <key>`; blank = **open/dev mode** (all requests permitted, warning logged). Compared constant-time. The same key authenticates the WebSocket handshake via `?token=<key>`. See [security-model.md](security-model.md). |
-| `valem.security.csp` | `default-src 'none'; frame-ancestors 'none'` | The `Content-Security-Policy` response header directives. The default is correct for `valem-api` used headless (audit SEC-9) but blocks a bundled UI's own same-origin script/stylesheet/WebSocket loads — a deployable that serves a browser UI (e.g. `valem-web`) overrides it, e.g. `default-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'`. |
+| `valem.security.csp` | `default-src 'none'; frame-ancestors 'none'` | The `Content-Security-Policy` response header directives. The default is correct for `valem-api` used headless but blocks a bundled UI's own same-origin script/stylesheet/WebSocket loads — a deployable that serves a browser UI (e.g. `valem-web`) overrides it, e.g. `default-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'`. |
 | `valem.websocket.allowed-origins` | *(unset = same-origin)* | Comma-separated allowlist of origins permitted to open the `/models/{id}/subscribe` WebSocket handshake. Unset = same-origin only; set `*` only for development. |
 | `valem.rate-limit.enabled` | `false` | Enable the optional per-IP sliding-window rate-limit filter. Off = no behaviour change. |
 | `valem.rate-limit.requests` | `100` | Requests allowed per window per client IP (when enabled). |
 | `valem.rate-limit.window-seconds` | `60` | Sliding-window length in seconds (when enabled). Over-limit requests get HTTP 429 + `Retry-After`. |
-| `valem.rate-limit.trust-forwarded-for` | `false` | When `true`, key the rate limiter on the first `X-Forwarded-For` hop instead of the socket peer (audit SEC-6). Enable **only** behind a trusted proxy that sets the header — otherwise a client can spoof it to evade limiting. Default off means a proxied deployment keys on the proxy address until you opt in. |
+| `valem.rate-limit.trust-forwarded-for` | `false` | When `true`, key the rate limiter on the first `X-Forwarded-For` hop instead of the socket peer. Enable **only** behind a trusted proxy that sets the header — otherwise a client can spoof it to evade limiting. Default off means a proxied deployment keys on the proxy address until you opt in. |
 
 > There is no per-field authorization. Any caller past the `valem.api.key` gate (or any caller
 > in open mode) may read/mutate/evolve every field of every model.
@@ -46,9 +46,9 @@ from `application.yml`. They apply process-wide.
 
 | Property | Default | Description |
 |---|---|---|
-| `valem.effects.allow-private-ips` | `false` | Relax the built-in `server` effect's `EgressGuard` to permit loopback/private/link-local hosts. Local dev / IT stubs only — does **not** apply to plugin `EffectExecutor` kinds, which enforce their own (if any) egress rules. This is an **address-only** relaxation: it never widens the URL scheme (audit SEC-5), so cleartext `http` still needs `allow-insecure-http`. |
-| `valem.effects.allow-insecure-http` | `false` | Permit cleartext `http` egress for the built-in `server` effect (audit SEC-5/T2.8). Independent of `allow-private-ips`; enabling private-IP access alone no longer implies http. A dev pointing at a plain-http loopback stub sets both. |
-| `valem.effects.allowed-hosts` | *(blank = any public host)* | Comma-separated allowlist of destination hostnames the built-in `server` effect may call (audit SEC-8). Blank imposes no host restriction beyond the SSRF address checks. |
+| `valem.effects.allow-private-ips` | `false` | Relax the built-in `server` effect's `EgressGuard` to permit loopback/private/link-local hosts. Local dev / IT stubs only — does **not** apply to plugin `EffectExecutor` kinds, which enforce their own (if any) egress rules. This is an **address-only** relaxation: it never widens the URL scheme, so cleartext `http` still needs `allow-insecure-http`. |
+| `valem.effects.allow-insecure-http` | `false` | Permit cleartext `http` egress for the built-in `server` effect. Independent of `allow-private-ips`; enabling private-IP access alone no longer implies http. A dev pointing at a plain-http loopback stub sets both. |
+| `valem.effects.allowed-hosts` | *(blank = any public host)* | Comma-separated allowlist of destination hostnames the built-in `server` effect may call. Blank imposes no host restriction beyond the SSRF address checks. |
 | `valem.effects.max-response-bytes` | `1048576` (1 MB) | Max response size the built-in `server` effect will fold back. Not enforced for plugin kinds. |
 | `valem.effects.kinds.enabled` | *(unset = all)* | Comma-separated allowlist of active effect executor kinds — built-in (`caller`/`server`/`llm`/`timer`) and any `EffectKind`/`EffectExecutor` discovered via `ServiceLoader` (e.g. `valem-effects-noop`). A spec selecting an unlisted/unknown kind is rejected at validation. Unset/empty = every discovered kind enabled. |
 
@@ -73,17 +73,17 @@ Properties for links between models, branching from templates, and inherited-eff
 | `valem.storage.spec-type` | *(falls back to `storage.type`)* | Backend for the model **spec** alone (per-concern override). |
 | `valem.storage.state-type` | *(falls back to `storage.type`)* | Backend for runtime **state** alone (per-concern override). |
 | `valem.storage.compaction-threshold` | `100` | Mutation-log length that triggers compaction into a new baseline snapshot. |
-| `valem.storage.jdbc.pool-size` | `8` | Maximum size of the pooled `HikariDataSource` synthesized for a DB backend when no `DataSource` bean is supplied (audit CPU-9). The pool is lazy (`initializationFailTimeout=-1`, `minimumIdle=0`) and closed on shutdown. |
+| `valem.storage.jdbc.pool-size` | `8` | Maximum size of the pooled `HikariDataSource` synthesized for a DB backend when no `DataSource` bean is supplied. The pool is lazy (`initializationFailTimeout=-1`, `minimumIdle=0`) and closed on shutdown. |
 | `valem.storage.audit-type` | *(resolved, see below)* | Backend for the durable, append-only audit trail: `none`, `memory` (retained, non-durable), `filesystem` (`{id}/audit.jsonl`), `postgres` (`ss_audit` table), or `mongodb` (`ss_audit` collection). Unset → follows the state backend when it is `filesystem`/`postgres`/`mongodb`, else `none`. |
 
-Each storage concern — spec, state, blob — selects its backend independently (F-T4). When spec and
+Each storage concern — spec, state, blob — selects its backend independently. When spec and
 state resolve to the **same** backend a single store instance backs both; when they **differ** a
 `CompositeModelStore` wires the two halves (e.g. spec in Postgres, state in Redis). Resolution order
 for spec/state: per-concern `*-type` → `storage.type` → `filesystem` if `persistence-dir` is set →
 `memory`. Backend connection settings reuse the standard Spring keys (`spring.datasource.*`,
 `spring.data.mongodb.*`, `spring.data.redis.url`); if no `DataSource` bean is present, a pooled
-`HikariDataSource` is synthesized from `spring.datasource.url`/`username`/`password` (audit CPU-9,
-sized by `valem.storage.jdbc.pool-size`). Spring Boot's `DataSourceAutoConfiguration` /
+`HikariDataSource` is synthesized from `spring.datasource.url`/`username`/`password` (sized by
+`valem.storage.jdbc.pool-size`). Spring Boot's `DataSourceAutoConfiguration` /
 `JdbcTemplateAutoConfiguration` are excluded so putting HikariCP on the classpath does not force a
 `DataSource` bean in memory-only deployments.
 
@@ -99,7 +99,7 @@ adapter jar`) — there is **no silent fallback** to another backend.
 
 > A failure to reconstruct a model's **state** on startup (corrupt snapshot or mutation log) loads
 > the model **spec-only** (state reset; derived fields recompute on first access) rather than
-> dropping the whole model (F-T5).
+> dropping the whole model.
 
 **Durable audit trail.** Independently of spec/state, an `AuditStore` retains one append-only
 `AuditRecord` per committed mutation cycle — the *what/when/why/what-it-triggered* (mutations,
@@ -122,7 +122,7 @@ altered/reordered/deleted record.
 | `valem.blob-store-path` | `~/.valem/blobs` | Directory for `filesystem` blob store. |
 | `valem.storage.blob` | *(unset)* | Set to `s3` to use the S3 blob backend (with `valem.storage.s3.bucket`/`region`/`endpoint`/`access-key`/`secret-key`). |
 | `valem.blob.max-bytes` | `52428800` (50 MB) | Per-blob upload cap enforced by `BlobController`; oversized upload → HTTP 413. |
-| `valem.blob.max-total-bytes` | `536870912` (512 MB) | Total-bytes ceiling for the in-memory blob store; over-budget upload is rejected with HTTP 413 (no eviction). A non-positive value opts into unbounded (a startup warning is logged) — this was the pre-audit default (audit MEM-5). |
+| `valem.blob.max-total-bytes` | `536870912` (512 MB) | Total-bytes ceiling for the in-memory blob store; over-budget upload is rejected with HTTP 413 (no eviction). A non-positive value opts into unbounded (a startup warning is logged). |
 | `spring.servlet.multipart.max-file-size` | `50MB` | Servlet multipart per-part cap (set explicitly, not left to defaults). |
 | `spring.servlet.multipart.max-request-size` | `55MB` | Servlet multipart whole-request cap. |
 
@@ -181,8 +181,8 @@ sit behind the same gate as the model API.
 | `valem.llm.web-search.max-results` | `5` | Max results returned per search. |
 | `valem.llm.eval-tool.enabled` | `true` | Offer the `eval_jsonata` tool so the model can test a candidate expression against a sample input (local; no network) and fix it in place before committing. Set `false` to drop it. |
 | `valem.llm.eval-tool.max-calls` | `25` | Max `eval_jsonata` evaluations per `generate()`/`generateEvolution()` session. |
-| `valem.llm.max-concurrent-requests` | `0` | Cap on simultaneous LLM calls. `0` = unlimited; `1` = fully serialised app-wide. Use a low value to avoid HTTP 429s on throttled keys when multiple generations overlap (limits concurrency, not raw request rate). |
-| `valem.llm.log.capture-content` | `true` | When `true`, `LlmInteractionLog` records the full prompt/response text of each LLM call (visible via `GET /llm/interactions`). Set `false` to keep only metadata (provider, model, timing, token counts) and redact the content (audit SEC-10). |
+| `valem.llm.max-concurrent-requests` | `1` *(shipped in `application.yml`; unset = `0`)* | Cap on simultaneous LLM calls. `0` = unlimited; `1` = fully serialised app-wide. Use a low value to avoid HTTP 429s on throttled keys when multiple generations overlap (limits concurrency, not raw request rate). |
+| `valem.llm.log.capture-content` | `true` | When `true`, `LlmInteractionLog` records the full prompt/response text of each LLM call (visible via `GET /llm/interactions`). Set `false` to keep only metadata (provider, model, timing, token counts) and redact the content. |
 
 **Provider base-URL defaults:** Anthropic `https://api.anthropic.com/v1/messages`; OpenAI
 `https://api.openai.com/v1`; Ollama `http://localhost:11434/v1`; OpenRouter

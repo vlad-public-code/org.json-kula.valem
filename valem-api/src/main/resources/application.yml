@@ -4,7 +4,7 @@ spring:
       enabled: true
   # StorageConfig owns DataSource creation (it synthesizes a pooled HikariDataSource only when a DB
   # backend is selected). Exclude Boot's JDBC auto-config so merely having HikariCP on the classpath
-  # does not force a dataSource bean from empty spring.datasource.* (audit T1.8).
+  # does not force a dataSource bean from empty spring.datasource.*.
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
@@ -43,16 +43,16 @@ valem:
     enabled: false             # optional per-IP rate limiting (off by default)
     requests: 100              # requests allowed per window per client IP
     window-seconds: 60         # sliding window length
-    trust-forwarded-for: false # only trust X-Forwarded-For behind a trusted proxy (SEC-6)
+    trust-forwarded-for: false # only trust X-Forwarded-For behind a trusted proxy
   effects:
     allow-private-ips: false   # relax the egress guard's address checks (local dev / IT stubs only)
-    allow-insecure-http: false # permit cleartext http egress (independent of allow-private-ips; SEC-5)
+    allow-insecure-http: false # permit cleartext http egress (independent of allow-private-ips)
     allowed-hosts:             # optional comma-separated egress allowlist (blank = any public host)
     max-response-bytes: 1048576 # max bytes an http effect will fold back (streamed, bounded)
   llm:
-    provider: mistral        # anthropic | openai | ollama | openrouter | groq | mistral
-    api-key: ${MISTRAL_API_KEY:}   # empty = LLM features disabled (not required for ollama)
-    model: ${VALEM_LLM_MODEL:}   # blank = provider-appropriate default (mistral→mistral-large-latest, openai→gpt-4o, …); set to override
+    provider: anthropic      # anthropic | openai | ollama | openrouter | groq | mistral | gemini | cerebras
+    api-key: ${VALEM_LLM_API_KEY:}   # empty = LLM features disabled (not required for ollama)
+    model: ${VALEM_LLM_MODEL:}   # blank = provider-appropriate default (anthropic→claude-sonnet-4-6, openai→gpt-4o, …); set to override
     max-tokens: 8192
     max-retries: 3
     generation-temperature: 0.0  # sampling temperature for the initial attempt (low = deterministic, structured)

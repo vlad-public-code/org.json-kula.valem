@@ -15,13 +15,13 @@ curl -X POST localhost:8080/models -H 'Content-Type: application/json' \
 > part of the `ModelSpec` schema. The management UI strips them before `POST /models`; a raw `curl`
 > works because unknown top-level fields are ignored on deserialization.
 
-## Featured: the beachhead ICP
+## Featured: quoting & eligibility models
 
 ### `insurance-quote.json` — Term Life Insurance Quote
 
-The reference model for Valem's wedge: **LLM-driven quoting / eligibility tools over structured
-data**, where a team would otherwise hand-wire the same compute-and-validate layer per project. It
-exercises every pillar of the runtime on one realistic domain:
+The reference model for Valem's core use case: **LLM-driven quoting / eligibility tools over
+structured data**, where a team would otherwise hand-wire the same compute-and-validate layer per
+project. It exercises every pillar of the runtime on one realistic domain:
 
 | Pillar | In this model |
 |---|---|
@@ -34,7 +34,7 @@ exercises every pillar of the runtime on one realistic domain:
 
 **Certification, not homework.** The spec's embedded `tests` array is a **golden dataset whose
 expected premiums are hand-derived from the rate table** — an *independent oracle*, not assertions
-the LLM wrote about its own formula (the concept audit's A1/C6 gap). The suite runs through the full
+the LLM wrote about its own formula. The suite runs through the full
 `ModelService` reactive pipeline in
 [`InsuranceQuoteGoldenTest`](../../valem-console/src/test/java/org/json_kula/valem/console/InsuranceQuoteGoldenTest.java),
 which is the concrete shape of the **draft → review → certify → promote** governance lifecycle: a
@@ -46,7 +46,7 @@ Worked example (from the golden set): a non-smoker aged 35 with $100,000 coverag
 
 ### `benefits-eligibility.json` — Benefits Eligibility
 
-A second model in the same wedge (eligibility over structured data): an assistance-program calculator
+A second model in the same family (eligibility over structured data): an assistance-program calculator
 whose federal-poverty-line threshold scales with household size (constants), whose income-to-poverty
 ratio drives an eligibility tier and monthly benefit (chained derivations), with a positive-household
 rollback invariant plus an over-max **soft flag**, an external income-verification `server` effect, a
@@ -55,7 +55,7 @@ caller notification, and a submission-expiry `timer`. Its golden suite
 is hand-derived from the poverty table — e.g. a household of 4 earning $45,000 → poverty line
 `15000 + 3×5000 = 30000`, ratio `1.5` ⟹ **partial tier, $300/mo**.
 
-Together the two wedge models split the teaching surface: insurance-quote demonstrates a
+Together the two featured models split the teaching surface: insurance-quote demonstrates a
 meta-derivation and a rollback constraint; benefits-eligibility demonstrates a soft-flag constraint
 and household-driven threshold scaling.
 

@@ -34,7 +34,7 @@ server still runs and those endpoints return `503`.
 
 ```bash
 # Anthropic (default provider)
-export ANTHROPIC_API_KEY=sk-ant-...
+export VALEM_LLM_API_KEY=sk-ant-...
 mvn spring-boot:run -pl valem-web
 
 # OpenAI
@@ -45,7 +45,11 @@ VALEM_LLM_PROVIDER=openai VALEM_LLM_MODEL=gpt-4o \
 VALEM_LLM_PROVIDER=ollama VALEM_LLM_MODEL=llama3 mvn spring-boot:run -pl valem-web
 ```
 
-Providers supported: `anthropic`, `openai`, `ollama`, `openrouter`, `groq`, `mistral`.
+The key is always read from `valem.llm.api-key` (env `VALEM_LLM_API_KEY`) — there is no
+provider-specific fallback such as an implicit `ANTHROPIC_API_KEY` read.
+
+Providers supported: `anthropic`, `openai`, `ollama`, `openrouter`, `groq`, `mistral`, `gemini`,
+`cerebras`.
 
 ## Durable storage
 
@@ -96,8 +100,8 @@ curl -s -X POST http://localhost:8080/models \
   -d '{
     "id": "order", "version": "1.0.0", "schema": {},
     "derivations":  [{ "path": "$.order.total", "expr": "order.subtotal + order.tax" }],
-    "constraints":  [{ "id": "max-order", "expr": "order.total <= 5000", "policy": "ROLLBACK" }],
-    "actions": [], "metaDerivations": [], "tests": []
+    "constraints":  [{ "id": "max-order", "expr": "order.total <= 5000",
+                       "message": "Order exceeds the cap", "policy": "rollback" }]
   }'
 
 # Mutate base fields — total derives automatically
