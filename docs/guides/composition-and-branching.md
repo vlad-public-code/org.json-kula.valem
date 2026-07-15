@@ -1,7 +1,7 @@
 ---
 title: Composition & branching
 parent: Guides
-nav_order: 6
+nav_order: 7
 description: "Links between models, branching from templates, and promotion."
 ---
 

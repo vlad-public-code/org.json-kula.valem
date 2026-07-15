@@ -1,7 +1,7 @@
 ---
 title: MCP server
 parent: Guides
-nav_order: 5
+nav_order: 6
 description: "Use Valem as the structured-state backend for an agent session over MCP."
 ---
 

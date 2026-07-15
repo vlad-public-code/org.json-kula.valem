@@ -1,7 +1,7 @@
 ---
 title: Generating specs with an LLM
 parent: Guides
-nav_order: 3
+nav_order: 4
 description: "Have an LLM compile a plain-text domain description into a runnable ModelSpec."
 ---
 

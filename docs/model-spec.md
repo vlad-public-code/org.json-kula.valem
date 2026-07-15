@@ -48,7 +48,7 @@ a live runtime.
 | `derivations` | Read-only computed fields. Evaluated in topological level order so a later level can read an earlier one. Wildcard paths (`$.items[*].lineTotal`) evaluate once per element with `$parent` bound. |
 | `metaDerivations` | Live per-field metadata (min / max / required / …) that overlays the effective schema. |
 | `constraints` | Boolean invariants with a `rollback` (reject the mutation) or `flag` (record a violation) policy. |
-| `effects` | Requests the pure core emits as **data** — executed post-commit by a shell: `caller` (returned inline), `server` (HTTP with SSRF guard), `llm` (calls the configured model), `timer` (scheduled). Replay never re-runs I/O. |
+| `effects` | Requests the pure core emits as **data** — executed post-commit by a shell: `caller` (returned inline), `server` (HTTP with SSRF guard), `llm` (calls the configured model), `timer` (scheduled), or a custom plugin kind. Replay never re-runs I/O. See the [Effects guide]({% link guides/effects.md %}). |
 | `tests` | Embedded spec-level test cases the runtime can execute. |
 | `viewDefinition` | An optional renderer-agnostic UI component tree, evaluated by `valem-view`. |
 

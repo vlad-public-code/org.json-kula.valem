@@ -39,6 +39,10 @@ The name says it: ***valem*** is the Estonian word for **"formula"**. It's prono
   same state, and history replays without re-contacting the outside world.
 - **Reactive by construction.** A dependency graph recomputes only what a change actually affects.
 - **LLM-native.** Specs are JSON an LLM can generate, and Valem validates-and-repairs them in a loop.
+- **Effectful, but governed.** **Effects** are how a model reaches the world — HTTP calls, LLM
+  calls, timers — declared in the spec, emitted by the pure core as data, and executed post-commit
+  behind an SSRF egress guard. Results fold back into state as ordinary mutations, replay never
+  re-runs I/O, and new effect kinds plug in as drop-in jars.
 - **Explainable.** Every derivation and constraint evaluation is traceable, with an optional durable,
   tamper-evident audit trail.
 - **Embeddable.** A pure-Java core with no framework lock-in, wrapped by an à-la-carte Spring layer.
@@ -59,6 +63,7 @@ ModelSpec, then mutate fields and see derivations, constraints, and effects reac
 | Drive a model from an AI agent | [Running the MCP server]({% link running-the-mcp-server.md %}) |
 | Understand the spec format | [Model spec]({% link model-spec.md %}) |
 | Start from a working example | [Examples gallery]({% link guides/examples-gallery.md %}) |
+| Reach the outside world (HTTP, LLM, timers) | [Effects]({% link guides/effects.md %}) |
 | Look up an endpoint or property | [API reference]({% link reference/api-reference.md %}) · [Configuration]({% link reference/configuration.md %}) |
 | See how it works inside | [Architecture]({% link architecture/index.md %}) |
 | See what Valem is built on | [Third-party libraries]({% link libraries.md %}) |

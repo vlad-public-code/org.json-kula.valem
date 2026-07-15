@@ -36,6 +36,7 @@ door is [index.md](index.md).
 
 **Author or generate specs** (human or LLM):
 - [reference/model-spec-format.md](reference/model-spec-format.md) — the ModelSpec format (canonical)
+- [guides/effects.md](guides/effects.md) — built-in effect executors + writing a custom effect kind
 - [guides/generating-specs-with-llm.md](guides/generating-specs-with-llm.md) — LLM-driven generation
 - [reference/llm-prompts.md](reference/llm-prompts.md) — exact prompts sent to the LLM
 
@@ -85,6 +86,7 @@ docs/                          ← doc tree + Jekyll source of the published sit
   guides/                      ← task-oriented
     getting-started.md         ← run console / backend / UI from source
     examples-gallery.md        ← ready-to-run specs
+    effects.md                 ← built-in effect executors + custom effect kinds
     client-sdks.md             ← TS + Java clients
     mcp-server.md              ← drive Valem over MCP
     composition-and-branching.md
