@@ -110,8 +110,55 @@ docs/
     reactive-engine.md
 ```
 
+## Third-party libraries
+
+Valem is Apache-2.0 and stands on a small, deliberately chosen set of libraries. The pure core
+(`valem-core` / `valem-service`) depends only on Jackson plus the two JSON libraries below — no
+framework. Everything else is à-la-carte, pulled in only by the module that needs it.
+
+### Java
+
+| Library | Version | Used for |
+|---|---|---|
+| [Jackson](https://github.com/FasterXML/jackson) | 2.21.2 | JSON tree (`JsonNode`) and (de)serialization — the substrate for all model state. |
+| [tracked-json](https://github.com/vlad-public-code/org.json-kula.tracked-json) | 1.0.0 | `JsonPointer`-tracking `JsonNode` wrapper + RFC 6902 JSON Patch + RFC 9535 JSONPath. |
+| [jsonata-jvm-compiler](https://github.com/vlad-public-code/org.json-kula.jsonata-jvm-compiler) | 1.0.3 | Compiles and evaluates the JSONata in derivations, constraints, and effects. |
+| [json-schema-validator](https://github.com/networknt/json-schema-validator) | 1.4.3 | Validates base documents and mutations against a model's JSON Schema. |
+| [Caffeine](https://github.com/ben-manes/caffeine) | — | In-memory caching on hot paths. |
+| [Spring Boot](https://spring.io/projects/spring-boot) | 3.3.5 | REST, WebSocket, actuator, and security layers (`valem-api` / `valem-web`, virtual threads on). |
+| [springdoc-openapi](https://springdoc.org/) | — | OpenAPI 3 spec + Swagger UI for the REST surface. |
+| [Micrometer](https://micrometer.io/) (Prometheus) | — | Metrics and observability. |
+| [HikariCP](https://github.com/brettwooldridge/HikariCP) | — | JDBC connection pooling for DB backends. |
+| [jsoup](https://jsoup.org/) | — | Extracts readable text for the LLM `web_fetch` tool. |
+| [PostgreSQL JDBC](https://jdbc.postgresql.org/) · [MongoDB Driver](https://www.mongodb.com/docs/drivers/java/sync/) · [Lettuce](https://lettuce.io/) (Redis) · [AWS SDK v2](https://github.com/aws/aws-sdk-java-v2) (S3) | — | Optional persistence adapters, loaded only when their backend is selected. |
+| [JUnit 5](https://junit.org/junit5/) · [AssertJ](https://assertj.github.io/doc/) · [JMH](https://github.com/openjdk/jmh) | 5.11.4 / 3.26.3 / — | Tests, fluent assertions, and micro-benchmarks. |
+
+### TypeScript & React
+
+| Library | Version | Used for |
+|---|---|---|
+| [React](https://react.dev/) + [react-dom](https://react.dev/) | 18 | The management SPA (`valem-ui`) and the `EvaluatedView` renderer (`valem-view-react`). |
+| [TypeScript](https://www.typescriptlang.org/) | 5.5 | Types across the UI, the view renderer, and the [TS SDK](guides/client-sdks.md). |
+| [Vite](https://vitejs.dev/) + [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react) | 5 | Dev server and build tooling for the front-end modules. |
+| [Recharts](https://recharts.org/) | 2.15 | Chart components in the `valem-view-react` renderer. |
+| [jsonata](https://github.com/jsonata-js/jsonata) (JS) | 2.0.5 | Client-side JSONata evaluation in the view renderer. |
+| [vite-plugin-dts](https://github.com/qmhc/vite-plugin-dts) | 4 | Bundles `.d.ts` types for the `valem-view-react` library build. |
+| [Playwright](https://playwright.dev/) | 1.48 | End-to-end browser tests (`valem-e2e`). |
+
+> The isomorphic TypeScript SDK (`clients/valem-sdk-ts`) has **zero runtime dependencies** — it uses
+> only the platform `fetch` and `WebSocket`.
+
+All are third-party projects under their own licenses (mostly Apache-2.0 / MIT / BSD); consult each
+for authoritative terms.
+
 ## Conventions
 - **One topic, one home.** Each topic has a single canonical doc; everything else links to it.
 - Spec format → `reference/model-spec-format.md`; API → `reference/api-reference.md`;
   config → `reference/configuration.md`. Do not duplicate these in other docs.
 - `reference/` and `architecture/` describe the **as-built** system.
+
+## See also
+- [Valem sandbox](https://valem.onrender.com/)
+- [Valem source code](https://github.com/vlad-public-code/org.json-kula.valem)
+- [tracked-json](https://vlad-public-code.github.io/org.json-kula.tracked-json/) — Jackson JsonNode wrapper that tracks each node's location (JsonPointer) and document root through every navigation — get, path, at, parent(), and JSONPath (RFC 9535). Includes JSON Patch (RFC 6902).
+- [jsonata-jvm-compiler](https://vlad-public-code.github.io/org.json-kula.jsonata-jvm-compiler/) — A Java library that compiles [JSONata](https://jsonata.org) expressions into native Java classes at runtime 

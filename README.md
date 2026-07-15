@@ -3,6 +3,10 @@
 Deterministic reactive computation runtime for AI-generated structured data models.
 A spreadsheet-like computation model for JSON-based agent systems.
 
+**▶ [Try the live sandbox](https://valem.onrender.com/)** — a zero-setup public demo: describe a
+domain in plain language, watch an LLM generate a ModelSpec, then mutate fields and see derivations,
+constraints, and effects react live.
+
 ## Documentation
 
 Full docs live under [`docs/`](docs/README.md) — an audience-keyed index. Canonical references:
@@ -10,6 +14,41 @@ Full docs live under [`docs/`](docs/README.md) — an audience-keyed index. Cano
 [Configuration](docs/reference/configuration.md) · [Security model](docs/reference/security-model.md) ·
 [Architecture](docs/architecture/overview.md). This README is a quickstart; the canonical detail
 lives in those docs.
+
+## Third-party libraries
+
+Valem is Apache-2.0 and stands on a small, deliberately chosen set of libraries. The pure core
+(`valem-core` / `valem-service`) depends only on Jackson plus the two JSON libraries below — no
+framework; everything else is à-la-carte, pulled in only by the module that needs it. See
+[docs/README.md](docs/README.md#third-party-libraries) for the fuller list.
+
+**Java**
+
+| Library | Version | Used for |
+|---|---|---|
+| [Jackson](https://github.com/FasterXML/jackson) | 2.21.2 | JSON tree (`JsonNode`) and (de)serialization — the substrate for all model state. |
+| [tracked-json](https://github.com/vlad-public-code/org.json-kula.tracked-json) | 1.0.0 | `JsonPointer`-tracking `JsonNode` wrapper + RFC 6902 JSON Patch + RFC 9535 JSONPath. |
+| [jsonata-jvm-compiler](https://github.com/vlad-public-code/org.json-kula.jsonata-jvm-compiler) | 1.0.3 | Compiles and evaluates the JSONata in derivations, constraints, and effects. |
+| [json-schema-validator](https://github.com/networknt/json-schema-validator) | 1.4.3 | Validates base documents and mutations against a model's JSON Schema. |
+| [Caffeine](https://github.com/ben-manes/caffeine) | — | In-memory caching on hot paths. |
+| [Spring Boot](https://spring.io/projects/spring-boot) | 3.3.5 | REST, WebSocket, actuator, and security layers (`valem-api` / `valem-web`). |
+| [springdoc-openapi](https://springdoc.org/) · [Micrometer](https://micrometer.io/) · [HikariCP](https://github.com/brettwooldridge/HikariCP) · [jsoup](https://jsoup.org/) | — | OpenAPI/Swagger UI, metrics, JDBC pooling, and LLM `web_fetch` text extraction. |
+| [PostgreSQL JDBC](https://jdbc.postgresql.org/) · [MongoDB Driver](https://www.mongodb.com/docs/drivers/java/sync/) · [Lettuce](https://lettuce.io/) · [AWS SDK v2](https://github.com/aws/aws-sdk-java-v2) | — | Optional persistence adapters, loaded only when their backend is selected. |
+| [JUnit 5](https://junit.org/junit5/) · [AssertJ](https://assertj.github.io/doc/) · [JMH](https://github.com/openjdk/jmh) | 5.11.4 / 3.26.3 / — | Tests, fluent assertions, and micro-benchmarks. |
+
+**TypeScript & React**
+
+| Library | Version | Used for |
+|---|---|---|
+| [React](https://react.dev/) + [react-dom](https://react.dev/) | 18 | The management SPA (`valem-ui`) and the `EvaluatedView` renderer (`valem-view-react`). |
+| [TypeScript](https://www.typescriptlang.org/) | 5.5 | Types across the UI, the view renderer, and the TypeScript SDK. |
+| [Vite](https://vitejs.dev/) + [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react) | 5 | Dev server and build tooling for the front-end modules. |
+| [Recharts](https://recharts.org/) | 2.15 | Chart components in the `valem-view-react` renderer. |
+| [jsonata](https://github.com/jsonata-js/jsonata) (JS) | 2.0.5 | Client-side JSONata evaluation in the view renderer. |
+| [Playwright](https://playwright.dev/) | 1.48 | End-to-end browser tests (`valem-e2e`). |
+
+The isomorphic TypeScript SDK (`clients/valem-sdk-ts`) has **zero runtime dependencies** — it uses
+only the platform `fetch` and `WebSocket`.
 
 ## Prerequisites
 
