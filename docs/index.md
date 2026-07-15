@@ -29,6 +29,10 @@ constraints are enforced, and nothing is left inconsistent.
 Think of a spreadsheet — cells, formulas, validation — but addressed by JSON Path, expressed in
 JSONata, and driven over a REST/WebSocket API, an in-process library, an MCP server, or a console.
 
+The name says it: ***valem*** is the Estonian word for **"formula"**. It's pronounced
+**VAH-lem** (IPA [ˈvɑlem]) — stress on the first syllable, *a* as in "father", never
+"va-LEM".
+
 ## Why it exists
 
 - **Deterministic & replayable.** The pure core performs no I/O; the same inputs always produce the
