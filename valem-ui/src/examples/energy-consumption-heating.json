@@ -1,0 +1,254 @@
+{
+  "_name": "Energy Consumption — House Heating",
+  "_description": "Four-level mathematical derivation pipeline: temperature delta → heat demand (kW) → monthly consumption (kWh) → monthly cost. Adjust insulation or outdoor temperature and watch every downstream value update.",
+  "id": "energy-consumption-heating",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "houseAreaM2": {
+        "type": "number",
+        "minimum": 1,
+        "description": "Heated floor area in m²"
+      },
+      "indoorTempC": {
+        "type": "number",
+        "description": "Desired indoor temperature in °C"
+      },
+      "outdoorTempC": {
+        "type": "number",
+        "description": "Outdoor (design) temperature in °C"
+      },
+      "insulationUValue": {
+        "type": "number",
+        "minimum": 0.1,
+        "description": "Overall U-value W/(m²·K) — lower is better (0.15 = excellent, 0.3 = good, 0.6 = average, 1.2 = poor)"
+      },
+      "heatingEfficiencyPct": {
+        "type": "number",
+        "minimum": 1,
+        "maximum": 500,
+        "description": "System efficiency % (100 = direct electric, 300 = heat pump COP 3)"
+      },
+      "hoursPerDay": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 24,
+        "description": "Hours of active heating per day"
+      },
+      "daysPerMonth": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 31,
+        "description": "Heating days per month"
+      },
+      "electricityRateEur": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Electricity price in €/kWh"
+      },
+      "tempDeltaK": {
+        "type": "number",
+        "readOnly": true,
+        "description": "Temperature difference in K = indoor − outdoor"
+      },
+      "heatDemandKw": {
+        "type": "number",
+        "readOnly": true,
+        "description": "Peak heat demand in kW"
+      },
+      "monthlyKwh": {
+        "type": "number",
+        "readOnly": true,
+        "description": "Estimated monthly energy consumption in kWh"
+      },
+      "monthlyCostEur": {
+        "type": "number",
+        "readOnly": true,
+        "description": "Estimated monthly heating cost in €"
+      }
+    },
+    "required": [
+      "houseAreaM2",
+      "indoorTempC",
+      "outdoorTempC",
+      "insulationUValue",
+      "heatingEfficiencyPct",
+      "hoursPerDay",
+      "daysPerMonth",
+      "electricityRateEur"
+    ]
+  },
+  "derivations": [
+    {
+      "path": "$.tempDeltaK",
+      "expr": "indoorTempC - outdoorTempC"
+    },
+    {
+      "path": "$.heatDemandKw",
+      "expr": "$round(houseAreaM2 * insulationUValue * tempDeltaK / 1000, 3)"
+    },
+    {
+      "path": "$.monthlyKwh",
+      "expr": "$round(heatDemandKw * hoursPerDay * daysPerMonth / (heatingEfficiencyPct / 100), 1)"
+    },
+    {
+      "path": "$.monthlyCostEur",
+      "expr": "$round(monthlyKwh * electricityRateEur, 2)"
+    }
+  ],
+  "constraints": [
+    {
+      "id": "heating-required",
+      "expr": "indoorTempC > outdoorTempC",
+      "message": "Indoor temperature must be higher than outdoor temperature for heating to be needed",
+      "policy": "rollback"
+    },
+    {
+      "id": "u-value-positive",
+      "expr": "insulationUValue > 0",
+      "message": "U-value must be positive",
+      "policy": "rollback"
+    }
+  ],
+  "actions": [],
+  "metaDerivations": [],
+  "defaultValues": [
+    {
+      "path": "$",
+      "expr": "{\"houseAreaM2\": 120, \"indoorTempC\": 21, \"outdoorTempC\": -5, \"insulationUValue\": 0.3, \"heatingEfficiencyPct\": 100, \"hoursPerDay\": 16, \"daysPerMonth\": 30, \"electricityRateEur\": 0.28}"
+    }
+  ],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "House Heating",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "inputGroup",
+            "type": "group",
+            "layout": "vertical",
+            "components": [
+              {
+                "id": "areaField",
+                "type": "numericField",
+                "label": "Floor Area (m²)",
+                "bind": "$.houseAreaM2",
+                "placeholder": "e.g. 120"
+              },
+              {
+                "id": "indoorField",
+                "type": "numericField",
+                "label": "Indoor Temperature (°C)",
+                "bind": "$.indoorTempC",
+                "placeholder": "e.g. 21"
+              },
+              {
+                "id": "outdoorField",
+                "type": "numericField",
+                "label": "Outdoor Temperature (°C)",
+                "bind": "$.outdoorTempC",
+                "placeholder": "e.g. -5"
+              },
+              {
+                "id": "uValueField",
+                "type": "numericField",
+                "label": "Insulation U-value W/(m²·K)",
+                "bind": "$.insulationUValue",
+                "placeholder": "e.g. 0.3 (good)"
+              },
+              {
+                "id": "efficiencyField",
+                "type": "numericField",
+                "label": "Heating Efficiency (%)",
+                "bind": "$.heatingEfficiencyPct",
+                "placeholder": "e.g. 100 = direct electric, 300 = heat pump COP 3"
+              },
+              {
+                "id": "hoursField",
+                "type": "numericField",
+                "label": "Heating Hours per Day",
+                "bind": "$.hoursPerDay",
+                "placeholder": "e.g. 16"
+              },
+              {
+                "id": "daysField",
+                "type": "numericField",
+                "label": "Heating Days per Month",
+                "bind": "$.daysPerMonth",
+                "placeholder": "e.g. 30"
+              },
+              {
+                "id": "rateField",
+                "type": "numericField",
+                "label": "Electricity Rate (€/kWh)",
+                "bind": "$.electricityRateEur",
+                "placeholder": "e.g. 0.28"
+              }
+            ]
+          },
+          {
+            "id": "sep1",
+            "type": "separatorLine"
+          },
+          {
+            "id": "resultsGroup",
+            "type": "group",
+            "layout": "horizontal",
+            "components": [
+              {
+                "id": "deltaLabel",
+                "type": "label",
+                "label": "Temp Delta (K)",
+                "bind": "$.tempDeltaK"
+              },
+              {
+                "id": "demandLabel",
+                "type": "label",
+                "label": "Peak Heat Demand (kW)",
+                "bind": "$.heatDemandKw"
+              },
+              {
+                "id": "kwhLabel",
+                "type": "label",
+                "label": "Monthly Consumption (kWh)",
+                "bind": "$.monthlyKwh"
+              },
+              {
+                "id": "costLabel",
+                "type": "label",
+                "label": "Monthly Cost (€)",
+                "bind": "$.monthlyCostEur"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "120 m² at 26K delta, U=0.3, 100% efficiency, 16h/day, 30 days",
+      "given": {
+        "$.houseAreaM2": 120,
+        "$.indoorTempC": 21,
+        "$.outdoorTempC": -5,
+        "$.insulationUValue": 0.3,
+        "$.heatingEfficiencyPct": 100,
+        "$.hoursPerDay": 16,
+        "$.daysPerMonth": 30,
+        "$.electricityRateEur": 0.28
+      },
+      "expect": {
+        "$.tempDeltaK": 26,
+        "$.heatDemandKw": 0.936,
+        "$.monthlyKwh": 449.3,
+        "$.monthlyCostEur": 125.8
+      }
+    }
+  ]
+}

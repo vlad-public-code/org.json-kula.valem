@@ -1,0 +1,110 @@
+{
+  "_name": "Support Ticket Triage",
+  "_description": "A help-desk ticket that shows all four effect kinds working together: an LLM reads the description and fills in category + urgency (llm), a policy service is queried for the promised response time (server), the agent is alerted when the ticket is urgent (caller), and an open ticket auto-escalates if nobody handles it in time (timer).",
+  "id": "support-ticket-triage",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "ticket": {
+        "type": "object",
+        "properties": {
+          "description":     { "type": "string" },
+          "status":          { "type": "string", "enum": ["open", "escalated", "closed"] },
+          "category":        { "type": "string" },
+          "urgency":         { "type": "number", "minimum": 1, "maximum": 5 },
+          "responseMinutes": { "type": "number", "minimum": 0 },
+          "highPriority":    { "type": "boolean", "readOnly": true }
+        }
+      }
+    }
+  },
+  "defaultValues": [
+    { "path": "$", "expr": "{ 'ticket': { 'status': 'open' } }", "description": "A new ticket starts open, which arms the auto-escalation timer." }
+  ],
+  "derivations": [
+    { "path": "$.ticket.highPriority", "expr": "ticket.urgency != null and ticket.urgency >= 4" }
+  ],
+  "constraints": [
+    { "id": "urgency-in-range", "expr": "ticket.urgency = null or (ticket.urgency >= 1 and ticket.urgency <= 5)",
+      "message": "Urgency must be between 1 and 5", "policy": "flag" }
+  ],
+  "effects": [
+    {
+      "id": "classify-ticket",
+      "executor": "llm",
+      "trigger": "ticket.description != null",
+      "dedupeKey": "ticket.description",
+      "prompt": "'Read this support ticket and classify it. Reply with JSON {\"category\": string, \"urgency\": number 1-5}. Ticket: ' & ticket.description",
+      "responseSchema": {
+        "type": "object",
+        "properties": { "category": { "type": "string" }, "urgency": { "type": "number" } },
+        "required": ["category", "urgency"]
+      },
+      "response": { "set": { "$.ticket.category": "$response.category", "$.ticket.urgency": "$response.urgency" } },
+      "statusPath": "$.ticket.ioClassify"
+    },
+    {
+      "id": "fetch-sla",
+      "executor": "server",
+      "trigger": "ticket.category != null",
+      "dedupeKey": "ticket.category",
+      "request": { "method": "GET", "url": "https://sla.example.com/lookup?category={ ticket.category }" },
+      "response": { "set": { "$.ticket.responseMinutes": "$response.responseMinutes" } },
+      "statusPath": "$.ticket.ioSla"
+    },
+    {
+      "id": "alert-agent-when-urgent",
+      "executor": "caller",
+      "trigger": "ticket.highPriority = true",
+      "dedupeKey": "ticket.urgency",
+      "emit": "ticket.urgent",
+      "payload": { "message": "'Urgent ticket needs attention: ' & ticket.category", "urgency": "ticket.urgency" }
+    },
+    {
+      "id": "auto-escalate",
+      "executor": "timer",
+      "trigger": "ticket.status = 'open'",
+      "dedupeKey": "ticket.status",
+      "afterMs": "1800000",
+      "response": { "set": { "$.ticket.status": "'escalated'" } },
+      "statusPath": "$.ticket.ioEscalate"
+    }
+  ],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "Ticket",
+        "layout": "vertical",
+        "components": [
+          { "id": "description", "type": "textField", "label": "Describe your issue", "bind": "$.ticket.description", "placeholder": "e.g. I was charged twice for my order" },
+          { "id": "status", "type": "textField", "label": "Status", "bind": "$.ticket.status" },
+          { "id": "sep1", "type": "separatorLine" },
+          { "id": "category", "type": "label", "label": "Category (from AI)", "bind": "$.ticket.category" },
+          { "id": "urgency", "type": "label", "label": "Urgency 1-5 (from AI)", "bind": "$.ticket.urgency" },
+          { "id": "highPriority", "type": "label", "label": "High priority", "bind": "$.ticket.highPriority" },
+          { "id": "responseMinutes", "type": "label", "label": "Promised response (minutes)", "bind": "$.ticket.responseMinutes" },
+          { "id": "sep2", "type": "separatorLine" },
+          { "id": "classifyStatus", "type": "label", "label": "AI classification", "bind": "$.ticket.ioClassify.phase" },
+          { "id": "slaStatus", "type": "label", "label": "SLA lookup", "bind": "$.ticket.ioSla.phase" },
+          { "id": "escalateStatus", "type": "label", "label": "Escalation timer", "bind": "$.ticket.ioEscalate.phase" }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "a ticket with urgency 4 or 5 is flagged high priority",
+      "given":  { "$.ticket.urgency": 5 },
+      "expect": { "$.ticket.highPriority": true }
+    },
+    {
+      "description": "a low-urgency ticket is not high priority",
+      "given":  { "$.ticket.urgency": 2 },
+      "expect": { "$.ticket.highPriority": false }
+    }
+  ]
+}

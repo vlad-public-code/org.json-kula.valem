@@ -1,0 +1,101 @@
+{
+  "_name": "World Clock",
+  "_description": "Pick a country and its current date and time are fetched live from a real public time API (timeapi.io) by a server (http) effect - no fake URL. A timer effect re-arms every 10 seconds by bumping a tick counter the http effect is keyed to, so the clock refreshes itself continuously. A minimal, focused demonstration of the two I/O-capable effect kinds (server + timer) composing into a self-refreshing poll against a real endpoint.",
+  "id": "world-clock",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "location": {
+        "type": "object",
+        "properties": {
+          "timeZone": { "type": ["string", "null"], "description": "IANA timezone of the selected country, e.g. Europe/London." }
+        }
+      },
+      "clock": {
+        "type": "object",
+        "properties": {
+          "tick":      { "type": "number", "description": "Refresh counter; the timer effect bumps it every 10s and the http effect is keyed to it." },
+          "dateTime":  { "type": ["string", "null"], "description": "Full ISO date-time for the selected zone, folded back from the time API." },
+          "time":      { "type": ["string", "null"], "description": "Local time (HH:mm) for the selected zone." },
+          "dayOfWeek": { "type": ["string", "null"], "description": "Day of week for the selected zone." }
+        }
+      }
+    }
+  },
+  "defaultValues": [
+    { "path": "$", "expr": "{ 'location': { 'timeZone': null }, 'clock': { 'tick': 0 } }",
+      "description": "A new clock starts at tick 0 with no zone selected, until a country is picked." }
+  ],
+  "effects": [
+    {
+      "id": "fetch-time",
+      "executor": "server",
+      "trigger": "location.timeZone != null",
+      "dedupeKey": "location.timeZone & '@' & clock.tick",
+      "request": { "method": "GET", "url": "https://timeapi.io/api/Time/current/zone?timeZone={ location.timeZone }" },
+      "response": { "set": {
+        "$.clock.dateTime":  "$response.dateTime",
+        "$.clock.time":      "$response.time",
+        "$.clock.dayOfWeek": "$response.dayOfWeek"
+      } },
+      "statusPath": "$.clock.ioFetch",
+      "description": "Fetch the current date and time for the selected country's timezone from the public timeapi.io service. Re-fires whenever the zone changes or the refresh tick advances."
+    },
+    {
+      "id": "refresh-tick",
+      "executor": "timer",
+      "trigger": "location.timeZone != null",
+      "dedupeKey": "clock.tick",
+      "afterMs": "10000",
+      "response": { "set": { "$.clock.tick": "clock.tick + 1" } },
+      "statusPath": "$.clock.ioRefresh",
+      "description": "Every 10 seconds, bump the refresh tick. Because fetch-time is keyed to the tick, this re-arms the time lookup so the clock keeps updating; it stops automatically when no zone is selected."
+    }
+  ],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "World Clock",
+        "layout": "vertical",
+        "components": [
+          { "id": "countryField", "type": "selectField", "label": "Country",
+            "bind": "$.location.timeZone",
+            "options": [
+              { "value": "Europe/London",     "label": "United Kingdom - London" },
+              { "value": "America/New_York",  "label": "United States - New York" },
+              { "value": "America/Sao_Paulo", "label": "Brazil - Sao Paulo" },
+              { "value": "Europe/Berlin",     "label": "Germany - Berlin" },
+              { "value": "Asia/Kolkata",      "label": "India - Kolkata" },
+              { "value": "Asia/Tokyo",        "label": "Japan - Tokyo" },
+              { "value": "Australia/Sydney",  "label": "Australia - Sydney" }
+            ] },
+          { "id": "sep1", "type": "separatorLine" },
+          { "id": "zoneLabel",      "type": "label", "label": "Selected zone", "bind": "$.location.timeZone" },
+          { "id": "dateTimeLabel",  "type": "label", "label": "Date & time",   "bind": "$.clock.dateTime" },
+          { "id": "timeLabel",      "type": "label", "label": "Local time",    "bind": "$.clock.time" },
+          { "id": "dayLabel",       "type": "label", "label": "Day of week",   "bind": "$.clock.dayOfWeek" },
+          { "id": "tickLabel",      "type": "label", "label": "Refresh #",     "bind": "$.clock.tick" },
+          { "id": "sep2", "type": "separatorLine" },
+          { "id": "fetchIoLabel",   "type": "label", "label": "Fetch status",   "bind": "$.clock.ioFetch.phase" },
+          { "id": "refreshIoLabel", "type": "label", "label": "Refresh status", "bind": "$.clock.ioRefresh.phase" }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "a fresh clock starts at tick 0 with no zone selected",
+      "given": {},
+      "expect": { "$.clock.tick": 0 }
+    },
+    {
+      "description": "selecting a country stores its timezone; the time lookup folds back asynchronously outside this synchronous test",
+      "given": { "$.location.timeZone": "Europe/London" },
+      "expect": { "$.location.timeZone": "Europe/London", "$.clock.tick": 0 }
+    }
+  ]
+}

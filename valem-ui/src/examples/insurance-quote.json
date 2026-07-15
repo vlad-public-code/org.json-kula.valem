@@ -1,0 +1,182 @@
+{
+  "_name": "Term Life Insurance Quote",
+  "_description": "The beachhead ICP: an LLM-driven quoting tool over structured data with real derivations and invariants. A term-life premium is computed reactively from applicant age, coverage, and smoker status against an actuarial rate table (constants); eligibility and the quote decision are enforced as constraints; a live regional rate multiplier is fetched via a server effect and folded back; the quote self-expires via a timer effect; and the caller is notified when a quote is ready. Every input->premium pair in the golden `tests` suite is hand-derived from the rate table, so the suite is an independent certification oracle, not LLM-authored homework.",
+  "id": "insurance-quote",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "quote": {
+        "type": "object",
+        "properties": {
+          "applicant": {
+            "type": "object",
+            "properties": {
+              "age":    { "type": "number", "minimum": 0, "maximum": 120 },
+              "smoker": { "type": "boolean" },
+              "region": { "type": "string" }
+            }
+          },
+          "coverage":         { "type": "number", "minimum": 0 },
+          "regionMultiplier": { "type": "number", "minimum": 0 },
+          "state":            { "type": "string", "enum": ["draft", "quoted", "expired"] },
+
+          "units":          { "type": "number", "readOnly": true },
+          "ageFactor":      { "type": "number", "readOnly": true },
+          "smokerFactor":   { "type": "number", "readOnly": true },
+          "baseAnnual":     { "type": "number", "readOnly": true },
+          "annualPremium":  { "type": "number", "readOnly": true },
+          "monthlyPremium": { "type": "number", "readOnly": true },
+          "eligible":       { "type": "boolean", "readOnly": true },
+          "decision":       { "type": "string", "readOnly": true }
+        }
+      }
+    }
+  },
+  "constants": {
+    "baseRatePer1000": 1.5,
+    "smokerLoading":   1.5,
+    "minCoverage":     10000,
+    "maxCoverage":     1000000
+  },
+  "defaultValues": [
+    {
+      "path": "$",
+      "expr": "{ 'quote': { 'regionMultiplier': 1.0, 'state': 'draft' } }",
+      "description": "A new quote starts in draft with a neutral (1.0) regional rate until the live rate is fetched."
+    }
+  ],
+  "derivations": [
+    { "path": "$.quote.units",
+      "expr": "quote.coverage != null ? quote.coverage / 1000 : 0",
+      "description": "Coverage expressed in $1,000 rating units." },
+
+    { "path": "$.quote.ageFactor",
+      "expr": "quote.applicant.age = null ? 1.0 : (quote.applicant.age < 30 ? 0.8 : (quote.applicant.age < 45 ? 1.0 : (quote.applicant.age < 60 ? 1.4 : 2.0)))",
+      "description": "Actuarial age band multiplier." },
+
+    { "path": "$.quote.smokerFactor",
+      "expr": "quote.applicant.smoker = true ? $const.smokerLoading : 1.0",
+      "description": "Smoker loading applied to the base rate." },
+
+    { "path": "$.quote.baseAnnual",
+      "expr": "quote.units * $const.baseRatePer1000",
+      "description": "Annual premium before risk factors: units x base rate." },
+
+    { "path": "$.quote.annualPremium",
+      "expr": "quote.baseAnnual * quote.ageFactor * quote.smokerFactor * quote.regionMultiplier",
+      "description": "Final annual premium after age, smoker, and regional factors." },
+
+    { "path": "$.quote.monthlyPremium",
+      "expr": "quote.annualPremium / 12",
+      "description": "Annual premium billed monthly." },
+
+    { "path": "$.quote.eligible",
+      "expr": "quote.applicant.age != null and quote.applicant.age >= 18 and quote.applicant.age <= 75",
+      "description": "Applicant is within the insurable age window." },
+
+    { "path": "$.quote.decision",
+      "expr": "quote.eligible = true ? 'quoted' : 'declined'",
+      "description": "Underwriting decision surfaced to the applicant." }
+  ],
+  "metaDerivations": [
+    { "path": "$.quote.coverage", "property": "maximum",
+      "expr": "quote.applicant.age = null ? $const.maxCoverage : (quote.applicant.age < 45 ? $const.maxCoverage : 500000)",
+      "description": "Older applicants are capped at a lower maximum coverage." }
+  ],
+  "constraints": [
+    { "id": "coverage-positive",
+      "expr": "quote.coverage = null or quote.coverage > 0",
+      "message": "Coverage amount must be positive", "policy": "rollback" },
+    { "id": "coverage-in-range",
+      "expr": "quote.coverage = null or (quote.coverage >= $const.minCoverage and quote.coverage <= $const.maxCoverage)",
+      "message": "Coverage must be between 10,000 and 1,000,000", "policy": "flag" }
+  ],
+  "effects": [
+    {
+      "id": "fetch-region-rate",
+      "executor": "server",
+      "trigger": "quote.applicant.region != null",
+      "dedupeKey": "quote.applicant.region",
+      "request": { "method": "GET", "url": "https://rates.example.com/regional?region={ quote.applicant.region }" },
+      "response": { "set": { "$.quote.regionMultiplier": "$response.multiplier" } },
+      "statusPath": "$.quote.ioRegionRate",
+      "description": "Fetch the live regional rate multiplier and fold it into the premium calculation."
+    },
+    {
+      "id": "notify-quote-ready",
+      "executor": "caller",
+      "trigger": "quote.decision = 'quoted' and quote.annualPremium > 0",
+      "dedupeKey": "quote.annualPremium",
+      "emit": "quote.ready",
+      "payload": { "message": "'Quote ready: $' & $string(quote.annualPremium) & '/yr'", "annualPremium": "quote.annualPremium" },
+      "description": "Surface a 'quote ready' command to the caller once a priced quote exists."
+    },
+    {
+      "id": "expire-quote",
+      "executor": "timer",
+      "trigger": "quote.decision = 'quoted' and quote.state = 'quoted'",
+      "dedupeKey": "quote.state",
+      "afterMs": "900000",
+      "response": { "set": { "$.quote.state": "'expired'" } },
+      "statusPath": "$.quote.ioExpiry",
+      "description": "A priced quote is only valid for 15 minutes, after which it expires."
+    }
+  ],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "Get a Quote",
+        "layout": "vertical",
+        "components": [
+          { "id": "age",      "type": "numericField",  "label": "Age",            "bind": "$.quote.applicant.age" },
+          { "id": "smoker",   "type": "checkboxField", "label": "Smoker",         "bind": "$.quote.applicant.smoker" },
+          { "id": "region",   "type": "textField",     "label": "Region",         "bind": "$.quote.applicant.region", "placeholder": "e.g. EU-WEST" },
+          { "id": "coverage", "type": "numericField",  "label": "Coverage amount","bind": "$.quote.coverage" },
+          { "id": "sep1",     "type": "separatorLine" },
+          { "id": "decision", "type": "label", "label": "Decision",             "bind": "$.quote.decision" },
+          { "id": "annual",   "type": "label", "label": "Annual premium ($)",   "bind": "$.quote.annualPremium" },
+          { "id": "monthly",  "type": "label", "label": "Monthly premium ($)",  "bind": "$.quote.monthlyPremium" },
+          { "id": "sep2",     "type": "separatorLine" },
+          { "id": "rateIo",   "type": "label", "label": "Regional rate lookup", "bind": "$.quote.ioRegionRate.phase" },
+          { "id": "expiryIo", "type": "label", "label": "Quote expiry",         "bind": "$.quote.ioExpiry.phase" }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "healthy 35-year-old, $100k non-smoker, neutral region -> $150/yr, $12.50/mo, quoted",
+      "given":  { "$.quote.applicant.age": 35, "$.quote.applicant.smoker": false, "$.quote.coverage": 100000 },
+      "expect": { "$.quote.annualPremium": 150.0, "$.quote.monthlyPremium": 12.5, "$.quote.eligible": true, "$.quote.decision": "quoted" }
+    },
+    {
+      "description": "smoker aged 55, $250k -> 375 x 1.4 x 1.5 = $787.50/yr",
+      "given":  { "$.quote.applicant.age": 55, "$.quote.applicant.smoker": true, "$.quote.coverage": 250000 },
+      "expect": { "$.quote.ageFactor": 1.4, "$.quote.smokerFactor": 1.5, "$.quote.annualPremium": 787.5, "$.quote.monthlyPremium": 65.625 }
+    },
+    {
+      "description": "young 25-year-old, $50k non-smoker uses the 0.8 age band -> $60/yr",
+      "given":  { "$.quote.applicant.age": 25, "$.quote.applicant.smoker": false, "$.quote.coverage": 50000 },
+      "expect": { "$.quote.ageFactor": 0.8, "$.quote.annualPremium": 60.0, "$.quote.monthlyPremium": 5.0 }
+    },
+    {
+      "description": "age 60 crosses into the senior band (2.0)",
+      "given":  { "$.quote.applicant.age": 60, "$.quote.applicant.smoker": false, "$.quote.coverage": 100000 },
+      "expect": { "$.quote.ageFactor": 2.0, "$.quote.annualPremium": 300.0 }
+    },
+    {
+      "description": "applicant over the maximum insurable age is declined",
+      "given":  { "$.quote.applicant.age": 80, "$.quote.coverage": 100000 },
+      "expect": { "$.quote.eligible": false, "$.quote.decision": "declined" }
+    },
+    {
+      "description": "applicant below the minimum insurable age is declined",
+      "given":  { "$.quote.applicant.age": 16, "$.quote.coverage": 100000 },
+      "expect": { "$.quote.eligible": false, "$.quote.decision": "declined" }
+    }
+  ]
+}

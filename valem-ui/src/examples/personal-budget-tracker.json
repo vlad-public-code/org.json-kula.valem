@@ -1,0 +1,275 @@
+{
+  "_name": "Personal Budget Tracker",
+  "_description": "Three-view budget form: Income, Expenses, and Summary. Demonstrates multi-view navigation via a shared menu component and navigation buttons, with cross-view derived totals (totalIncome, totalExpenses, balance) and a status badge.",
+  "id": "personal-budget-tracker",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "income": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "amount": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        }
+      },
+      "expenses": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "amount": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            }
+          }
+        }
+      },
+      "totalIncome": {
+        "type": "number",
+        "readOnly": true
+      },
+      "totalExpenses": {
+        "type": "number",
+        "readOnly": true
+      },
+      "balance": {
+        "type": "number",
+        "readOnly": true
+      }
+    }
+  },
+  "derivations": [
+    {
+      "path": "$.totalIncome",
+      "expr": "$count(income) > 0 ? ($count(income[amount != null]) > 0 ? $sum(income[amount != null].amount) : 0) : 0"
+    },
+    {
+      "path": "$.totalExpenses",
+      "expr": "$count(expenses) > 0 ? ($count(expenses[amount != null]) > 0 ? $sum(expenses[amount != null].amount) : 0) : 0"
+    },
+    {
+      "path": "$.balance",
+      "expr": "totalIncome - totalExpenses"
+    }
+  ],
+  "constraints": [],
+  "defaultValues": [
+    {
+      "path": "$",
+      "expr": "{\"income\": [], \"expenses\": []}"
+    }
+  ],
+  "viewDefinition": {
+    "defaultView": "income",
+    "views": [
+      {
+        "id": "income",
+        "label": "Income",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "incomeNav",
+            "type": "menu",
+            "orientation": "horizontal",
+            "menuItems": [
+              {
+                "label": "Income",
+                "targetView": "income"
+              },
+              {
+                "label": "Expenses",
+                "targetView": "expenses"
+              },
+              {
+                "label": "Summary",
+                "targetView": "summary"
+              }
+            ]
+          },
+          {
+            "id": "incomeList",
+            "type": "sectionList",
+            "label": "Income Sources",
+            "bind": "$.income",
+            "addLabel": "Add Income",
+            "removeLabel": "Remove",
+            "components": [
+              {
+                "id": "incomeDesc",
+                "type": "textField",
+                "label": "Description",
+                "bind": "$.income[*].description",
+                "placeholder": "e.g. Monthly salary"
+              },
+              {
+                "id": "incomeAmt",
+                "type": "numericField",
+                "label": "Amount",
+                "bind": "$.income[*].amount"
+              }
+            ]
+          },
+          {
+            "id": "toExpenses",
+            "type": "button",
+            "label": "Expenses →",
+            "variant": "secondary",
+            "onClick": {
+              "navigate": "expenses"
+            }
+          }
+        ]
+      },
+      {
+        "id": "expenses",
+        "label": "Expenses",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "expensesNav",
+            "type": "menu",
+            "orientation": "horizontal",
+            "menuItems": [
+              {
+                "label": "Income",
+                "targetView": "income"
+              },
+              {
+                "label": "Expenses",
+                "targetView": "expenses"
+              },
+              {
+                "label": "Summary",
+                "targetView": "summary"
+              }
+            ]
+          },
+          {
+            "id": "expensesList",
+            "type": "sectionList",
+            "label": "Expenses",
+            "bind": "$.expenses",
+            "addLabel": "Add Expense",
+            "removeLabel": "Remove",
+            "components": [
+              {
+                "id": "expenseDesc",
+                "type": "textField",
+                "label": "Description",
+                "bind": "$.expenses[*].description",
+                "placeholder": "e.g. Monthly rent"
+              },
+              {
+                "id": "expenseAmt",
+                "type": "numericField",
+                "label": "Amount",
+                "bind": "$.expenses[*].amount"
+              }
+            ]
+          },
+          {
+            "id": "backToIncome",
+            "type": "button",
+            "label": "← Income",
+            "variant": "ghost",
+            "onClick": {
+              "navigate": "income"
+            }
+          },
+          {
+            "id": "toSummary",
+            "type": "button",
+            "label": "Summary →",
+            "variant": "secondary",
+            "onClick": {
+              "navigate": "summary"
+            }
+          }
+        ]
+      },
+      {
+        "id": "summary",
+        "label": "Summary",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "summaryNav",
+            "type": "menu",
+            "orientation": "horizontal",
+            "menuItems": [
+              {
+                "label": "Income",
+                "targetView": "income"
+              },
+              {
+                "label": "Expenses",
+                "targetView": "expenses"
+              },
+              {
+                "label": "Summary",
+                "targetView": "summary"
+              }
+            ]
+          },
+          {
+            "id": "totalIncomeLabel",
+            "type": "label",
+            "label": "Total Income",
+            "bind": "$.totalIncome"
+          },
+          {
+            "id": "totalExpensesLabel",
+            "type": "label",
+            "label": "Total Expenses",
+            "bind": "$.totalExpenses"
+          },
+          {
+            "id": "balanceLabel",
+            "type": "label",
+            "label": "Balance",
+            "bind": "$.balance"
+          },
+          {
+            "id": "statusBadge",
+            "type": "badge",
+            "text": "balance > 0 ? 'Surplus' : (balance < 0 ? 'Deficit' : 'Balanced')",
+            "variant": "balance > 0 ? 'success' : (balance < 0 ? 'danger' : 'secondary')"
+          },
+          {
+            "id": "backToExpenses",
+            "type": "button",
+            "label": "← Expenses",
+            "variant": "ghost",
+            "onClick": {
+              "navigate": "expenses"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

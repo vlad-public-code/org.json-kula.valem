@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.vlad-public-code</groupId>
+        <artifactId>valem</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>valem-api</artifactId>
+    <name>valem-api</name>
+    <description>Valem REST and WebSocket API — Spring Boot 3</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.github.vlad-public-code</groupId>
+            <artifactId>valem-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.vlad-public-code</groupId>
+            <artifactId>valem-service</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.vlad-public-code</groupId>
+            <artifactId>valem-persistence-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.vlad-public-code</groupId>
+            <artifactId>valem-persistence-memory</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.github.vlad-public-code</groupId>
+            <artifactId>valem-persistence-filesystem</artifactId>
+        </dependency>
+        <!-- Optional persistence backends: discovered at runtime via the PersistenceProvider SPI
+             (ServiceLoader), so valem-api does not compile-depend on them. Present here at
+             test scope so StorageConfigTest can assert wiring; production deployments add whichever
+             adapter jar(s) they need to the classpath. A selection with no matching provider fails
+             fast with an "add the jar" message (see StorageConfig / MissingBackendResolutionTest). -->
+        <dependency>
+            <groupId>io.github.vlad-public-code</groupId>
+            <artifactId>valem-persistence-redis</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.github.vlad-public-code</groupId>
+            <artifactId>valem-persistence-mongo</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.github.vlad-public-code</groupId>
+            <artifactId>valem-persistence-postgres</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.github.vlad-public-code</groupId>
+            <artifactId>valem-persistence-s3</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+        <!-- Observability: Actuator (health/metrics endpoints) + Prometheus scrape endpoint -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.6.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.18.3</version>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Test-only: drive the real embeddable McpServer over an in-process pipe for the mcp-transport
+             e2e (no cycle — valem-mcp depends on service, not api). -->
+        <dependency>
+            <groupId>io.github.vlad-public-code</groupId>
+            <artifactId>valem-mcp</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

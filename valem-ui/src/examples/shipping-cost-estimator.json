@@ -1,0 +1,238 @@
+{
+  "_name": "Shipping Cost Estimator",
+  "_description": "Package weight, distance, and carrier level combine into a cost breakdown and total, with an overweight surcharge warning.",
+  "id": "shipping-cost-estimator",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "packageWeightKg": {
+        "type": "number",
+        "minimum": 0.01,
+        "description": "Package weight in kilograms (e.g. 5)"
+      },
+      "distanceKm": {
+        "type": "number",
+        "minimum": 1,
+        "description": "Shipping distance in kilometers (e.g. 250)"
+      },
+      "carrier": {
+        "type": "string",
+        "enum": ["standard", "express", "priority"],
+        "description": "Carrier service level"
+      },
+      "baseCost": {
+        "type": "number",
+        "readOnly": true
+      },
+      "distanceCost": {
+        "type": "number",
+        "readOnly": true
+      },
+      "carrierMultiplier": {
+        "type": "number",
+        "readOnly": true
+      },
+      "subtotal": {
+        "type": "number",
+        "readOnly": true
+      },
+      "totalCost": {
+        "type": "number",
+        "readOnly": true
+      },
+      "overweight": {
+        "type": "boolean",
+        "readOnly": true
+      },
+      "breakdown": {
+        "type": "array",
+        "readOnly": true,
+        "items": {
+          "type": "object",
+          "properties": {
+            "label": { "type": "string" },
+            "amount": { "type": "number" }
+          }
+        }
+      }
+    },
+    "required": ["packageWeightKg", "distanceKm", "carrier"]
+  },
+  "constants": {
+    "ratePerKg": 2.5,
+    "ratePerKm": 0.05,
+    "maxWeightKg": 1000
+  },
+  "derivations": [
+    {
+      "path": "$.baseCost",
+      "expr": "$round(packageWeightKg * $const.ratePerKg, 2)"
+    },
+    {
+      "path": "$.distanceCost",
+      "expr": "$round(distanceKm * $const.ratePerKm, 2)"
+    },
+    {
+      "path": "$.carrierMultiplier",
+      "expr": "carrier = \"express\" ? 1.5 : carrier = \"priority\" ? 2 : 1"
+    },
+    {
+      "path": "$.subtotal",
+      "expr": "$round(baseCost + distanceCost, 2)"
+    },
+    {
+      "path": "$.totalCost",
+      "expr": "$round(subtotal * carrierMultiplier, 2)"
+    },
+    {
+      "path": "$.overweight",
+      "expr": "packageWeightKg > $const.maxWeightKg"
+    },
+    {
+      "path": "$.breakdown",
+      "expr": "[{\"label\": \"Base cost\", \"amount\": baseCost}, {\"label\": \"Distance cost\", \"amount\": distanceCost}, {\"label\": \"Carrier surcharge\", \"amount\": $round(totalCost - subtotal, 2)}]"
+    }
+  ],
+  "constraints": [
+    {
+      "id": "weight-positive",
+      "expr": "packageWeightKg > 0",
+      "message": "Package weight must be positive",
+      "policy": "rollback"
+    },
+    {
+      "id": "distance-positive",
+      "expr": "distanceKm > 0",
+      "message": "Distance must be positive",
+      "policy": "rollback"
+    },
+    {
+      "id": "weight-hard-cap",
+      "expr": "packageWeightKg <= 2000",
+      "message": "Weight cannot exceed 2000kg (carrier hard limit)",
+      "policy": "rollback"
+    }
+  ],
+  "metaDerivations": [],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "Shipping Cost Estimator",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "weightField",
+            "type": "numericField",
+            "label": "Package Weight (kg)",
+            "bind": "$.packageWeightKg",
+            "placeholder": "e.g. 5"
+          },
+          {
+            "id": "distanceField",
+            "type": "numericField",
+            "label": "Distance (km)",
+            "bind": "$.distanceKm",
+            "placeholder": "e.g. 250"
+          },
+          {
+            "id": "carrierField",
+            "type": "selectField",
+            "label": "Carrier",
+            "bind": "$.carrier",
+            "options": [
+              { "value": "standard", "label": "Standard" },
+              { "value": "express", "label": "Express" },
+              { "value": "priority", "label": "Priority" }
+            ]
+          },
+          {
+            "id": "sep1",
+            "type": "separatorLine"
+          },
+          {
+            "id": "summaryGroup",
+            "type": "group",
+            "layout": "horizontal",
+            "components": [
+              {
+                "id": "subtotalLabel",
+                "type": "label",
+                "label": "Subtotal",
+                "bind": "$.subtotal"
+              },
+              {
+                "id": "totalLabel",
+                "type": "label",
+                "label": "Total Cost",
+                "bind": "$.totalCost"
+              }
+            ]
+          },
+          {
+            "id": "overweightBadge",
+            "type": "badge",
+            "text": "Overweight surcharge may apply",
+            "variant": "warning",
+            "visible": "overweight"
+          },
+          {
+            "id": "sep2",
+            "type": "separatorLine"
+          },
+          {
+            "id": "breakdownTable",
+            "type": "dataTable",
+            "label": "Cost Breakdown",
+            "bind": "$.breakdown",
+            "tableColumns": [
+              { "field": "label", "header": "Item", "width": "60%" },
+              { "field": "amount", "header": "Amount", "format": "currency", "width": "40%" }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "defaultValues": [
+    {
+      "path": "$",
+      "expr": "{\"packageWeightKg\": 5, \"distanceKm\": 250, \"carrier\": \"standard\"}"
+    }
+  ],
+  "tests": [
+    {
+      "description": "5kg standard package over 250km",
+      "given": {
+        "$.packageWeightKg": 5,
+        "$.distanceKm": 250,
+        "$.carrier": "standard"
+      },
+      "expect": {
+        "$.baseCost": 12.5,
+        "$.distanceCost": 12.5,
+        "$.subtotal": 25,
+        "$.totalCost": 25,
+        "$.overweight": false
+      }
+    },
+    {
+      "description": "10kg express package over 100km applies a 1.5x surcharge",
+      "given": {
+        "$.packageWeightKg": 10,
+        "$.distanceKm": 100,
+        "$.carrier": "express"
+      },
+      "expect": {
+        "$.baseCost": 25,
+        "$.distanceCost": 5,
+        "$.subtotal": 30,
+        "$.totalCost": 45,
+        "$.overweight": false
+      }
+    }
+  ]
+}

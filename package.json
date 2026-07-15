@@ -1,0 +1,8 @@
+{
+  "name": "valem-workspace",
+  "private": true,
+  "workspaces": [
+    "valem-ui",
+    "valem-view-react"
+  ]
+}

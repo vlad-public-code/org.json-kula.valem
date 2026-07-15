@@ -1,0 +1,43 @@
+{
+  "name": "@valem/sdk",
+  "version": "1.0.0",
+  "description": "Typed TypeScript/JavaScript client for the Valem reactive computation runtime — REST + reconnecting WebSocket subscriptions.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "author": "vlad-public-code (https://github.com/vlad-public-code)",
+  "homepage": "https://github.com/vlad-public-code/org.json-kula.valem/tree/main/clients/valem-sdk-ts#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vlad-public-code/org.json-kula.valem.git",
+    "directory": "clients/valem-sdk-ts"
+  },
+  "bugs": {
+    "url": "https://github.com/vlad-public-code/org.json-kula.valem/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "src", "README.md"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test",
+    "prepack": "npm run build"
+  },
+  "keywords": ["valem", "reactive", "jsonata", "sdk", "client"],
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}

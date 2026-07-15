@@ -1,0 +1,36 @@
+{
+  "name": "valem-view-react",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Valem view component library for React",
+  "main": "./dist/valem-view-react.umd.cjs",
+  "module": "./dist/valem-view-react.js",
+  "exports": {
+    ".": {
+      "import": "./dist/valem-view-react.js",
+      "require": "./dist/valem-view-react.umd.cjs"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "dependencies": {
+    "jsonata": "^2.0.5",
+    "recharts": "^2.15.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.4",
+    "vite-plugin-dts": "^4.0.0"
+  }
+}

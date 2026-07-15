@@ -1,0 +1,130 @@
+{
+  "_name": "Order / Line Items",
+  "_description": "Items array with per-row lineTotal and grand total derived via JSONata.",
+  "id": "order-items-price-total",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name":      { "type": "string" },
+            "price":     { "type": "number", "minimum": 0, "multipleOf": 0.01 },
+            "qty":       { "type": "integer", "minimum": 1 },
+            "lineTotal": { "type": "number", "readOnly": true }
+          },
+          "required": ["name", "price", "qty"]
+        }
+      },
+      "total": { "type": "number", "readOnly": true, "multipleOf": 0.01 }
+    }
+  },
+  "derivations": [
+    {
+      "path": "$.total",
+      "expr": "$count(items) > 0 ? ($count(items[price != null and qty != null]) > 0 ? $sum(items[price != null and qty != null].(price * qty)) : 0) : 0"
+    },
+    {
+      "path": "$.items[*].lineTotal",
+      "expr": "$parent.price != null and $parent.qty != null ? $parent.price * $parent.qty : 0"
+    }
+  ],
+  "constraints": [
+    {
+      "id": "non-negative-total",
+      "expr": "total >= 0",
+      "message": "Total must be non-negative",
+      "policy": "rollback"
+    }
+  ],
+  "actions": [],
+  "metaDerivations": [],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "Order",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "itemsList",
+            "type": "sectionList",
+            "label": "Order Items",
+            "bind": "$.items",
+            "canAdd": true,
+            "canRemove": true,
+            "addLabel": "Add Item",
+            "removeLabel": "Remove",
+            "components": [
+              {
+                "id": "itemName",
+                "type": "textField",
+                "label": "Product Name",
+                "bind": "$.items[*].name",
+                "placeholder": "e.g. Apple"
+              },
+              {
+                "id": "itemPrice",
+                "type": "numericField",
+                "label": "Unit Price",
+                "bind": "$.items[*].price",
+                "placeholder": "0.00"
+              },
+              {
+                "id": "itemQty",
+                "type": "numericField",
+                "label": "Quantity",
+                "bind": "$.items[*].qty",
+                "placeholder": "1"
+              }
+            ]
+          },
+          { "id": "sep1", "type": "separatorLine" },
+          {
+            "id": "itemsTable",
+            "type": "dataTable",
+            "label": "Summary",
+            "bind": "$.items",
+            "tableColumns": [
+              { "field": "name",      "header": "Product",    "width": "40%" },
+              { "field": "qty",       "header": "Qty",        "width": "15%" },
+              { "field": "price",     "header": "Unit Price", "format": "currency", "width": "20%" },
+              { "field": "lineTotal", "header": "Line Total", "format": "currency", "width": "25%" }
+            ],
+            "pageSize": 20
+          },
+          { "id": "sep2", "type": "separatorLine" },
+          {
+            "id": "totalLabel",
+            "type": "label",
+            "label": "Grand Total",
+            "bind": "$.total"
+          }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "total and per-item lineTotal are derived from price x qty",
+      "given": {
+        "$.items[0].name":  "Apple",
+        "$.items[0].price": 1.5,
+        "$.items[0].qty":   4,
+        "$.items[1].name":  "Bread",
+        "$.items[1].price": 2.75,
+        "$.items[1].qty":   2
+      },
+      "expect": {
+        "$.total":               11.5,
+        "$.items[0].lineTotal":  6,
+        "$.items[1].lineTotal":  5.5
+      }
+    }
+  ]
+}

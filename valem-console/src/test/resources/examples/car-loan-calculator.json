@@ -1,0 +1,148 @@
+{
+  "_name": "Car Loan Calculator",
+  "_description": "Full amortization schedule: monthly payment, interest, principal, and remaining balance for each month of the term.",
+  "id": "car-loan-calculator",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "loanAmount": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Principal borrowed (e.g. 20000)"
+      },
+      "annualRatePercent": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Annual interest rate in percent (e.g. 6 for 6%)"
+      },
+      "termMonths": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Loan term in months (e.g. 60 for 5 years)"
+      },
+      "monthlyRate": {
+        "type": "number",
+        "readOnly": true
+      },
+      "compoundFactor": {
+        "type": "number",
+        "readOnly": true
+      },
+      "monthlyPayment": {
+        "type": "number",
+        "readOnly": true
+      },
+      "totalPayment": {
+        "type": "number",
+        "readOnly": true
+      },
+      "totalInterest": {
+        "type": "number",
+        "readOnly": true
+      },
+      "schedule": {
+        "type": "array",
+        "readOnly": true,
+        "items": {
+          "type": "object",
+          "properties": {
+            "month": {
+              "type": "integer"
+            },
+            "payment": {
+              "type": "number"
+            },
+            "interest": {
+              "type": "number"
+            },
+            "principal": {
+              "type": "number"
+            },
+            "balance": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "required": [
+      "loanAmount",
+      "annualRatePercent",
+      "termMonths"
+    ]
+  },
+  "derivations": [
+    {
+      "path": "$.monthlyRate",
+      "expr": "annualRatePercent / 1200"
+    },
+    {
+      "path": "$.compoundFactor",
+      "expr": "$power(1 + monthlyRate, termMonths)"
+    },
+    {
+      "path": "$.monthlyPayment",
+      "expr": "$round(loanAmount * monthlyRate * compoundFactor / (compoundFactor - 1), 2)"
+    },
+    {
+      "path": "$.totalPayment",
+      "expr": "$round(monthlyPayment * termMonths, 2)"
+    },
+    {
+      "path": "$.totalInterest",
+      "expr": "$round(totalPayment - loanAmount, 2)"
+    },
+    {
+      "path": "$.schedule",
+      "expr": "$map([1..termMonths], function($n) {{\"month\": $n, \"payment\": monthlyPayment, \"interest\": $round(loanAmount * monthlyRate * (compoundFactor - $power(1 + monthlyRate, $n - 1)) / (compoundFactor - 1), 2), \"principal\": $round(loanAmount * monthlyRate * $power(1 + monthlyRate, $n - 1) / (compoundFactor - 1), 2), \"balance\": $round(loanAmount * (compoundFactor - $power(1 + monthlyRate, $n)) / (compoundFactor - 1), 2)}})"
+    }
+  ],
+  "constraints": [
+    {
+      "id": "loan-amount-positive",
+      "expr": "loanAmount > 0",
+      "message": "Loan amount must be positive",
+      "policy": "rollback"
+    },
+    {
+      "id": "rate-positive",
+      "expr": "annualRatePercent > 0",
+      "message": "Annual interest rate must be positive (zero-interest loans are not supported)",
+      "policy": "rollback"
+    },
+    {
+      "id": "term-positive",
+      "expr": "termMonths >= 1",
+      "message": "Term must be at least 1 month",
+      "policy": "rollback"
+    }
+  ],
+  "actions": [],
+  "metaDerivations": [],
+  "defaultValues": [
+    {
+      "path": "$",
+      "expr": "{\"loanAmount\": 20000, \"annualRatePercent\": 6, \"termMonths\": 60}"
+    }
+  ],
+  "tests": [
+    {
+      "description": "$20 000 at 6% APR over 60 months — payment and first-month breakdown",
+      "given": {
+        "$.loanAmount": 20000,
+        "$.annualRatePercent": 6,
+        "$.termMonths": 60
+      },
+      "expect": {
+        "$.monthlyPayment": 386.66,
+        "$.totalPayment": 23199.6,
+        "$.totalInterest": 3199.6,
+        "$.schedule[0].month": 1,
+        "$.schedule[0].interest": 100.0,
+        "$.schedule[0].principal": 286.66,
+        "$.schedule[0].balance": 19713.34
+      }
+    }
+  ]
+}

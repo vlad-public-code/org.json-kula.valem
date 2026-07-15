@@ -1,0 +1,59 @@
+title: Valem
+description: >-
+  Deterministic reactive computation runtime for AI-generated structured data
+  models — a spreadsheet-like computation model for JSON-based agent systems.
+
+# Published as a GitHub project page:
+# https://vlad-public-code.github.io/org.json-kula.valem/
+url: https://vlad-public-code.github.io
+baseurl: /org.json-kula.valem
+
+theme: just-the-docs
+
+# --- Project-wide links (referenced from pages as {{ site.<name> }}) ---------
+gh_repo: https://github.com/vlad-public-code/org.json-kula.valem
+# The hosted public sandbox on Render.
+sandbox_url: https://valem.onrender.com
+
+# --- just-the-docs options ---------------------------------------------------
+search_enabled: true
+heading_anchors: true
+back_to_top: true
+back_to_top_text: "Back to top"
+color_scheme: light
+
+# Callout boxes used with {: .note } / {: .warning } in the pages.
+callouts:
+  note:
+    title: Note
+    color: blue
+  warning:
+    title: Warning
+    color: red
+
+aux_links:
+  "GitHub":
+    - https://github.com/vlad-public-code/org.json-kula.valem
+  "Live sandbox":
+    - https://valem.onrender.com
+aux_links_new_tab: true
+
+footer_content: >-
+  Valem — Apache-2.0. Built by
+  <a href="https://github.com/vlad-public-code">vlad-public-code</a>.
+
+# Every page defaults to the theme layout, so pages only declare title + nav_order.
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default
+
+# The Search Console verification file is a raw asset — don't let Jekyll process it.
+include:
+  - googlecbade7c0be249d3a.html
+
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor

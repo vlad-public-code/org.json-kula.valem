@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.vlad-public-code</groupId>
+        <artifactId>valem</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>valem-effects-noop</artifactId>
+    <name>valem-effects-noop</name>
+    <description>Reference effect-kind plugin — proves the pluggable-effects SPI end to end (drop-in jar,
+        no core/api edits): a ServiceLoader-discovered EffectKind ("noop") plus an auto-configured
+        shell EffectExecutor that echoes its payload back through the fold-back machinery.</description>
+
+    <dependencies>
+        <!-- Pure half: the EffectKind SPI + EffectRequest/EffectSpec live in core. -->
+        <dependency>
+            <groupId>io.github.vlad-public-code</groupId>
+            <artifactId>valem-core</artifactId>
+        </dependency>
+
+        <!-- Impure half: the shell EffectExecutor + EffectShell + EffectMetrics live in the api layer.
+             'provided' — the host app already supplies these; the plugin only compiles against them. -->
+        <dependency>
+            <groupId>io.github.vlad-public-code</groupId>
+            <artifactId>valem-api</artifactId>
+            <version>${project.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Spring Boot auto-configuration so merely dropping the jar registers the executor bean. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Test-only: boots the REAL valem-api Spring Boot application (ValemApplication) so
+             the e2e test proves auto-discovery/auto-configuration exactly as a host app would see it.
+             (spring-boot-starter-web/security/websocket/actuator/micrometer-prometheus already arrive
+             transitively, as 'provided', via the valem-api dependency above.) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+</project>

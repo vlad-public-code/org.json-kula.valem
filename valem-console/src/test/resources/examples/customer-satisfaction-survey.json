@@ -1,0 +1,181 @@
+{
+  "_name": "Customer Satisfaction Survey",
+  "_description": "Conditional follow-up questions: issue details appear only when issues are reported, contact fields only for low ratings. Uses metaDerivations to control field visibility (x-valem-relevant) and mutability (readOnly).",
+  "id": "customer-satisfaction-survey",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "overallRating": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5,
+        "description": "Overall satisfaction score 1 (very dissatisfied) – 5 (very satisfied)"
+      },
+      "wouldRecommend": {
+        "type": "boolean",
+        "description": "Would the respondent recommend the product/service?"
+      },
+      "issueEncountered": {
+        "type": "boolean",
+        "description": "Did the respondent encounter any issues?"
+      },
+      "issueCategory": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "enum": [
+          "product",
+          "service",
+          "shipping",
+          "billing",
+          "other",
+          null
+        ],
+        "description": "Category of the issue (relevant only when issueEncountered = true)"
+      },
+      "issueDetails": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Free-text description of the issue (relevant only when issueEncountered = true)"
+      },
+      "contactPermission": {
+        "type": [
+          "boolean",
+          "null"
+        ],
+        "description": "May we contact you? (relevant only when issueEncountered = true AND overallRating ≤ 3)"
+      },
+      "contactEmail": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Contact email (relevant only when contactPermission = true)"
+      },
+      "sentimentScore": {
+        "type": "integer",
+        "readOnly": true,
+        "description": "0–100 composite sentiment score"
+      },
+      "priorityFlag": {
+        "type": "boolean",
+        "readOnly": true,
+        "description": "True when immediate follow-up is required"
+      }
+    },
+    "required": [
+      "overallRating"
+    ]
+  },
+  "derivations": [
+    {
+      "path": "$.sentimentScore",
+      "expr": "$max([0, $min([100, overallRating * 16 + (wouldRecommend = true ? 20 : 0) - (issueEncountered = true ? 20 : 0)])])"
+    },
+    {
+      "path": "$.priorityFlag",
+      "expr": "overallRating <= 2 and issueEncountered = true"
+    }
+  ],
+  "metaDerivations": [
+    {
+      "path": "$.issueCategory",
+      "property": "relevant",
+      "expr": "issueEncountered = true"
+    },
+    {
+      "path": "$.issueDetails",
+      "property": "relevant",
+      "expr": "issueEncountered = true"
+    },
+    {
+      "path": "$.contactPermission",
+      "property": "relevant",
+      "expr": "issueEncountered = true and overallRating <= 3"
+    },
+    {
+      "path": "$.contactEmail",
+      "property": "relevant",
+      "expr": "contactPermission = true"
+    },
+    {
+      "path": "$.issueCategory",
+      "property": "readOnly",
+      "expr": "issueEncountered != true"
+    },
+    {
+      "path": "$.issueDetails",
+      "property": "readOnly",
+      "expr": "issueEncountered != true"
+    },
+    {
+      "path": "$.contactPermission",
+      "property": "readOnly",
+      "expr": "issueEncountered != true or overallRating > 3"
+    },
+    {
+      "path": "$.contactEmail",
+      "property": "readOnly",
+      "expr": "contactPermission != true"
+    }
+  ],
+  "constraints": [
+    {
+      "id": "rating-in-range",
+      "expr": "overallRating >= 1 and overallRating <= 5",
+      "message": "Rating must be between 1 and 5",
+      "policy": "rollback"
+    }
+  ],
+  "actions": [],
+  "defaultValues": [
+    {
+      "path": "$",
+      "expr": "{\"overallRating\": 5, \"wouldRecommend\": true, \"issueEncountered\": false}"
+    }
+  ],
+  "tests": [
+    {
+      "description": "satisfied respondent — high score, no priority flag",
+      "given": {
+        "$.overallRating": 5,
+        "$.wouldRecommend": true,
+        "$.issueEncountered": false
+      },
+      "expect": {
+        "$.sentimentScore": 100,
+        "$.priorityFlag": false
+      }
+    },
+    {
+      "description": "issue reported with mid rating — medium score, no priority",
+      "given": {
+        "$.overallRating": 3,
+        "$.wouldRecommend": false,
+        "$.issueEncountered": true
+      },
+      "expect": {
+        "$.sentimentScore": 28,
+        "$.priorityFlag": false
+      }
+    },
+    {
+      "description": "low rating with issue and contact permission — low score, priority flagged",
+      "given": {
+        "$.overallRating": 2,
+        "$.wouldRecommend": false,
+        "$.issueEncountered": true,
+        "$.issueCategory": "service",
+        "$.contactPermission": true
+      },
+      "expect": {
+        "$.sentimentScore": 12,
+        "$.priorityFlag": true
+      }
+    }
+  ]
+}

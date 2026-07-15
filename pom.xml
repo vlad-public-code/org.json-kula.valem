@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.github.vlad-public-code</groupId>
+    <artifactId>valem</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>valem</name>
+    <description>Valem — deterministic reactive computation runtime for AI-generated structured data models</description>
+    <!-- inherit.append.path=false: children inherit these URLs verbatim (Maven otherwise appends the
+         module's artifactId, mangling the git SCM url). -->
+    <url child.project.url.inherit.append.path="false">https://github.com/vlad-public-code/org.json-kula.valem</url>
+
+    <!-- Project metadata inherited by every module; required in the effective POM of any artifact
+         published to Maven Central (e.g. valem-client). -->
+    <licenses>
+        <license>
+            <name>The Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>vlad-public-code</id>
+            <name>vlad-public-code</name>
+            <url>https://github.com/vlad-public-code</url>
+        </developer>
+    </developers>
+
+    <scm child.scm.connection.inherit.append.path="false"
+         child.scm.developerConnection.inherit.append.path="false"
+         child.scm.url.inherit.append.path="false">
+        <connection>scm:git:https://github.com/vlad-public-code/org.json-kula.valem.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/vlad-public-code/org.json-kula.valem.git</developerConnection>
+        <url>https://github.com/vlad-public-code/org.json-kula.valem</url>
+    </scm>
+
+    <modules>
+        <module>valem-core</module>
+        <module>valem-service</module>
+        <module>valem-view</module>
+        <module>valem-persistence</module>
+        <module>valem-api</module>
+        <module>valem-web</module>
+        <module>valem-effects-noop</module>
+        <module>valem-client</module>
+        <module>valem-cli-common</module>
+        <module>valem-console</module>
+        <module>valem-mcp</module>
+    </modules>
+
+    <properties>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <jackson.version>2.21.2</jackson.version>
+        <tracked-json.version>1.0.0</tracked-json.version>
+        <jsonata-jvm-compiler.version>1.0.3</jsonata-jvm-compiler.version>
+        <json-schema-validator.version>1.4.3</json-schema-validator.version>
+        <spring-boot.version>3.3.5</spring-boot.version>
+        <junit.version>5.11.4</junit.version>
+        <assertj.version>3.26.3</assertj.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Internal modules -->
+            <dependency>
+                <groupId>io.github.vlad-public-code</groupId>
+                <artifactId>valem-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.vlad-public-code</groupId>
+                <artifactId>valem-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.vlad-public-code</groupId>
+                <artifactId>valem-service</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.vlad-public-code</groupId>
+                <artifactId>valem-view</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.vlad-public-code</groupId>
+                <artifactId>valem-client</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.vlad-public-code</groupId>
+                <artifactId>valem-cli-common</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Persistence modules -->
+            <dependency>
+                <groupId>io.github.vlad-public-code</groupId>
+                <artifactId>valem-persistence-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.vlad-public-code</groupId>
+                <artifactId>valem-persistence-memory</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.vlad-public-code</groupId>
+                <artifactId>valem-persistence-filesystem</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.vlad-public-code</groupId>
+                <artifactId>valem-persistence-redis</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.vlad-public-code</groupId>
+                <artifactId>valem-persistence-mongo</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.vlad-public-code</groupId>
+                <artifactId>valem-persistence-postgres</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.vlad-public-code</groupId>
+                <artifactId>valem-persistence-s3</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+
+            <!-- Sibling projects (must be mvn install-ed locally) -->
+            <dependency>
+                <groupId>io.github.vlad-public-code</groupId>
+                <artifactId>tracked-json</artifactId>
+                <version>${tracked-json.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.github.vlad-public-code</groupId>
+                <artifactId>jsonata-jvm-compiler</artifactId>
+                <version>${jsonata-jvm-compiler.version}</version>
+            </dependency>
+
+            <!-- JSON Schema validation -->
+            <dependency>
+                <groupId>com.networknt</groupId>
+                <artifactId>json-schema-validator</artifactId>
+                <version>${json-schema-validator.version}</version>
+            </dependency>
+
+            <!-- Jackson BOM — enforces consistent versions across all Jackson modules -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Spring Boot BOM -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- Test -->
+            <dependency>
+                <groupId>org.junit.jupiter</groupId>
+                <artifactId>junit-jupiter</artifactId>
+                <version>${junit.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.assertj</groupId>
+                <artifactId>assertj-core</artifactId>
+                <version>${assertj.version}</version>
+                <scope>test</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.13.0</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.5.2</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <version>${spring-boot.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+    <profiles>
+        <!--
+          JMH micro-benchmarks (audit T0.2). Kept out of the default reactor so `mvn test` stays fast
+          and does not require the JMH toolchain. Build/run with: `mvn -Pbenchmarks install` then
+          `java -jar valem-benchmarks/target/benchmarks.jar`.
+        -->
+        <profile>
+            <id>benchmarks</id>
+            <modules>
+                <module>valem-benchmarks</module>
+            </modules>
+        </profile>
+    </profiles>
+
+</project>

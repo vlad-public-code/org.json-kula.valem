@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.vlad-public-code</groupId>
+        <artifactId>valem</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>valem-persistence</artifactId>
+    <packaging>pom</packaging>
+    <name>valem-persistence</name>
+    <description>Valem persistence adapters — parent aggregator</description>
+
+    <modules>
+        <module>valem-persistence-api</module>
+        <module>valem-persistence-memory</module>
+        <module>valem-persistence-filesystem</module>
+        <module>valem-persistence-redis</module>
+        <module>valem-persistence-mongo</module>
+        <module>valem-persistence-postgres</module>
+        <module>valem-persistence-s3</module>
+    </modules>
+
+</project>

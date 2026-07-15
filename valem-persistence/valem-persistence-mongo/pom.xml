@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.vlad-public-code</groupId>
+        <artifactId>valem-persistence</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>valem-persistence-mongo</artifactId>
+    <name>valem-persistence-mongo</name>
+    <description>
+        Valem MongoDB persistence adapter (BlobStore via GridFS + SpecStore + StateStore).
+        Uses the synchronous MongoDB Java driver directly.
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.github.vlad-public-code</groupId>
+            <artifactId>valem-persistence-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- tracked-json: JsonPatch for mutation log replay -->
+        <dependency>
+            <groupId>io.github.vlad-public-code</groupId>
+            <artifactId>tracked-json</artifactId>
+        </dependency>
+
+        <!-- MongoDB synchronous driver; version managed by Spring Boot BOM -->
+        <dependency>
+            <groupId>org.mongodb</groupId>
+            <artifactId>mongodb-driver-sync</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- mongo-java-server: pure-Java in-memory MongoDB wire-protocol server for tests -->
+        <dependency>
+            <groupId>de.bwaldvogel</groupId>
+            <artifactId>mongo-java-server</artifactId>
+            <version>1.45.0</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/*IT.java</include>
+                    </includes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

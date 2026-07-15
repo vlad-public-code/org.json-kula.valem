@@ -1,0 +1,46 @@
+# Maven
+target/
+*.jar
+*.war
+*.ear
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Node / npm
+**/node_modules/
+**/dist/
+**/playwright-report/
+**/test-results/
+**/coverage/
+**/.env
+**/.env.local
+npm-debug.log*
+package-lock.json
+/valem-ui/node/
+
+# VS Code
+.vscode/
+
+# Claude Code local state (permissions, scheduled-task locks)
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Valem runtime data
+valem-data/
+
+# Jekyll site build (site/ is the GitHub Pages source)
+site/_site/
+site/.jekyll-cache/
+site/.jekyll-metadata
+site/vendor/
+site/Gemfile.lock

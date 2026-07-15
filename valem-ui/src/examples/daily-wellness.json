@@ -1,0 +1,296 @@
+{
+  "_name": "Daily Wellness Check-in",
+  "_description": "Track daily energy, mood, and steps. Uses sliderField for energy/mood scores, timeField for check-in time, fileUploadField for an optional photo, and progressBar for weekly step-goal progress.",
+  "id": "daily-wellness",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "energyLevel": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 10,
+        "description": "Energy level 1 (exhausted) to 10 (fully energised)"
+      },
+      "moodLevel": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 10,
+        "description": "Mood level 1 (very low) to 10 (excellent)"
+      },
+      "checkInTime": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Time of today's check-in in HH:mm format"
+      },
+      "photoRef": {
+        "type": [
+          "array",
+          "null"
+        ],
+        "items": {
+          "type": "object"
+        },
+        "maxItems": 3,
+        "description": "Up to 3 optional wellness photos stored as BlobRefs"
+      },
+      "stepsToday": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Number of steps recorded today"
+      },
+      "weeklyStepGoal": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Target steps per week"
+      },
+      "weeklyStepsCompleted": {
+        "type": "integer",
+        "minimum": 0,
+        "description": "Running total of steps taken this week"
+      },
+      "wellnessScore": {
+        "type": "integer",
+        "readOnly": true,
+        "description": "Composite score 0–100 derived from energy and mood"
+      },
+      "weeklyProgress": {
+        "type": "integer",
+        "readOnly": true,
+        "description": "Weekly step-goal completion in percent (capped at 100)"
+      },
+      "statusLabel": {
+        "type": "string",
+        "readOnly": true,
+        "description": "Wellness band: Excellent / Good / Fair / Low"
+      }
+    },
+    "required": [
+      "energyLevel",
+      "moodLevel",
+      "weeklyStepGoal"
+    ]
+  },
+  "derivations": [
+    {
+      "path": "$.wellnessScore",
+      "expr": "(energyLevel + moodLevel) * 5"
+    },
+    {
+      "path": "$.weeklyProgress",
+      "expr": "$min([$round(weeklyStepsCompleted / weeklyStepGoal * 100), 100])"
+    },
+    {
+      "path": "$.statusLabel",
+      "expr": "wellnessScore >= 80 ? \"Excellent\" : wellnessScore >= 60 ? \"Good\" : wellnessScore >= 40 ? \"Fair\" : \"Low\""
+    }
+  ],
+  "constraints": [
+    {
+      "id": "energy-in-range",
+      "expr": "energyLevel >= 1 and energyLevel <= 10",
+      "message": "Energy level must be between 1 and 10",
+      "policy": "rollback"
+    },
+    {
+      "id": "mood-in-range",
+      "expr": "moodLevel >= 1 and moodLevel <= 10",
+      "message": "Mood level must be between 1 and 10",
+      "policy": "rollback"
+    },
+    {
+      "id": "steps-sanity",
+      "expr": "weeklyStepsCompleted <= weeklyStepGoal * 2",
+      "message": "Weekly steps completed seems unusually high",
+      "policy": "flag"
+    }
+  ],
+  "actions": [],
+  "metaDerivations": [],
+  "defaultValues": [
+    {
+      "path": "$",
+      "expr": "{\"energyLevel\": 7, \"moodLevel\": 7, \"stepsToday\": 0, \"weeklyStepGoal\": 70000, \"weeklyStepsCompleted\": 0}"
+    }
+  ],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "Daily Wellness Check-in",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "energySlider",
+            "type": "sliderField",
+            "label": "Energy Level",
+            "bind": "$.energyLevel",
+            "min": 1,
+            "max": 10,
+            "step": 1,
+            "helperText": "1 = exhausted, 10 = fully energised"
+          },
+          {
+            "id": "moodSlider",
+            "type": "sliderField",
+            "label": "Mood Level",
+            "bind": "$.moodLevel",
+            "min": 1,
+            "max": 10,
+            "step": 1,
+            "helperText": "1 = very low, 10 = excellent"
+          },
+          {
+            "id": "checkInTimeField",
+            "type": "timeField",
+            "label": "Check-in Time",
+            "bind": "$.checkInTime",
+            "helperText": "When are you checking in today?"
+          },
+          {
+            "id": "photoUpload",
+            "type": "fileUploadField",
+            "label": "Wellness Photos (optional)",
+            "bind": "$.photoRef",
+            "accept": "image/*",
+            "multiple": true,
+            "maxFiles": 3,
+            "helperText": "Upload up to 3 photos of your workout, meal, or surroundings"
+          },
+          {
+            "id": "sep1",
+            "type": "separatorLine"
+          },
+          {
+            "id": "stepsField",
+            "type": "numericField",
+            "label": "Steps Today",
+            "bind": "$.stepsToday",
+            "placeholder": "0"
+          },
+          {
+            "id": "weeklyProgressBar",
+            "type": "progressBar",
+            "label": "Weekly Step Goal",
+            "bind": "$.weeklyProgress",
+            "min": 0,
+            "max": 100,
+            "showValue": true,
+            "format": "percent"
+          },
+          {
+            "id": "sep2",
+            "type": "separatorLine"
+          },
+          {
+            "id": "scoreGroup",
+            "type": "group",
+            "layout": "horizontal",
+            "components": [
+              {
+                "id": "wellnessLabel",
+                "type": "label",
+                "label": "Wellness Score",
+                "bind": "$.wellnessScore"
+              },
+              {
+                "id": "statusBadge",
+                "type": "badge",
+                "label": "Status",
+                "bind": "$.statusLabel",
+                "text": "statusLabel",
+                "variant": "wellnessScore >= 80 ? 'success' : wellnessScore >= 60 ? 'primary' : wellnessScore >= 40 ? 'warning' : 'danger'"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "high energy and high mood — Excellent status",
+      "given": {
+        "$.energyLevel": 9,
+        "$.moodLevel": 9,
+        "$.weeklyStepsCompleted": 0,
+        "$.weeklyStepGoal": 70000
+      },
+      "expect": {
+        "$.wellnessScore": 90,
+        "$.statusLabel": "Excellent"
+      }
+    },
+    {
+      "description": "mid energy and mid mood — Good status",
+      "given": {
+        "$.energyLevel": 6,
+        "$.moodLevel": 6,
+        "$.weeklyStepsCompleted": 0,
+        "$.weeklyStepGoal": 70000
+      },
+      "expect": {
+        "$.wellnessScore": 60,
+        "$.statusLabel": "Good"
+      }
+    },
+    {
+      "description": "fair wellness band at energy=5 mood=3",
+      "given": {
+        "$.energyLevel": 5,
+        "$.moodLevel": 3,
+        "$.weeklyStepsCompleted": 0,
+        "$.weeklyStepGoal": 70000
+      },
+      "expect": {
+        "$.wellnessScore": 40,
+        "$.statusLabel": "Fair"
+      }
+    },
+    {
+      "description": "low energy and low mood — Low status",
+      "given": {
+        "$.energyLevel": 2,
+        "$.moodLevel": 2,
+        "$.weeklyStepsCompleted": 0,
+        "$.weeklyStepGoal": 70000
+      },
+      "expect": {
+        "$.wellnessScore": 20,
+        "$.statusLabel": "Low"
+      }
+    },
+    {
+      "description": "half-way through weekly step goal — 50% progress",
+      "given": {
+        "$.energyLevel": 7,
+        "$.moodLevel": 7,
+        "$.weeklyStepsCompleted": 35000,
+        "$.weeklyStepGoal": 70000
+      },
+      "expect": {
+        "$.wellnessScore": 70,
+        "$.weeklyProgress": 50,
+        "$.statusLabel": "Good"
+      }
+    },
+    {
+      "description": "weekly step goal exceeded — progress capped at 100",
+      "given": {
+        "$.energyLevel": 8,
+        "$.moodLevel": 8,
+        "$.weeklyStepsCompleted": 80000,
+        "$.weeklyStepGoal": 70000
+      },
+      "expect": {
+        "$.wellnessScore": 80,
+        "$.weeklyProgress": 100,
+        "$.statusLabel": "Excellent"
+      }
+    }
+  ]
+}

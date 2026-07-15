@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>io.github.vlad-public-code</groupId>
+        <artifactId>valem-persistence</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>valem-persistence-postgres</artifactId>
+    <name>valem-persistence-postgres</name>
+    <description>
+        Valem PostgreSQL persistence adapter (BlobStore + SpecStore + StateStore).
+        Uses Spring JDBC (JdbcTemplate) and JSONB columns for structured data.
+        Blob bytes are stored inline as BYTEA up to a configurable size limit;
+        larger blobs are delegated to an external BlobStore (e.g., S3).
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>io.github.vlad-public-code</groupId>
+            <artifactId>valem-persistence-api</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- tracked-json: JsonPatch for mutation log replay -->
+        <dependency>
+            <groupId>io.github.vlad-public-code</groupId>
+            <artifactId>tracked-json</artifactId>
+        </dependency>
+
+        <!-- Spring JDBC; version managed by Spring Boot BOM -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-jdbc</artifactId>
+        </dependency>
+
+        <!-- PostgreSQL JDBC driver; version managed by Spring Boot BOM -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+        </dependency>
+
+        <!-- HikariCP: the provider synthesizes and owns a pooled DataSource when the host does
+             not supply one; version managed by Spring Boot BOM -->
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- embedded-postgres: real PostgreSQL binary, no Docker -->
+        <dependency>
+            <groupId>io.zonky.test</groupId>
+            <artifactId>embedded-postgres</artifactId>
+            <version>2.0.7</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/*IT.java</include>
+                    </includes>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

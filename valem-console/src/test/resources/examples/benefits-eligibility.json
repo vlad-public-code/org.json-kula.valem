@@ -1,0 +1,158 @@
+{
+  "_name": "Benefits Eligibility",
+  "_description": "A second beachhead-ICP example: an assistance-program eligibility calculator over structured household data. The federal-poverty-line threshold scales with household size (constants), the income-to-poverty ratio drives an eligibility tier and monthly benefit (chained derivations), a positive-household invariant is enforced (constraint), income is verified against an external service (server effect), the applicant is notified when eligible (caller effect), and an unsubmitted application expires (timer effect). Every case in the golden `tests` suite is hand-derived from the poverty table, so it certifies domain fidelity independently of the LLM.",
+  "id": "benefits-eligibility",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "application": {
+        "type": "object",
+        "properties": {
+          "income":         { "type": "number", "minimum": 0 },
+          "householdSize":  { "type": "number", "minimum": 1 },
+          "age":            { "type": "number", "minimum": 0, "maximum": 120 },
+          "status":         { "type": "string", "enum": ["draft", "submitted", "expired"] },
+          "verifiedIncome": { "type": "number", "minimum": 0 },
+
+          "povertyLine":    { "type": "number",  "readOnly": true },
+          "incomeRatio":    { "type": "number",  "readOnly": true },
+          "tier":           { "type": "string",  "readOnly": true },
+          "eligible":       { "type": "boolean", "readOnly": true },
+          "monthlyBenefit": { "type": "number",  "readOnly": true }
+        }
+      }
+    }
+  },
+  "constants": {
+    "fplBase":        15000,
+    "fplPerPerson":   5000,
+    "fullBenefit":    500,
+    "partialBenefit": 300,
+    "reducedBenefit": 150,
+    "maxHousehold":   12
+  },
+  "defaultValues": [
+    {
+      "path": "$",
+      "expr": "{ 'application': { 'householdSize': 1, 'status': 'draft' } }",
+      "description": "A new application starts as a draft household of one."
+    }
+  ],
+  "derivations": [
+    { "path": "$.application.povertyLine",
+      "expr": "$const.fplBase + (application.householdSize - 1) * $const.fplPerPerson",
+      "description": "Federal poverty line for this household size." },
+
+    { "path": "$.application.incomeRatio",
+      "expr": "application.income != null and application.povertyLine > 0 ? application.income / application.povertyLine : 0",
+      "description": "Household income as a multiple of the poverty line." },
+
+    { "path": "$.application.tier",
+      "expr": "application.incomeRatio <= 1.0 ? 'full' : (application.incomeRatio <= 1.5 ? 'partial' : (application.incomeRatio <= 2.0 ? 'reduced' : 'none'))",
+      "description": "Benefit tier from the income-to-poverty ratio." },
+
+    { "path": "$.application.eligible",
+      "expr": "application.income != null and application.age != null and application.age >= 18 and application.incomeRatio <= 2.0",
+      "description": "Applicant is an adult within 200% of the poverty line." },
+
+    { "path": "$.application.monthlyBenefit",
+      "expr": "application.eligible = true ? (application.tier = 'full' ? $const.fullBenefit : (application.tier = 'partial' ? $const.partialBenefit : (application.tier = 'reduced' ? $const.reducedBenefit : 0))) : 0",
+      "description": "Monthly benefit for the awarded tier, or zero when ineligible." }
+  ],
+  "constraints": [
+    { "id": "household-size-positive",
+      "expr": "application.householdSize = null or application.householdSize >= 1",
+      "message": "Household size must be at least 1", "policy": "rollback" },
+    { "id": "household-size-in-range",
+      "expr": "application.householdSize = null or application.householdSize <= $const.maxHousehold",
+      "message": "Household size exceeds the program maximum", "policy": "flag" }
+  ],
+  "effects": [
+    {
+      "id": "verify-income",
+      "executor": "server",
+      "trigger": "application.income != null",
+      "dedupeKey": "application.income",
+      "request": { "method": "GET", "url": "https://verify.example.com/income?declared={ application.income }" },
+      "response": { "set": { "$.application.verifiedIncome": "$response.verifiedIncome" } },
+      "statusPath": "$.application.ioVerify",
+      "description": "Verify declared income against an external service and fold the result back."
+    },
+    {
+      "id": "notify-eligible",
+      "executor": "caller",
+      "trigger": "application.eligible = true and application.monthlyBenefit > 0",
+      "dedupeKey": "application.monthlyBenefit",
+      "emit": "application.eligible",
+      "payload": { "message": "'Eligible for $' & $string(application.monthlyBenefit) & '/mo (' & application.tier & ')'", "monthlyBenefit": "application.monthlyBenefit" },
+      "description": "Surface an 'eligible' command to the caller once a benefit is awarded."
+    },
+    {
+      "id": "expire-application",
+      "executor": "timer",
+      "trigger": "application.status = 'submitted'",
+      "dedupeKey": "application.status",
+      "afterMs": "2592000000",
+      "response": { "set": { "$.application.status": "'expired'" } },
+      "statusPath": "$.application.ioExpiry",
+      "description": "A submitted application expires after 30 days if not processed."
+    }
+  ],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "Check Eligibility",
+        "layout": "vertical",
+        "components": [
+          { "id": "income",    "type": "numberField", "label": "Annual household income ($)", "bind": "$.application.income" },
+          { "id": "household", "type": "numberField", "label": "Household size",              "bind": "$.application.householdSize" },
+          { "id": "age",       "type": "numberField", "label": "Age",                          "bind": "$.application.age" },
+          { "id": "sep1",      "type": "separatorLine" },
+          { "id": "poverty",   "type": "label", "label": "Poverty line ($)",     "bind": "$.application.povertyLine" },
+          { "id": "ratio",     "type": "label", "label": "Income ratio",         "bind": "$.application.incomeRatio" },
+          { "id": "tier",      "type": "label", "label": "Tier",                 "bind": "$.application.tier" },
+          { "id": "eligible",  "type": "label", "label": "Eligible",             "bind": "$.application.eligible" },
+          { "id": "benefit",   "type": "label", "label": "Monthly benefit ($)",  "bind": "$.application.monthlyBenefit" },
+          { "id": "sep2",      "type": "separatorLine" },
+          { "id": "verifyIo",  "type": "label", "label": "Income verification",  "bind": "$.application.ioVerify.phase" }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "household of 1, $12k income, adult -> ratio 0.8, full tier, $500/mo",
+      "given":  { "$.application.householdSize": 1, "$.application.income": 12000, "$.application.age": 30 },
+      "expect": { "$.application.povertyLine": 15000.0, "$.application.incomeRatio": 0.8, "$.application.tier": "full", "$.application.eligible": true, "$.application.monthlyBenefit": 500.0 }
+    },
+    {
+      "description": "household of 4, $45k income -> poverty line $30k, ratio 1.5, partial tier, $300/mo",
+      "given":  { "$.application.householdSize": 4, "$.application.income": 45000, "$.application.age": 40 },
+      "expect": { "$.application.povertyLine": 30000.0, "$.application.incomeRatio": 1.5, "$.application.tier": "partial", "$.application.monthlyBenefit": 300.0 }
+    },
+    {
+      "description": "household of 2, $38k income -> ratio 1.9, reduced tier, $150/mo",
+      "given":  { "$.application.householdSize": 2, "$.application.income": 38000, "$.application.age": 50 },
+      "expect": { "$.application.povertyLine": 20000.0, "$.application.incomeRatio": 1.9, "$.application.tier": "reduced", "$.application.monthlyBenefit": 150.0 }
+    },
+    {
+      "description": "income above 200% of the poverty line is ineligible",
+      "given":  { "$.application.householdSize": 2, "$.application.income": 50000, "$.application.age": 45 },
+      "expect": { "$.application.incomeRatio": 2.5, "$.application.tier": "none", "$.application.eligible": false, "$.application.monthlyBenefit": 0.0 }
+    },
+    {
+      "description": "a minor is ineligible even below the poverty line",
+      "given":  { "$.application.householdSize": 1, "$.application.income": 10000, "$.application.age": 16 },
+      "expect": { "$.application.eligible": false, "$.application.monthlyBenefit": 0.0 }
+    },
+    {
+      "description": "income exactly at the poverty line (ratio 1.0) is the full tier",
+      "given":  { "$.application.householdSize": 4, "$.application.income": 30000, "$.application.age": 33 },
+      "expect": { "$.application.incomeRatio": 1.0, "$.application.tier": "full", "$.application.monthlyBenefit": 500.0 }
+    }
+  ]
+}

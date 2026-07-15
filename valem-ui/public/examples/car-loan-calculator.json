@@ -1,0 +1,253 @@
+{
+  "_name": "Car Loan Calculator",
+  "_description": "Full amortization schedule: monthly payment, interest, principal, and remaining balance for each month of the term.",
+  "id": "car-loan-calculator",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "loanAmount": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Principal borrowed (e.g. 20000)"
+      },
+      "annualRatePercent": {
+        "type": "number",
+        "minimum": 0,
+        "description": "Annual interest rate in percent (e.g. 6 for 6%)"
+      },
+      "termMonths": {
+        "type": "integer",
+        "minimum": 1,
+        "description": "Loan term in months (e.g. 60 for 5 years)"
+      },
+      "monthlyRate": {
+        "type": "number",
+        "readOnly": true
+      },
+      "compoundFactor": {
+        "type": "number",
+        "readOnly": true
+      },
+      "monthlyPayment": {
+        "type": "number",
+        "readOnly": true
+      },
+      "totalPayment": {
+        "type": "number",
+        "readOnly": true
+      },
+      "totalInterest": {
+        "type": "number",
+        "readOnly": true
+      },
+      "schedule": {
+        "type": "array",
+        "readOnly": true,
+        "items": {
+          "type": "object",
+          "properties": {
+            "month": {
+              "type": "integer"
+            },
+            "payment": {
+              "type": "number"
+            },
+            "interest": {
+              "type": "number"
+            },
+            "principal": {
+              "type": "number"
+            },
+            "balance": {
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    "required": [
+      "loanAmount",
+      "annualRatePercent",
+      "termMonths"
+    ]
+  },
+  "derivations": [
+    {
+      "path": "$.monthlyRate",
+      "expr": "annualRatePercent / 1200"
+    },
+    {
+      "path": "$.compoundFactor",
+      "expr": "$power(1 + monthlyRate, termMonths)"
+    },
+    {
+      "path": "$.monthlyPayment",
+      "expr": "$round(loanAmount * monthlyRate * compoundFactor / (compoundFactor - 1), 2)"
+    },
+    {
+      "path": "$.totalPayment",
+      "expr": "$round(monthlyPayment * termMonths, 2)"
+    },
+    {
+      "path": "$.totalInterest",
+      "expr": "$round(totalPayment - loanAmount, 2)"
+    },
+    {
+      "path": "$.schedule",
+      "expr": "$map([1..termMonths], function($n) {{\"month\": $n, \"payment\": monthlyPayment, \"interest\": $round(loanAmount * monthlyRate * (compoundFactor - $power(1 + monthlyRate, $n - 1)) / (compoundFactor - 1), 2), \"principal\": $round(loanAmount * monthlyRate * $power(1 + monthlyRate, $n - 1) / (compoundFactor - 1), 2), \"balance\": $round(loanAmount * (compoundFactor - $power(1 + monthlyRate, $n)) / (compoundFactor - 1), 2)}})"
+    }
+  ],
+  "constraints": [
+    {
+      "id": "loan-amount-positive",
+      "expr": "loanAmount > 0",
+      "message": "Loan amount must be positive",
+      "policy": "rollback"
+    },
+    {
+      "id": "rate-positive",
+      "expr": "annualRatePercent > 0",
+      "message": "Annual interest rate must be positive (zero-interest loans are not supported)",
+      "policy": "rollback"
+    },
+    {
+      "id": "term-positive",
+      "expr": "termMonths >= 1",
+      "message": "Term must be at least 1 month",
+      "policy": "rollback"
+    }
+  ],
+  "actions": [],
+  "metaDerivations": [],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "Car Loan Calculator",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "loanAmountField",
+            "type": "numericField",
+            "label": "Loan Amount ($)",
+            "bind": "$.loanAmount",
+            "placeholder": "e.g. 20000"
+          },
+          {
+            "id": "rateField",
+            "type": "numericField",
+            "label": "Annual Interest Rate (%)",
+            "bind": "$.annualRatePercent",
+            "placeholder": "e.g. 6"
+          },
+          {
+            "id": "termField",
+            "type": "numericField",
+            "label": "Term (months)",
+            "bind": "$.termMonths",
+            "placeholder": "e.g. 60"
+          },
+          {
+            "id": "sep1",
+            "type": "separatorLine"
+          },
+          {
+            "id": "summaryGroup",
+            "type": "group",
+            "layout": "horizontal",
+            "components": [
+              {
+                "id": "paymentLabel",
+                "type": "label",
+                "label": "Monthly Payment",
+                "bind": "$.monthlyPayment"
+              },
+              {
+                "id": "totalLabel",
+                "type": "label",
+                "label": "Total Payment",
+                "bind": "$.totalPayment"
+              },
+              {
+                "id": "interestLabel",
+                "type": "label",
+                "label": "Total Interest",
+                "bind": "$.totalInterest"
+              }
+            ]
+          },
+          {
+            "id": "sep2",
+            "type": "separatorLine"
+          },
+          {
+            "id": "scheduleTable",
+            "type": "dataTable",
+            "label": "Amortization Schedule",
+            "bind": "$.schedule",
+            "tableColumns": [
+              {
+                "field": "month",
+                "header": "Month",
+                "width": "10%"
+              },
+              {
+                "field": "payment",
+                "header": "Payment",
+                "format": "currency",
+                "width": "20%"
+              },
+              {
+                "field": "interest",
+                "header": "Interest",
+                "format": "currency",
+                "width": "20%"
+              },
+              {
+                "field": "principal",
+                "header": "Principal",
+                "format": "currency",
+                "width": "20%"
+              },
+              {
+                "field": "balance",
+                "header": "Balance",
+                "format": "currency",
+                "width": "30%"
+              }
+            ],
+            "pageSize": 12
+          }
+        ]
+      }
+    ]
+  },
+  "defaultValues": [
+    {
+      "path": "$",
+      "expr": "{\"loanAmount\": 20000, \"annualRatePercent\": 6, \"termMonths\": 60}"
+    }
+  ],
+  "tests": [
+    {
+      "description": "$20 000 at 6% APR over 60 months — payment and first-month breakdown",
+      "given": {
+        "$.loanAmount": 20000,
+        "$.annualRatePercent": 6,
+        "$.termMonths": 60
+      },
+      "expect": {
+        "$.monthlyPayment": 386.66,
+        "$.totalPayment": 23199.6,
+        "$.totalInterest": 3199.6,
+        "$.schedule[0].month": 1,
+        "$.schedule[0].interest": 100.0,
+        "$.schedule[0].principal": 286.66,
+        "$.schedule[0].balance": 19713.34
+      }
+    }
+  ]
+}

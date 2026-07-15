@@ -1,0 +1,57 @@
+{
+  "_name": "Order / Line Items",
+  "_description": "Items array with per-row lineTotal and grand total derived via JSONata.",
+  "id": "order-items-price-total",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name":      { "type": "string" },
+            "price":     { "type": "number", "minimum": 0, "multipleOf": 0.01 },
+            "qty":       { "type": "integer", "minimum": 1 },
+            "lineTotal": { "type": "number", "readOnly": true }
+          },
+          "required": ["name", "price", "qty"]
+        }
+      },
+      "total": { "type": "number", "readOnly": true, "multipleOf": 0.01 }
+    }
+  },
+  "derivations": [
+    { "path": "$.total",              "expr": "$sum(items.(price * qty))" },
+    { "path": "$.items[*].lineTotal", "expr": "$parent.price * $parent.qty" }
+  ],
+  "constraints": [
+    {
+      "id": "non-negative-total",
+      "expr": "total >= 0",
+      "message": "Total must be non-negative",
+      "policy": "rollback"
+    }
+  ],
+  "actions": [],
+  "metaDerivations": [],
+  "tests": [
+    {
+      "description": "total and per-item lineTotal are derived from price x qty",
+      "given": {
+        "$.items[0].name":  "Apple",
+        "$.items[0].price": 1.5,
+        "$.items[0].qty":   4,
+        "$.items[1].name":  "Bread",
+        "$.items[1].price": 2.75,
+        "$.items[1].qty":   2
+      },
+      "expect": {
+        "$.total":               11.5,
+        "$.items[0].lineTotal":  6,
+        "$.items[1].lineTotal":  5.5
+      }
+    }
+  ]
+}

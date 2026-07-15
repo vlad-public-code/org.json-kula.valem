@@ -1,0 +1,62 @@
+spring:
+  threads:
+    virtual:
+      enabled: true
+  # StorageConfig owns DataSource creation (it synthesizes a pooled HikariDataSource only when a DB
+  # backend is selected). Exclude Boot's JDBC auto-config so merely having HikariCP on the classpath
+  # does not force a dataSource bean from empty spring.datasource.* (audit T1.8).
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus   # /actuator/{health,info,metrics,prometheus}
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    tags:
+      application: valem
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  jackson:
+    mapper:
+      accept-case-insensitive-enums: true
+  servlet:
+    multipart:
+      max-file-size: 50MB        # hard cap on a single uploaded part (do not rely on defaults)
+      max-request-size: 55MB     # cap on the whole multipart request
+
+valem:
+  blob-store: memory           # memory | filesystem
+  blob-store-path: ${user.home}/.valem/blobs
+  blob:
+    max-bytes: 52428800        # per-blob upload cap enforced by BlobController (50 MB)
+    max-total-bytes: 536870912 # in-memory store total-bytes ceiling (512 MB); <=0 = unbounded (warned)
+  rate-limit:
+    enabled: false             # optional per-IP rate limiting (off by default)
+    requests: 100              # requests allowed per window per client IP
+    window-seconds: 60         # sliding window length
+    trust-forwarded-for: false # only trust X-Forwarded-For behind a trusted proxy (SEC-6)
+  effects:
+    allow-private-ips: false   # relax the egress guard's address checks (local dev / IT stubs only)
+    allow-insecure-http: false # permit cleartext http egress (independent of allow-private-ips; SEC-5)
+    allowed-hosts:             # optional comma-separated egress allowlist (blank = any public host)
+    max-response-bytes: 1048576 # max bytes an http effect will fold back (streamed, bounded)
+  llm:
+    provider: mistral        # anthropic | openai | ollama | openrouter | groq | mistral
+    api-key: ${MISTRAL_API_KEY:}   # empty = LLM features disabled (not required for ollama)
+    model: ${VALEM_LLM_MODEL:}   # blank = provider-appropriate default (mistral→mistral-large-latest, openai→gpt-4o, …); set to override
+    max-tokens: 8192
+    max-retries: 3
+    generation-temperature: 0.0  # sampling temperature for the initial attempt (low = deterministic, structured)
+    structured-output:
+      enabled: true              # send the ModelSpec/SpecEvolution JSON Schema as response_format (OpenAI-compatible providers)
+    max-concurrent-requests: 1 # cap simultaneous LLM calls (0 = unlimited, 1 = serialise); avoids 429s on throttled keys
+    base-url:                  # optional: override default endpoint (e.g. http://localhost:11434/v1 for custom ollama)
