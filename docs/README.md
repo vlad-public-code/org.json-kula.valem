@@ -3,6 +3,10 @@
 Deterministic reactive computation runtime for AI-generated structured data models.
 This is the documentation map. Find your audience below and start there.
 
+**▶ [Try the live sandbox](https://valem.onrender.com/)** — a zero-setup public demo: describe a
+domain in plain language, watch an LLM generate a ModelSpec, then mutate fields and see derivations,
+constraints, and effects react live.
+
 > **Scope.** These docs describe the **as-built, open** Valem runtime: `reference/` and
 > `architecture/` document how the shipped system works; `guides/` are task-oriented how-tos.
 
