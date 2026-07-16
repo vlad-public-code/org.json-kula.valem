@@ -47,6 +47,8 @@ public final class ValemClient implements AutoCloseable {
 
     private final String        baseUrl;   // no trailing slash
     private final String        apiKey;    // nullable
+    private final String        authHeaderName;  // e.g. "Authorization" or "X-Session-Token"
+    private final String        authHeaderValue; // precomputed, e.g. "Bearer <key>" or the bare token; null when no key
     private final HttpClient    http;
     private final ObjectMapper  mapper;
     private final WsConnector   wsConnector;
@@ -62,12 +64,31 @@ public final class ValemClient implements AutoCloseable {
         this(baseUrl, apiKey, HttpClient.newHttpClient(), null, new ObjectMapper(), DEFAULT_BACKOFF_MS);
     }
 
+    /**
+     * A client authenticating with a custom header instead of {@code Authorization: Bearer} — e.g.
+     * a Valem sandbox's {@code X-Session-Token} (device-flow paired sessions, sent with no value
+     * prefix). The WebSocket handshake is unaffected: it already authenticates via a plain
+     * {@code ?token=} query parameter, which a session-token host can accept identically.
+     */
+    public ValemClient(String baseUrl, String apiKey, String authHeaderName) {
+        this(baseUrl, apiKey, authHeaderName, "", HttpClient.newHttpClient(), null,
+                new ObjectMapper(), DEFAULT_BACKOFF_MS);
+    }
+
     /** Full constructor — the {@code wsConnector}/{@code backoffMs} seams exist for testing. */
     ValemClient(String baseUrl, String apiKey, HttpClient http,
                      WsConnector wsConnector, ObjectMapper mapper, long[] backoffMs) {
+        this(baseUrl, apiKey, "Authorization", "Bearer ", http, wsConnector, mapper, backoffMs);
+    }
+
+    /** Full constructor with a pluggable auth header — the seam {@link #ValemClient(String, String, String)} uses. */
+    ValemClient(String baseUrl, String apiKey, String authHeaderName, String authHeaderPrefix,
+                     HttpClient http, WsConnector wsConnector, ObjectMapper mapper, long[] backoffMs) {
         if (baseUrl == null || baseUrl.isBlank()) throw new IllegalArgumentException("baseUrl required");
-        this.baseUrl     = baseUrl.replaceAll("/+$", "");
-        this.apiKey      = (apiKey == null || apiKey.isBlank()) ? null : apiKey;
+        this.baseUrl         = baseUrl.replaceAll("/+$", "");
+        this.apiKey          = (apiKey == null || apiKey.isBlank()) ? null : apiKey;
+        this.authHeaderName  = authHeaderName;
+        this.authHeaderValue = this.apiKey == null ? null : authHeaderPrefix + this.apiKey;
         this.http        = http;
         this.mapper      = mapper;
         this.backoffMs   = backoffMs.clone();
@@ -214,7 +235,7 @@ public final class ValemClient implements AutoCloseable {
 
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(baseUrl + "/blobs"));
         b.header("Content-Type", "multipart/form-data; boundary=" + boundary);
-        if (apiKey != null) b.header("Authorization", "Bearer " + apiKey);
+        if (authHeaderValue != null) b.header(authHeaderName, authHeaderValue);
         b.POST(HttpRequest.BodyPublishers.ofByteArray(body));
 
         HttpResponse<String> res;
@@ -245,7 +266,7 @@ public final class ValemClient implements AutoCloseable {
 
     private byte[] getBytes(String path) {
         HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(baseUrl + path));
-        if (apiKey != null) b.header("Authorization", "Bearer " + apiKey);
+        if (authHeaderValue != null) b.header(authHeaderName, authHeaderValue);
         b.GET();
         HttpResponse<byte[]> res;
         try {
@@ -393,7 +414,14 @@ public final class ValemClient implements AutoCloseable {
                 String frame = buffer.toString();
                 buffer.setLength(0);
                 try {
-                    listener.onEvent(mapper.readValue(frame, ChangeEvent.class));
+                    // The topic also carries discriminated non-mutation frames (kind:"spec-evolved",
+                    // pushed after POST /models/{id}/spec/evolve). ChangeEvent models mutation frames
+                    // only — anything else would deserialize with all-null lists, so skip it rather
+                    // than hand the listener a half-empty event.
+                    JsonNode node = mapper.readTree(frame);
+                    if ("mutation".equals(node.path("kind").asText("mutation"))) {
+                        listener.onEvent(mapper.treeToValue(node, ChangeEvent.class));
+                    }
                 } catch (Exception e) {
                     listener.onError(e);
                 }
@@ -450,7 +478,7 @@ public final class ValemClient implements AutoCloseable {
                 : HttpRequest.BodyPublishers.ofString(toJson(body));
         b.method(method, publisher);
         if (body != null) b.header("Content-Type", contentType == null ? "application/json" : contentType);
-        if (apiKey != null) b.header("Authorization", "Bearer " + apiKey);
+        if (authHeaderValue != null) b.header(authHeaderName, authHeaderValue);
         extraHeaders.forEach(b::header);
 
         HttpResponse<String> res;

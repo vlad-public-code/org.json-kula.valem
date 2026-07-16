@@ -71,6 +71,13 @@ export default function LivePanel({ modelId }: Props) {
           events.map((evt, i) => (
             <div className="live-event" key={i}>
               <span className="live-event-time">{new Date(evt.ts).toLocaleTimeString()}</span>
+              {evt.kind === 'spec-evolved' ? (
+                <div>
+                  <strong>spec evolved:</strong>{' '}
+                  <span className="badge badge-purple">v{evt.version}</span>
+                </div>
+              ) : (
+              <>
               <div>
                 <strong>mutated:</strong>{' '}
                 {evt.mutatedPaths.map(p => <span key={p} className="badge badge-blue" style={{ marginRight: 3 }}>{p}</span>)}
@@ -92,6 +99,8 @@ export default function LivePanel({ modelId }: Props) {
                   <strong>effects:</strong>{' '}
                   {evt.dispatchedEffects.map(e => <span key={e.effectId} className="badge badge-green" style={{ marginRight: 3 }}>{e.effectId}</span>)}
                 </div>
+              )}
+              </>
               )}
             </div>
           ))

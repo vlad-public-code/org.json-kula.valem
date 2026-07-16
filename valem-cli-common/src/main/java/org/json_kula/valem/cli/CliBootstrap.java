@@ -27,20 +27,29 @@ public final class CliBootstrap {
 
     private CliBootstrap() {}
 
-    /** Parsed launch options. {@link #remote()} is true iff a non-blank base URL was supplied. */
-    public record Options(String url, String apiKey, boolean help, boolean version, List<String> unknown) {
+    /**
+     * Parsed launch options. {@link #remote()} is true iff a non-blank base URL was supplied;
+     * {@link #remoteWithBrowser()} additionally requires {@code --browser} — the device-flow-paired
+     * mode that targets a Valem web host's session protocol (e.g. the hosted sandbox) instead of a
+     * plain API key.
+     */
+    public record Options(String url, String apiKey, boolean browser,
+                          boolean help, boolean version, List<String> unknown) {
         public boolean remote() { return url != null && !url.isBlank(); }
+        public boolean remoteWithBrowser() { return remote() && browser; }
     }
 
     /**
      * Parses CLI arguments, falling back to {@code VALEM_URL} / {@code VALEM_API_KEY} from
      * the supplied environment lookup. Recognises {@code --url}, {@code --api-key} (space- or
-     * {@code =}-separated), {@code --help}/{@code -h}, {@code --version}/{@code -V}. Any other token is
-     * collected in {@link Options#unknown()} for the caller to report.
+     * {@code =}-separated), {@code --browser} (device-flow pairing instead of an API key),
+     * {@code --help}/{@code -h}, {@code --version}/{@code -V}. Any other token is collected in
+     * {@link Options#unknown()} for the caller to report.
      */
     public static Options parse(String[] args, UnaryOperator<String> env) {
         String url    = env.apply("VALEM_URL");
         String apiKey = env.apply("VALEM_API_KEY");
+        boolean browser = false;
         boolean help = false;
         boolean version = false;
         List<String> unknown = new ArrayList<>();
@@ -50,6 +59,7 @@ public final class CliBootstrap {
             switch (a) {
                 case "--help", "-h"    -> help = true;
                 case "--version", "-V" -> version = true;
+                case "--browser"       -> browser = true;
                 case "--url"           -> url    = requireValue(args, ++i, a);
                 case "--api-key"       -> apiKey = requireValue(args, ++i, a);
                 default -> {
@@ -59,7 +69,7 @@ public final class CliBootstrap {
                 }
             }
         }
-        return new Options(blankToNull(url), blankToNull(apiKey), help, version, List.copyOf(unknown));
+        return new Options(blankToNull(url), blankToNull(apiKey), browser, help, version, List.copyOf(unknown));
     }
 
     /**
@@ -69,6 +79,13 @@ public final class CliBootstrap {
      */
     @SuppressWarnings("deprecation") // core InMemoryBlobStore: lean dep tree; embedded CLI state is ephemeral
     public static ModelOperations createModelOperations(Options opts, ObjectMapper mapper) {
+        if (opts.remoteWithBrowser()) {
+            // Browser pairing needs a device-flow facade this shared bootstrap cannot build (see
+            // valem-mcp's SandboxSessionModelOperations). A CLI that supports the mode constructs its
+            // own facade before calling here; anything else must fail loudly rather than silently
+            // hand back a plain-remote facade whose calls then fail with a confusing auth error.
+            throw new IllegalArgumentException("--browser (remote_with_browser mode) is not supported by this tool");
+        }
         if (opts.remote()) {
             return new RemoteModelOperations(new ValemClient(opts.url(), opts.apiKey()), mapper);
         }

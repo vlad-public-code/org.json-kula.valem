@@ -97,13 +97,21 @@ export interface AuditQuery {
   limit?: number;
 }
 
-/** A WebSocket change event pushed after each committed mutation. */
+/**
+ * A WebSocket frame pushed to subscribers. `kind: "mutation"` (the default when absent, for older
+ * servers) follows each committed mutation and carries the path/constraint/effect lists;
+ * `kind: "spec-evolved"` follows a successful spec evolution and carries only the new `version` —
+ * re-fetch the spec/view/state as the source of truth.
+ */
 export interface ChangeEvent {
+  kind?: 'mutation' | 'spec-evolved';
   modelId: string;
   mutatedPaths: string[];
   derivedUpdated: string[];
   flaggedConstraints: ConstraintViolation[];
   dispatchedEffects: DispatchedEffect[];
+  /** Present on a spec-evolved frame: the new spec version. */
+  version?: string;
 }
 
 export interface Snapshot {

@@ -128,10 +128,14 @@ Connect to `ws://host/models/{id}/subscribe`. When `valem.api.key` is configured
 handshake must carry the key as a query-param token (browsers cannot set headers on the WS
 handshake): `ws://host/models/{id}/subscribe?token=<apiKey>`. A missing/invalid token is rejected
 with HTTP 401. Cross-origin handshakes are allowed only from `valem.websocket.allowed-origins`
-(same-origin only when unset). After each committed mutation the server pushes a `ChangeEvent` frame:
+(same-origin only when unset). The topic carries two frame shapes, discriminated by `kind`:
+
+After each committed mutation, a `"mutation"` frame (`kind` defaults to `"mutation"` if absent, for
+older clients):
 
 ```json
 {
+  "kind": "mutation",
   "modelId": "order-001",
   "mutatedPaths":       ["$.order.subtotal"],
   "derivedUpdated":     ["$.order.total"],
@@ -140,10 +144,23 @@ with HTTP 401. Cross-origin handshakes are allowed only from `valem.websocket.al
 }
 ```
 
-Optional `?paths=` query parameter filters to events touching the listed path prefixes
-(comma-separated, OR'd): `ws://host/models/{id}/subscribe?paths=$.order,$.customer`.
-Constraint violations and dispatched (caller) effects are always forwarded regardless of the filter.
-See [security-model.md](security-model.md) for the WebSocket auth/origin model.
+After a successful `POST /models/{id}/spec/evolve`, a `"spec-evolved"` frame — however the evolve was
+made (this REST call, the MCP's `evolve_spec` tool, or an AI-assisted evolve):
+
+```json
+{ "kind": "spec-evolved", "modelId": "order-001", "version": "1.1.0" }
+```
+
+It deliberately carries only the new version, not the spec itself; a subscriber re-fetches
+`GET /models/{id}/spec` (and view/state) as the source of truth. This is what lets a browser tab
+notice a spec change made by another client on the same model — see
+[MCP server: pairing with a browser](../guides/mcp-server.md#pairing-with-a-browser-remote_with_browser-mode).
+
+Optional `?paths=` query parameter filters `"mutation"` events to those touching the listed path
+prefixes (comma-separated, OR'd): `ws://host/models/{id}/subscribe?paths=$.order,$.customer`.
+Constraint violations, dispatched (caller) effects, and `"spec-evolved"` frames are always forwarded
+regardless of the filter. See [security-model.md](security-model.md) for the WebSocket auth/origin
+model.
 
 ---
 

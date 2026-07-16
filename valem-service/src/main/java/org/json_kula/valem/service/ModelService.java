@@ -190,6 +190,33 @@ public class ModelService implements ModelOperations {
     }
 
     /**
+     * Post-commit notification that a model's <b>spec</b> (not just state) changed via
+     * {@link #evolveSpec}. Same contract as {@link ChangeListener}: fires under the evolved model's
+     * lock, so listeners MUST NOT call back into any model synchronously — hand off to another
+     * thread. Registering here (rather than broadcasting per evolve endpoint) is what guarantees
+     * every evolve entry point — REST, AI-assisted, streaming — notifies subscribers identically.
+     */
+    @FunctionalInterface
+    public interface EvolveListener {
+        void onEvolve(String modelId, ModelSpec evolved);
+    }
+
+    private final java.util.List<EvolveListener> evolveListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** Registers an evolve listener; returns a handle whose {@code close()} deregisters it. */
+    public AutoCloseable addEvolveListener(EvolveListener listener) {
+        evolveListeners.add(listener);
+        return () -> evolveListeners.remove(listener);
+    }
+
+    private void notifyEvolve(String id, ModelSpec evolved) {
+        for (EvolveListener l : evolveListeners) {
+            try { l.onEvolve(id, evolved); }
+            catch (RuntimeException e) { log.warn("evolve listener failed for '{}': {}", id, e.toString()); }
+        }
+    }
+
+    /**
      * Executes a server-effect request emitted by a model's reactive cycle. The core emits the
      * request as data (no I/O); the executor (in the api shell) performs the I/O <b>asynchronously</b>
      * and folds any response back via {@link #mutate}. It must not fold back synchronously — the sink
@@ -591,6 +618,7 @@ public class ModelService implements ModelOperations {
                 newRuntime.recomputeAllDerivations();
 
                 registry.register(id, newRuntime);
+                notifyEvolve(id, evolved);
                 return evolved;
             }
         } finally {

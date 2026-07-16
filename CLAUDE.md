@@ -83,7 +83,8 @@ valem/                   ← parent POM (multi-module Maven)
 │   ├── McpServer             ← JSON-RPC 2.0 stdio transport + initialize/tools/resources handshake
 │   ├── ToolRegistry          ← 16 tools → ModelService: model CRUD (create/mutate/get_state/explain/
 │   │                            evolve_spec/…) + authoring/verify (validate_spec/eval_expression/
-│   │                            test_spec/dry_run) — the agent generates, Valem verifies
+│   │                            test_spec/dry_run) — the agent generates, Valem verifies;
+│   │                            + pair_browser in remote_with_browser mode (--url --browser)
 │   └── ResourceRegistry      ← MCP resources: spec-format guide + JSON schemas + bundled example specs
 │
 ├── valem-client/        ← thin Java SDK over REST/WS (jackson + JDK java.net.http only;

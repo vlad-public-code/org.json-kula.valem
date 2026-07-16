@@ -50,11 +50,15 @@ export interface DerivationTrace {
 }
 
 export interface ChangeEvent {
+  /** Frame discriminator — "mutation" (default when absent, older servers) or "spec-evolved". */
+  kind?: 'mutation' | 'spec-evolved';
   modelId: string;
   mutatedPaths: string[];
   derivedUpdated: string[];
   flaggedConstraints: string[];
   dispatchedEffects: DispatchedEffect[];
+  /** Present on a spec-evolved frame: the new spec version. */
+  version?: string;
 }
 
 export interface Snapshot {

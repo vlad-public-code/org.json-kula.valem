@@ -301,6 +301,25 @@ class ToolRegistry {
                 }
                 return throwaway.getState(spec.id(), null);
             });
+
+        // ── remote_with_browser mode only: the device-flow pairing entry point ──
+
+        if (service instanceof BrowserPairable pairable) {
+            add("pair_browser", "Pair with browser",
+                "Pair this MCP session with a browser tab on the hosted Valem sandbox so both drive the "
+                + "same live model session. Mints a pairing on first call (or resumes an existing "
+                + "not-yet-approved one) and waits up to a minute for the developer to approve it. Returns "
+                + "{status:\"paired\"|\"already_paired\", namespaceId} once done, or "
+                + "{status:\"pending\", verificationUri, userCode, expiresInSec} if the developer hasn't "
+                + "approved yet — tell them to open verificationUri and TYPE userCode into the approve "
+                + "screen (the page never shows it; only you and they know it), then "
+                + "call this tool again (it resumes the SAME pairing, it does not mint a new one). Every "
+                + "other model tool (create_model, mutate, evolve_spec, get_state, explain, ...) fails "
+                + "with a clear error until pairing succeeds.",
+                objectSchema(),
+                annotations(false, false, false),
+                args -> pairable.pairBrowser());
+        }
     }
 
     // ── Transport-facing operations ───────────────────────────────────────────────

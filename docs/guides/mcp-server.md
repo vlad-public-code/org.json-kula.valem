@@ -68,6 +68,45 @@ an agent can vet a candidate spec offline before pushing it to the shared server
 (create/mutate/get_state/explain/evolve/…) is routed to the server in remote mode. The API key is
 never logged or echoed.
 
+## Pairing with a browser: `remote_with_browser` mode
+
+Add `--browser` to `--url` to pair the MCP with **a browser tab on that host** — for example the
+[hosted Valem sandbox](https://valem.onrender.com/) — instead of authenticating with an API key.
+Both ends then drive **one shared, live session**: a model the agent creates appears in the browser
+immediately, the developer can enter data and inspect it through the sandbox's View/State/Explain
+panels, the agent can read exactly what the developer entered with `get_state`/`explain`, and an
+agent-authored `evolve_spec` pushes the browser to re-fetch and re-render automatically — no
+copy-pasting a spec or mutation log between the two.
+
+```bash
+java -jar valem-mcp-1.0.0-SNAPSHOT.jar --url https://valem.onrender.com --browser
+```
+
+**How pairing works** (a device-authorization-grant handshake, [RFC 8628](https://www.rfc-editor.org/rfc/rfc8628) shape):
+
+1. Ask the agent to pair (or call the `pair_browser` tool directly). The MCP mints a pairing on the
+   host and prints a **verification link** plus a short **confirmation code**.
+2. Open the link in a browser. It shows an **Approve** screen — type the confirmation code the
+   agent printed (the page never displays it; only you and the agent know it), then approve.
+3. Call `pair_browser` again (it resumes the *same* pairing rather than minting a new one) if the
+   first call reported `"pending"`. Once you've approved, it returns `{"status":"paired", ...}` and
+   every other model tool now drives the shared session.
+
+Model ids stay exactly as the agent chose them — `create_model({"id":"loan", ...})` and then
+`mutate("loan", ...)` — even though the host namespaces ids internally per session; the MCP tracks
+that transparently. `list_models` is scoped to the paired session, not the whole host. The pure
+authoring tools (`validate_spec`, `eval_expression`, `test_spec`, `dry_run`) still run locally and
+need no pairing.
+
+A pairing is one-time, short-lived (a few minutes), and gated by two secrets that never appear
+together anywhere an observer could combine them: a `deviceSecret` known only to the MCP process
+(gates polling) and a `userCode` the agent prints and the human types into the Approve screen —
+the server never reveals it to the browser, and wrong-code attempts are capped, so even someone
+who intercepts the verification link cannot approve the pairing (the link itself carries neither
+secret). If the host evicts the session (idle
+timeout or redeploy) mid-loop, the browser's own local recovery copy rebuilds the model, and
+re-running `pair_browser` re-establishes the live link.
+
 ## Register with an MCP client
 
 Point your client's MCP server config at the jar. For Claude Desktop
@@ -98,6 +137,14 @@ claude mcp add valem --env VALEM_API_KEY=$KEY -- \
   java -jar /absolute/path/to/valem-mcp-1.0.0-SNAPSHOT.jar --url https://valem.internal
 ```
 
+To register `remote_with_browser` mode against the hosted sandbox, add `--browser` instead of an
+API key (see [Pairing with a browser](#pairing-with-a-browser-remote_with_browser-mode) above):
+
+```bash
+claude mcp add valem -- \
+  java -jar /absolute/path/to/valem-mcp-1.0.0-SNAPSHOT.jar --url https://valem.onrender.com --browser
+```
+
 The client launches the process, performs the `initialize` handshake, and lists the tools below.
 
 ## Tools
@@ -120,10 +167,14 @@ JSON Path, exactly as the REST API and console are.
 | `evolve_spec` | `POST /models/{id}/spec/evolve` | `id`, `evolution` (a SpecEvolution) | — |
 | `delete_model` | `DELETE /models/{id}` | `id` | — |
 | `get_view` | `GET /models/{id}/view[/{viewId}]` | `id` | `viewId` |
+| `pair_browser` | `POST /sandbox/pair` + `/token` | — | — |
 
 Blobs and snapshot/restore are intentionally **not** exposed — the MCP surface targets the
 agent-state use case (create, mutate, read, explain, evolve), and binary/base64 payloads are a poor
 fit for a tool-call channel. Use the REST API for those.
+
+`pair_browser` only appears in [`remote_with_browser` mode](#pairing-with-a-browser-remote_with_browser-mode)
+(`--url ... --browser`) — embedded mode and plain `--url` remote mode never advertise it.
 
 `create_model` returns the model info (id + version + derivation/meta/constraint/effect counts);
 `evolve_spec` returns the new version.

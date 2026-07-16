@@ -118,6 +118,14 @@ public class ModelController {
             ChangeEvent event = toChangeEvent(id, result);
             broadcastPool.execute(() -> wsHandler.broadcast(id, event));
         });
+        // Notify subscribers a spec (not just state) changed — registered on the service so EVERY
+        // evolve entry point (this controller's evolveSpec, AiEvolveController, the streaming AI
+        // evolve) broadcasts identically; a browser had no way to learn the spec changed after
+        // another client's evolution. Same off-lock dispatch as mutations.
+        service.addEvolveListener((id, evolved) -> {
+            var specEvolved = new org.json_kula.valem.api.websocket.SpecEvolvedEvent(id, evolved.version());
+            broadcastPool.execute(() -> wsHandler.broadcast(id, specEvolved));
+        });
     }
 
     @PreDestroy

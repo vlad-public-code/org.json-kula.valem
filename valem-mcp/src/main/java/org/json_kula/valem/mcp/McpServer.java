@@ -44,9 +44,17 @@ import java.util.Set;
  * authoring/verify tools ({@code validate_spec}, {@code eval_expression}, {@code test_spec},
  * {@code dry_run}) still run locally.
  *
+ * <p>Adding {@code --browser} to {@code --url} selects <b>{@code remote_with_browser}</b> mode: instead
+ * of an API key, the MCP pairs with a browser tab on that host over a device-flow handshake (the
+ * {@code pair_browser} tool mints/prints a verification link + confirmation code, and resumes polling
+ * until the developer approves it) and then drives the same <b>shared, live session</b> the browser is
+ * on — so an agent-authored {@code evolve_spec} lands on the model the developer is looking at, and the
+ * browser re-renders automatically. See the MCP guide's "pair with the sandbox" section.
+ *
  * <pre>
- *   java -jar valem-mcp.jar                       # embedded, in-memory (default)
- *   java -jar valem-mcp.jar --url https://host    # remote against valem-web
+ *   java -jar valem-mcp.jar                                # embedded, in-memory (default)
+ *   java -jar valem-mcp.jar --url https://host             # remote against valem-web
+ *   java -jar valem-mcp.jar --url https://host --browser   # remote_with_browser (paired sandbox session)
  * </pre>
  */
 public class McpServer {
@@ -97,11 +105,23 @@ public class McpServer {
             printUsage(System.err);
             return;
         }
+        if (opts.browser() && !opts.remote()) {
+            System.err.println("[valem-mcp] --browser has no effect without --url (or VALEM_URL) — "
+                    + "running embedded; pass --url <host> --browser for remote_with_browser mode");
+        }
 
-        ModelOperations service = CliBootstrap.createModelOperations(opts, mapper);
+        // remote_with_browser is its own facade (device-flow pairing + session protocol) built here
+        // rather than by CliBootstrap — it has no ModelOperations to hand back until pairing completes,
+        // unlike the embedded/plain-remote facades CliBootstrap builds eagerly.
+        ModelOperations service = opts.remoteWithBrowser()
+                ? new SandboxSessionModelOperations(opts.url(), mapper)
+                : CliBootstrap.createModelOperations(opts, mapper);
         // Diagnostics go to stderr only — stdout is reserved for the JSON-RPC protocol. The API key
-        // (if any) is never printed.
-        if (opts.remote()) {
+        // (if any) is never printed; neither is a session token or device secret once pairing runs.
+        if (opts.remoteWithBrowser()) {
+            System.err.println("[valem-mcp] remote_with_browser mode: driving " + opts.url()
+                    + " — call the pair_browser tool to start pairing");
+        } else if (opts.remote()) {
             System.err.println("[valem-mcp] remote mode: driving " + opts.url());
         }
         new McpServer(service, mapper).run(System.in, System.out);
@@ -117,6 +137,8 @@ public class McpServer {
             Options:
               --url <base>       Drive a remote valem-web server (default: embedded, in-memory)
               --api-key <key>    API key for the remote server
+              --browser          With --url: pair with a browser tab on that host instead of an API key
+                                 (remote_with_browser mode — e.g. the hosted Valem sandbox)
               -h, --help         Print this help and exit
               -V, --version      Print the version and exit
 
@@ -124,7 +146,10 @@ public class McpServer {
               VALEM_URL, VALEM_API_KEY   Fallbacks for --url / --api-key
 
             With no --url the server runs embedded and in-memory (zero config). In remote mode the pure
-            authoring/verify tools (validate_spec, eval_expression, test_spec, dry_run) still run locally.""");
+            authoring/verify tools (validate_spec, eval_expression, test_spec, dry_run) still run locally.
+            In remote_with_browser mode (--url + --browser), call the pair_browser tool to obtain a
+            verification link and confirmation code for the developer to approve in their browser; once
+            approved, model operations drive that shared session.""");
     }
 
     /**
@@ -217,12 +242,25 @@ public class McpServer {
         ObjectNode serverInfo = result.putObject("serverInfo");
         serverInfo.put("name", SERVER_NAME);
         serverInfo.put("version", SERVER_VERSION);
-        result.put("instructions",
+        String instructions =
                 "Valem is a deterministic reactive computation runtime for structured JSON models. "
                 + "Use create_model to compile a declarative ModelSpec (schema + derivations + constraints "
                 + "+ effects), then mutate base fields — derived fields recompute automatically and "
                 + "constraints are enforced. Read merged state with get_state, trace any value with explain, "
-                + "and change the model in place with evolve_spec. State is in-memory for this session.");
+                + "and change the model in place with evolve_spec. State is in-memory for this session.";
+        if (tools.toolNames().contains("pair_browser")) {
+            instructions +=
+                " This server is in remote_with_browser mode: call pair_browser first to get a "
+                + "verification link + confirmation code for the developer to approve in their browser; "
+                + "model operations fail until that pairing completes. Once paired, create_model/mutate/"
+                + "evolve_spec/get_state/explain all drive the SAME live session the browser has open, so "
+                + "the developer's own entered data is visible to get_state/explain, and an evolve_spec "
+                + "pushes the browser to re-render automatically — no copy-paste. Before evolve_spec, "
+                + "prefer dry_run(evolvedSpec, currentInputs) to preview whether the change would strand "
+                + "any of the developer's entered data; the server also rejects a stranding evolution "
+                + "with an error as a backstop.";
+        }
+        result.put("instructions", instructions);
         return result;
     }
 

@@ -128,12 +128,14 @@ public class ValemWebSocketHandler extends TextWebSocketHandler {
     // ── Broadcast ─────────────────────────────────────────────────────────────
 
     /**
-     * Broadcasts a {@link ChangeEvent} to all sessions subscribed to the given model,
-     * applying per-session path filters.
+     * Broadcasts an event to all sessions subscribed to the given model, applying per-session path
+     * filters. Accepts any JSON-serialisable view-model event on this topic — a {@link ChangeEvent}
+     * (path-filtered as below) or a {@link SpecEvolvedEvent} (always forwarded, see
+     * {@link #eventMatchesFilter}).
      *
      * <p>Sessions that have been closed are removed automatically.
      */
-    public void broadcast(String modelId, ChangeEvent event) {
+    public void broadcast(String modelId, Object event) {
         Set<WebSocketSession> set = sessions.get(modelId);
         if (set == null || set.isEmpty()) return;
 
@@ -172,24 +174,28 @@ public class ValemWebSocketHandler extends TextWebSocketHandler {
      * Returns {@code true} when the event should be forwarded to a session with the given filter.
      *
      * <ul>
+     *   <li>A non-{@link ChangeEvent} (e.g. {@link SpecEvolvedEvent}) always passes — a path filter only
+     *       makes sense for mutation-shaped events, and a spec change matters regardless of which paths
+     *       a subscriber was watching.</li>
      *   <li>A {@code null} filter means "no filter" — all events pass.</li>
-     *   <li>Otherwise an event passes if any path in {@code mutatedPaths} or
+     *   <li>Otherwise a {@link ChangeEvent} passes if any path in {@code mutatedPaths} or
      *       {@code derivedUpdated} starts with one of the filter prefixes.</li>
      *   <li>Events with constraint violations or dispatched actions always pass,
      *       so clients never miss safety-relevant notifications.</li>
      * </ul>
      */
-    static boolean eventMatchesFilter(ChangeEvent event, Set<String> filterPaths) {
+    static boolean eventMatchesFilter(Object event, Set<String> filterPaths) {
+        if (!(event instanceof ChangeEvent change)) return true;
         if (filterPaths == null) return true;
 
         // Constraint violations and dispatched (caller) effects are always forwarded
-        if (!event.flaggedConstraints().isEmpty() || !event.dispatchedEffects().isEmpty()) return true;
+        if (!change.flaggedConstraints().isEmpty() || !change.dispatchedEffects().isEmpty()) return true;
 
         for (String prefix : filterPaths) {
-            for (String p : event.mutatedPaths()) {
+            for (String p : change.mutatedPaths()) {
                 if (p.startsWith(prefix)) return true;
             }
-            for (String p : event.derivedUpdated()) {
+            for (String p : change.derivedUpdated()) {
                 if (p.startsWith(prefix)) return true;
             }
         }

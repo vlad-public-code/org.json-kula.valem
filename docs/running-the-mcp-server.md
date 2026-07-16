@@ -75,5 +75,13 @@ the console); durable, shared, multi-tenant state is the REST path — see
 Because the pure core is deterministic and side-effect-free, the agent can dry-run freely without
 touching the outside world.
 
+## Pairing with a browser
+
+Adding `--browser` to `--url` pairs the MCP with a browser tab on that host (e.g. the hosted Valem
+sandbox) instead of an API key, so the agent and a human in the browser drive **one shared, live
+model** — the agent's `evolve_spec` pushes the browser to re-render automatically, with no
+copy-paste. See [MCP server guide: pairing with a browser]({% link guides/mcp-server.md %}#pairing-with-a-browser-remote_with_browser-mode)
+for the full handshake and the `pair_browser` tool.
+
 For the full tool-by-tool reference and workflow patterns, see the
 [MCP server guide]({% link guides/mcp-server.md %}).

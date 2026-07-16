@@ -124,7 +124,20 @@ export default function ViewPanel({ modelId }: Props) {
       ws = new WebSocket(buildSubscribeUrl(modelId));
       wsRef.current = ws;
 
-      ws.onmessage = () => {
+      ws.onmessage = (e: MessageEvent) => {
+        let kind = 'mutation';
+        try {
+          kind = (JSON.parse(e.data as string) as { kind?: string }).kind ?? 'mutation';
+        } catch { /* malformed frame — treat as a mutation-shaped nudge */ }
+        if (kind === 'spec-evolved') {
+          // Another client evolved the spec (e.g. a paired MCP's evolve_spec): the viewDefinition
+          // and constraints may have changed, so re-fetch the spec too. Doesn't touch the
+          // own-mutation slot below — that accounting is for mutation broadcasts only.
+          loadSpec();
+          loadState();
+          loadMeta();
+          return;
+        }
         // Skip re-fetch for mutations we just made ourselves — we already applied viewDelta locally
         if (pendingOwnMutationRef.current > 0) {
           pendingOwnMutationRef.current--;
@@ -144,7 +157,7 @@ export default function ViewPanel({ modelId }: Props) {
       clearTimeout(reconnectTimer);
       ws.close();
     };
-  }, [modelId, loadState, loadMeta]);
+  }, [modelId, loadSpec, loadState, loadMeta]);
 
   function applyViewDelta(delta: Record<string, ViewDeltaComponent> | undefined, derivedPaths: string[]) {
     if (!delta) return;
