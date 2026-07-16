@@ -1,0 +1,55 @@
+name: release-mcp
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write        # needed to upload assets to the release
+
+jobs:
+  build-and-attach:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # Sibling deps are not on Maven Central — build them from their public repos
+      - name: Checkout tracked-json
+        uses: actions/checkout@v4
+        with:
+          repository: vlad-public-code/org.json-kula.tracked-json
+          ref: v1.0.0
+          path: deps/tracked-json
+
+      - name: Checkout jsonata-jvm-compiler
+        uses: actions/checkout@v4
+        with:
+          repository: vlad-public-code/org.json-kula.jsonata-jvm-compiler
+          ref: v1.0.3
+          path: deps/jsonata-jvm-compiler
+
+      - name: Install sibling deps
+        run: |
+          mvn -q -f deps/tracked-json/pom.xml install -DskipTests
+          mvn -q -f deps/jsonata-jvm-compiler/pom.xml install -DskipTests
+
+      # The tagged dep poms are still *-SNAPSHOT, so override Valem's pinned versions
+      - name: Build valem-mcp (shaded jar)
+        run: >
+          mvn -pl valem-mcp -am package
+          -Dtracked-json.version=1.0.0-SNAPSHOT
+          -Djsonata-jvm-compiler.version=1.0.3-SNAPSHOT
+
+      - name: Attach jars to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSIONED=$(ls valem-mcp/target/valem-mcp-*.jar | grep -v original)
+          cp "$VERSIONED" valem-mcp.jar
+          gh release upload "$GITHUB_REF_NAME" valem-mcp.jar "$VERSIONED" --clobber

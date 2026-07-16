@@ -26,6 +26,14 @@ It is a thin adapter over the same pure-Java [`ModelService`](../architecture/ov
 that backs the REST API and the console, so the reactive pipeline, constraints, and effects behave
 identically to every other access surface.
 
+## Download
+
+Grab the prebuilt, executable jar from the latest release (Java 21 required):
+
+**[⬇ valem-mcp.jar (latest release)](https://github.com/vlad-public-code/org.json-kula.valem/releases/latest/download/valem-mcp.jar)**
+
+Or build it from source below.
+
 ## Build
 
 ```powershell

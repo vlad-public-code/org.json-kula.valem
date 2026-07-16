@@ -18,7 +18,13 @@ HTTP server).
 
 ---
 
-## Build the server jar
+## Get the server jar
+
+Download the prebuilt, executable jar from the latest release (Java 21 required):
+
+**[⬇ valem-mcp.jar (latest release)](https://github.com/vlad-public-code/org.json-kula.valem/releases/latest/download/valem-mcp.jar)**
+
+Or build it from source:
 
 ```bash
 mvn install -pl valem-core,valem-service,valem-view -q
