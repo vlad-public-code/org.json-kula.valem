@@ -54,6 +54,8 @@ public class LlmConfig {
             @Value("${valem.llm.base-url:}") String baseUrl,
             @Value("${valem.llm.mock:false}") boolean mock,
             @Value("${valem.llm.max-concurrent-requests:0}") int maxConcurrentRequests,
+            @Value("${valem.llm.prompt-cache.enabled:true}") boolean promptCacheEnabled,
+            @Value("${valem.llm.tool-loop.max-iterations:40}") int toolLoopMaxIterations,
             ObjectMapper mapper,
             RestClient.Builder restClientBuilder,
             LlmInteractionLog interactionLog) {
@@ -72,17 +74,17 @@ public class LlmConfig {
             inner = switch (provider.toLowerCase()) {
                 case "openai" -> {
                     String url = baseUrl.isBlank() ? OPENAI_BASE_URL : baseUrl;
-                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, mapper,
+                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, toolLoopMaxIterations, mapper,
                             restClientBuilder.build());
                 }
                 case "ollama" -> {
                     String url = baseUrl.isBlank() ? OLLAMA_BASE_URL : baseUrl;
-                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, mapper,
+                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, toolLoopMaxIterations, mapper,
                             restClientBuilder.build());
                 }
                 case "openrouter" -> {
                     String url = baseUrl.isBlank() ? OPENROUTER_BASE_URL : baseUrl;
-                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, mapper,
+                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, toolLoopMaxIterations, mapper,
                             restClientBuilder
                                     .defaultHeader("HTTP-Referer", "https://github.com/vlad-public-code/valem")
                                     .defaultHeader("X-Title", "Valem")
@@ -90,28 +92,28 @@ public class LlmConfig {
                 }
                 case "groq" -> {
                     String url = baseUrl.isBlank() ? GROQ_BASE_URL : baseUrl;
-                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, mapper,
+                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, toolLoopMaxIterations, mapper,
                             restClientBuilder.build());
                 }
                 case "mistral" -> {
                     String url = baseUrl.isBlank() ? MISTRAL_BASE_URL : baseUrl;
-                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, mapper,
+                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, toolLoopMaxIterations, mapper,
                             restClientBuilder.build());
                 }
                 case "gemini" -> {
                     String url = baseUrl.isBlank()
                             ? "https://generativelanguage.googleapis.com/v1beta/openai/"
                             : baseUrl;
-                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, mapper,
+                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, toolLoopMaxIterations, mapper,
                             restClientBuilder.build());
                 }
                 case "cerebras" -> {
                     String url = baseUrl.isBlank() ? "https://api.cerebras.ai/v1" : baseUrl;
-                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, mapper,
+                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, toolLoopMaxIterations, mapper,
                             restClientBuilder.build());
                 }
-                case "anthropic" -> new AnthropicLlmClient(apiKey, model, maxTokens, mapper,
-                        restClientBuilder.build());
+                case "anthropic" -> new AnthropicLlmClient(apiKey, model, maxTokens, promptCacheEnabled,
+                        toolLoopMaxIterations, mapper, restClientBuilder.build());
                 default -> throw new IllegalArgumentException(
                         "Unknown LLM provider: '" + provider + "'. Valid values: anthropic, openai, ollama, openrouter, groq, mistral, gemini, cerebras");
             };
@@ -217,10 +219,15 @@ public class LlmConfig {
             @Value("${valem.llm.max-retries:3}") int maxRetries,
             @Value("${valem.llm.max-retries-hard:6}") int maxRetriesHard,
             @Value("${valem.llm.repair-temperature:0.2}") double repairTemperature,
+            @Value("${valem.llm.repair-temperature-step:0.15}") double repairTemperatureStep,
+            @Value("${valem.llm.repair-temperature-max:0.8}") double repairTemperatureMax,
             @Value("${valem.llm.generation-temperature:0.0}") double generationTemperature,
             @Value("${valem.llm.structured-output.enabled:true}") boolean structuredOutput,
+            @Value("${valem.llm.max-tokens:8192}") int maxTokens,
+            @Value("${valem.llm.max-tokens-hard:16384}") int maxTokensHard,
             @Autowired(required = false) WebTool webTool) {
         return new SpecGenerator(llmClient, mapper, maxRetries, maxRetriesHard,
-                repairTemperature, generationTemperature, structuredOutput, webTool);
+                repairTemperature, generationTemperature, structuredOutput,
+                maxTokens, maxTokensHard, repairTemperatureStep, repairTemperatureMax, webTool);
     }
 }

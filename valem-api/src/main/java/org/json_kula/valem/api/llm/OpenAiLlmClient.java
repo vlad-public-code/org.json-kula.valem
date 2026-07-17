@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.json_kula.valem.core.llm.LlmClient;
 import org.json_kula.valem.core.llm.LlmProgressEvent;
+import org.json_kula.valem.core.llm.SpecGenerationPrompt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -31,47 +32,75 @@ public class OpenAiLlmClient implements LlmClient {
     private final String model;
     private final int maxTokens;
     private final String endpoint;
+    /** Hard ceiling on tool-call round-trips before one final tools-withheld request. */
+    private final int maxToolIterations;
+
+    private static final int DEFAULT_MAX_TOOL_ITERATIONS = 40;
 
     public OpenAiLlmClient(String baseUrl, String apiKey, String model, int maxTokens,
                            ObjectMapper mapper, RestClient restClient) {
+        this(baseUrl, apiKey, model, maxTokens, DEFAULT_MAX_TOOL_ITERATIONS, mapper, restClient);
+    }
+
+    public OpenAiLlmClient(String baseUrl, String apiKey, String model, int maxTokens,
+                           int maxToolIterations, ObjectMapper mapper, RestClient restClient) {
         this.apiKey = apiKey;
         this.model = model;
         this.maxTokens = maxTokens;
+        this.maxToolIterations = Math.max(1, maxToolIterations);
         this.mapper = mapper;
         this.restClient = restClient;
         this.endpoint = baseUrl.stripTrailing() + "/chat/completions";
     }
 
+    private int effectiveMaxTokens(Integer override) {
+        return override != null ? override : maxTokens;
+    }
+
     @Override
     public String complete(String prompt) throws LlmException {
-        return completeJson(prompt, null, null);
+        return completeJson(prompt, null, null, null, null);
     }
 
     @Override
     public String complete(String prompt, double temperature) throws LlmException {
-        return completeJson(prompt, temperature, null);
+        return completeJson(prompt, null, temperature, null, null);
     }
 
     @Override
     public String complete(String prompt, CompletionOptions options) throws LlmException {
-        return completeJson(prompt,
+        return completeJson(prompt, null,
                 options == null ? null : options.temperature(),
-                options == null ? null : options.responseSchema());
+                options == null ? null : options.responseSchema(),
+                options == null ? null : options.maxTokens());
     }
 
-    private String completeJson(String prompt, Double temperature, JsonNode responseSchema)
+    @Override
+    public String complete(SpecGenerationPrompt.PromptParts parts, CompletionOptions options)
             throws LlmException {
-        log.debug("Calling OpenAI-compatible API: endpoint={} model={} maxTokens={} temp={} schema={} promptLen={}",
-                endpoint, model, maxTokens, temperature, responseSchema != null, prompt.length());
+        return completeJson(parts.user(), parts.system(),
+                options == null ? null : options.temperature(),
+                options == null ? null : options.responseSchema(),
+                options == null ? null : options.maxTokens());
+    }
+
+    private String completeJson(String prompt, String system, Double temperature, JsonNode responseSchema,
+                                Integer maxTokensOverride) throws LlmException {
+        int budget = effectiveMaxTokens(maxTokensOverride);
+        log.debug("Calling OpenAI-compatible API: endpoint={} model={} maxTokens={} temp={} schema={} system={} promptLen={}",
+                endpoint, model, budget, temperature, responseSchema != null, system != null, prompt.length());
         try {
             ObjectNode req = mapper.createObjectNode();
             req.put("model", model);
-            req.put("max_tokens", maxTokens);
+            req.put("max_tokens", budget);
             // Force structured JSON output — without this, weaker OpenAI-compatible models (e.g.
             // mistral-small) answer in conversational prose and the spec parse fails.
             setResponseFormat(req, responseSchema);
             if (temperature != null) req.put("temperature", temperature.doubleValue());
             ArrayNode messages = req.putArray("messages");
+            // A distinct system role improves instruction adherence; OpenAI-compatible providers
+            // auto-cache long stable prefixes, so no explicit cache control is needed.
+            addSystemMessage(messages, system);
             ObjectNode msg = messages.addObject();
             msg.put("role", "user");
             msg.put("content", prompt);
@@ -90,39 +119,54 @@ public class OpenAiLlmClient implements LlmClient {
     @Override
     public String completeWithTools(String prompt, java.util.List<ToolDefinition> toolDefs,
                                     ToolExecutor executor) throws LlmException {
-        return completeWithToolsImpl(prompt, toolDefs, executor, null, null, null);
+        return completeWithToolsImpl(prompt, null, toolDefs, executor, null, null, null, null);
     }
 
     @Override
     public String completeWithTools(String prompt, java.util.List<ToolDefinition> toolDefs,
                                     ToolExecutor executor, double temperature) throws LlmException {
-        return completeWithToolsImpl(prompt, toolDefs, executor, temperature, null, null);
+        return completeWithToolsImpl(prompt, null, toolDefs, executor, temperature, null, null, null);
     }
 
     @Override
     public String completeWithTools(String prompt, java.util.List<ToolDefinition> toolDefs,
                                     ToolExecutor executor, CompletionOptions options) throws LlmException {
-        return completeWithToolsImpl(prompt, toolDefs, executor,
+        return completeWithToolsImpl(prompt, null, toolDefs, executor,
                 options == null ? null : options.temperature(),
-                options == null ? null : options.responseSchema(), null);
+                options == null ? null : options.responseSchema(),
+                options == null ? null : options.maxTokens(), null);
     }
 
     @Override
     public String completeWithTools(String prompt, java.util.List<ToolDefinition> toolDefs,
                                     ToolExecutor executor, CompletionOptions options,
                                     Consumer<LlmProgressEvent> onProgress) throws LlmException {
-        return completeWithToolsImpl(prompt, toolDefs, executor,
+        return completeWithToolsImpl(prompt, null, toolDefs, executor,
                 options == null ? null : options.temperature(),
-                options == null ? null : options.responseSchema(), onProgress);
+                options == null ? null : options.responseSchema(),
+                options == null ? null : options.maxTokens(), onProgress);
     }
 
-    private String completeWithToolsImpl(String prompt, java.util.List<ToolDefinition> toolDefs,
+    @Override
+    public String completeWithTools(SpecGenerationPrompt.PromptParts parts,
+                                    java.util.List<ToolDefinition> toolDefs, ToolExecutor executor,
+                                    CompletionOptions options, Consumer<LlmProgressEvent> onProgress)
+            throws LlmException {
+        return completeWithToolsImpl(parts.user(), parts.system(), toolDefs, executor,
+                options == null ? null : options.temperature(),
+                options == null ? null : options.responseSchema(),
+                options == null ? null : options.maxTokens(), onProgress);
+    }
+
+    private String completeWithToolsImpl(String prompt, String system,
+                                         java.util.List<ToolDefinition> toolDefs,
                                          ToolExecutor executor, Double temperature,
-                                         JsonNode responseSchema,
+                                         JsonNode responseSchema, Integer maxTokensOverride,
                                          Consumer<LlmProgressEvent> onProgress) throws LlmException {
-        log.debug("Calling OpenAI-compatible API (tools): endpoint={} model={} tools={} temp={} schema={}",
+        int budget = effectiveMaxTokens(maxTokensOverride);
+        log.debug("Calling OpenAI-compatible API (tools): endpoint={} model={} tools={} temp={} schema={} system={}",
                 endpoint, model, toolDefs.stream().map(ToolDefinition::name).toList(), temperature,
-                responseSchema != null);
+                responseSchema != null, system != null);
         try {
             ArrayNode tools = mapper.createArrayNode();
             for (ToolDefinition tool : toolDefs) {
@@ -135,14 +179,25 @@ public class OpenAiLlmClient implements LlmClient {
             }
 
             ArrayNode messages = mapper.createArrayNode();
+            addSystemMessage(messages, system);
             ObjectNode userMsg = messages.addObject();
             userMsg.put("role", "user");
             userMsg.put("content", prompt);
 
+            int iterations = 0;
             for (;;) {
+                // Iteration ceiling: withhold tools for one final request when the cap is hit so a model
+                // stuck calling exhausted tools cannot loop unbounded.
+                if (++iterations > maxToolIterations) {
+                    if (onProgress != null)
+                        onProgress.accept(new LlmProgressEvent.ToolCompleted(
+                                "tool-loop", "iteration cap (" + maxToolIterations + ") reached — forcing final answer"));
+                    return finalAnswerWithoutTools(messages, budget, temperature, responseSchema);
+                }
+
                 ObjectNode req = mapper.createObjectNode();
                 req.put("model", model);
-                req.put("max_tokens", maxTokens);
+                req.put("max_tokens", budget);
                 // Structured JSON for the final answer (tool_calls turns still emit function calls).
                 setResponseFormat(req, responseSchema);
                 if (temperature != null) req.put("temperature", temperature.doubleValue());
@@ -199,6 +254,44 @@ public class OpenAiLlmClient implements LlmClient {
             log.error("OpenAI-compatible API call failed: {}", e.getMessage());
             throw new LlmException("API call failed: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Tool-loop escape hatch: appends a "produce the final JSON now" user turn and re-requests with
+     * {@code tools} omitted, so the model must answer. If it still asks for a tool call, throw.
+     */
+    private String finalAnswerWithoutTools(ArrayNode messages, int budget, Double temperature,
+                                           JsonNode responseSchema) throws JsonProcessingException {
+        ObjectNode nudge = messages.addObject();
+        nudge.put("role", "user");
+        nudge.put("content", "Tool budget exhausted — produce the final JSON now.");
+
+        ObjectNode req = mapper.createObjectNode();
+        req.put("model", model);
+        req.put("max_tokens", budget);
+        setResponseFormat(req, responseSchema);
+        if (temperature != null) req.put("temperature", temperature.doubleValue());
+        req.set("messages", messages);   // no "tools" → the model cannot request a call
+
+        String responseJson = sendRequest(req);
+        JsonNode response   = mapper.readTree(responseJson);
+        JsonNode choices    = response.path("choices");
+        if (!choices.isArray() || choices.isEmpty())
+            throw new LlmException("Unexpected response: choices missing — " + responseJson);
+        JsonNode choice = choices.get(0);
+        if ("tool_calls".equals(choice.path("finish_reason").asText())) {
+            throw new LlmException("OpenAI-compatible tool loop did not converge: model kept calling "
+                    + "tools after the budget was exhausted");
+        }
+        return choice.path("message").path("content").asText();
+    }
+
+    /** Prepends a {@code system}-role message when a system context is present. */
+    private static void addSystemMessage(ArrayNode messages, String system) {
+        if (system == null || system.isBlank()) return;
+        ObjectNode sys = messages.addObject();
+        sys.put("role", "system");
+        sys.put("content", system);
     }
 
     private static String toolCallDetail(String toolName, JsonNode arguments) {

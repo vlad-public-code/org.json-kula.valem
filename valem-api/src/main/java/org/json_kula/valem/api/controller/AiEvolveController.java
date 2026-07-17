@@ -30,7 +30,12 @@ public class AiEvolveController {
 
     private static final int MAX_DESCRIPTION_LENGTH = 5_000;
 
-    record AiEvolveRequest(String description) {}
+    /**
+     * {@code includeView} is a nullable tri-state: {@code null} (the default when omitted) means
+     * "auto" — evolve the view when the current spec already has a {@code viewDefinition}, so a spec
+     * with a UI keeps it in sync; {@code true}/{@code false} force it on/off.
+     */
+    record AiEvolveRequest(String description, Boolean includeView) {}
 
     @PostMapping("/models/{id}/spec/evolve/ai")
     ResponseEntity<?> evolveWithAi(
@@ -54,9 +59,12 @@ public class AiEvolveController {
         log.info("AI evolve: modelId={} descriptionLen={}", id, req.description().length());
 
         ModelSpec currentSpec = service.getSpec(id);
+        boolean includeView = req.includeView() != null
+                ? req.includeView() : currentSpec.viewDefinition() != null;
 
         try {
-            var evolution = specGenerator.get().generateEvolution(currentSpec, req.description());
+            var evolution = specGenerator.get()
+                    .generateEvolution(currentSpec, req.description(), includeView, e -> {});
             ModelSpec evolved = service.evolveSpec(id, evolution);
             log.info("AI evolve succeeded: modelId={} newVersion={}", id, evolved.version());
             return ResponseEntity.ok(Map.of("version", evolved.version(), "spec", evolved));

@@ -36,6 +36,8 @@ public class LlmInteractionLog {
     private static LlmInteractionRecord redact(LlmInteractionRecord e) {
         return new LlmInteractionRecord(
                 e.timestamp(),
+                e.system() == null ? null : REDACTED,
+                e.user() == null ? null : REDACTED,
                 REDACTED,
                 e.response() == null ? null : REDACTED,
                 e.errorMessage() == null ? null : REDACTED,

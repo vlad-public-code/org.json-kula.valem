@@ -2,6 +2,7 @@ package org.json_kula.valem.api.llm;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.json_kula.valem.core.llm.LlmClient;
+import org.json_kula.valem.core.llm.SpecGenerationPrompt;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -66,6 +67,148 @@ class AnthropicLlmClientTest {
 
         client.complete("my custom prompt text");
         mockServer.verify();
+    }
+
+    @Test
+    void promptParts_sends_system_block_array_with_cache_control_and_user_only_message() throws Exception {
+        mockServer.expect(requestTo(ENDPOINT))
+                .andExpect(req -> {
+                    String body = ((MockClientHttpRequest) req).getBodyAsString();
+                    // system is a block array carrying an ephemeral cache breakpoint
+                    assertThat(body).contains("\"system\":[{");
+                    assertThat(body).contains("\"cache_control\":{\"type\":\"ephemeral\"}");
+                    assertThat(body).contains("SYSTEM RULES HERE");
+                    // the user message contains only the user part, not the system context
+                    int userIdx = body.indexOf("USER TASK HERE");
+                    int roleIdx = body.indexOf("\"role\":\"user\"");
+                    assertThat(userIdx).isGreaterThan(0);
+                    assertThat(roleIdx).isGreaterThan(0);
+                    // the system rules must not appear inside the messages array (only in "system")
+                    assertThat(body.indexOf("SYSTEM RULES HERE")).isLessThan(roleIdx);
+                })
+                .andRespond(withSuccess("""
+                        {"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn"}
+                        """, MediaType.APPLICATION_JSON));
+
+        var parts = new SpecGenerationPrompt.PromptParts("SYSTEM RULES HERE", "USER TASK HERE");
+        client.complete(parts, new LlmClient.CompletionOptions(null, null));
+        mockServer.verify();
+    }
+
+    @Test
+    void promptParts_with_cache_disabled_sends_plain_string_system() throws Exception {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        AnthropicLlmClient noCache =
+                new AnthropicLlmClient("test-key", "claude-sonnet-4-6", 256, false, MAPPER, builder.build());
+        server.expect(requestTo(ENDPOINT))
+                .andExpect(req -> {
+                    String body = ((MockClientHttpRequest) req).getBodyAsString();
+                    assertThat(body).contains("\"system\":\"SYS\"");
+                    assertThat(body).doesNotContain("cache_control");
+                })
+                .andRespond(withSuccess("""
+                        {"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn"}
+                        """, MediaType.APPLICATION_JSON));
+
+        noCache.complete(new SpecGenerationPrompt.PromptParts("SYS", "U"),
+                new LlmClient.CompletionOptions(null, null));
+        server.verify();
+    }
+
+    @Test
+    void complete_concatenates_multiple_text_blocks() throws Exception {
+        mockServer.expect(requestTo(ENDPOINT))
+                .andRespond(withSuccess("""
+                        {"content":[{"type":"text","text":"preamble "},
+                                    {"type":"text","text":"{\\"spec\\":true}"}],
+                         "stop_reason":"end_turn"}
+                        """, MediaType.APPLICATION_JSON));
+
+        String result = client.complete("give me two blocks");
+        assertThat(result).isEqualTo("preamble {\"spec\":true}");
+        mockServer.verify();
+    }
+
+    @Test
+    void structured_output_forces_submit_spec_and_returns_its_input() throws Exception {
+        mockServer.expect(requestTo(ENDPOINT))
+                .andExpect(req -> {
+                    String body = ((MockClientHttpRequest) req).getBodyAsString();
+                    assertThat(body).contains("\"tool_choice\":{\"type\":\"tool\",\"name\":\"submit_spec\"}");
+                    assertThat(body).contains("\"name\":\"submit_spec\"");
+                })
+                .andRespond(withSuccess("""
+                        {"content":[{"type":"tool_use","name":"submit_spec","id":"t1",
+                                     "input":{"id":"x","schema":{}}}],
+                         "stop_reason":"tool_use"}
+                        """, MediaType.APPLICATION_JSON));
+
+        var schema = MAPPER.readTree("{\"type\":\"object\"}");
+        var opts   = new LlmClient.CompletionOptions(null, schema);
+        String result = client.complete(new SpecGenerationPrompt.PromptParts("SYS", "make a spec"), opts);
+
+        assertThat(result).isEqualTo("{\"id\":\"x\",\"schema\":{}}");
+        mockServer.verify();
+    }
+
+    @Test
+    void structured_output_with_tools_treats_submit_spec_tool_use_as_terminal() throws Exception {
+        mockServer.expect(requestTo(ENDPOINT))
+                .andExpect(req -> {
+                    String body = ((MockClientHttpRequest) req).getBodyAsString();
+                    // submit_spec offered alongside the grounding tool, but NOT forced
+                    assertThat(body).contains("\"name\":\"submit_spec\"");
+                    assertThat(body).doesNotContain("tool_choice");
+                })
+                .andRespond(withSuccess("""
+                        {"content":[{"type":"tool_use","name":"submit_spec","id":"t9",
+                                     "input":{"id":"y"}}],
+                         "stop_reason":"tool_use"}
+                        """, MediaType.APPLICATION_JSON));
+
+        var schema  = MAPPER.readTree("{\"type\":\"object\"}");
+        var opts    = new LlmClient.CompletionOptions(null, schema);
+        var toolDef = new LlmClient.ToolDefinition("web_search", "search",
+                MAPPER.readTree("{\"type\":\"object\"}"));
+        String result = client.completeWithTools("find it", java.util.List.of(toolDef),
+                call -> "should-not-run", opts, e -> {});
+
+        assertThat(result).isEqualTo("{\"id\":\"y\"}");
+        mockServer.verify();
+    }
+
+    @Test
+    void tool_loop_ceiling_forces_a_final_request_without_tools() throws Exception {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        // cap = 1: one tool round-trip, then the forced final answer.
+        AnthropicLlmClient capped =
+                new AnthropicLlmClient("k", "claude-sonnet-4-6", 256, true, 1, MAPPER, builder.build());
+
+        // iteration 1: model asks for a tool
+        server.expect(requestTo(ENDPOINT)).andExpect(method(HttpMethod.POST))
+                .andRespond(withSuccess("""
+                        {"content":[{"type":"tool_use","name":"web_search","id":"t1","input":{"query":"x"}}],
+                         "stop_reason":"tool_use"}
+                        """, MediaType.APPLICATION_JSON));
+        // iteration 2 (> cap): final request must withhold tools and demand the answer
+        server.expect(requestTo(ENDPOINT))
+                .andExpect(req -> {
+                    String body = ((MockClientHttpRequest) req).getBodyAsString();
+                    assertThat(body).doesNotContain("\"tools\"");
+                    assertThat(body).contains("produce the final JSON now");
+                })
+                .andRespond(withSuccess("""
+                        {"content":[{"type":"text","text":"FINAL"}],"stop_reason":"end_turn"}
+                        """, MediaType.APPLICATION_JSON));
+
+        var tool = new LlmClient.ToolDefinition("web_search", "s", MAPPER.readTree("{\"type\":\"object\"}"));
+        String out = capped.completeWithTools("go", java.util.List.of(tool),
+                call -> "tool-result", new LlmClient.CompletionOptions(null, null), e -> {});
+
+        assertThat(out).isEqualTo("FINAL");
+        server.verify();
     }
 
     @Test

@@ -42,20 +42,37 @@ import java.util.stream.Collectors;
 public final class SpecGenerator {
 
     private static final int DEFAULT_MAX_RETRIES = 3;
-    /** Default low sampling temperature for repair attempts — favours focused fixes over creativity. */
+    /**
+     * Default sampling temperature for repair attempts. Slightly <em>above</em> the (typically 0)
+     * generation temperature on purpose: after a deterministic attempt failed, a little randomness
+     * helps the model escape the rut and try a different fix rather than re-emitting the same output.
+     */
     private static final double DEFAULT_REPAIR_TEMPERATURE = 0.2;
+    /** Default per-repeat increase in repair temperature (see {@link #repairTemperatureStep}). */
+    private static final double DEFAULT_REPAIR_TEMPERATURE_STEP = 0.15;
+    /** Default ceiling the escalating repair temperature is clamped to. */
+    private static final double DEFAULT_REPAIR_TEMPERATURE_MAX = 0.8;
 
     private final LlmClient   llm;
     private final ObjectMapper mapper;
     private final int          maxRetries;      // base budget — always attempted
     private final int          maxRetriesHard;  // ceiling — extra attempts only while converging
-    private final double       repairTemperature; // sampling temperature on repair attempts
+    private final double       repairTemperature; // sampling temperature on the FIRST repair attempt
+    // Each subsequent repair attempt raises the temperature by this step (clamped to
+    // repairTemperatureMax), so a model stuck re-emitting the same failing output gets progressively
+    // more room to escape the rut. 0 = flat repair temperature (old behavior).
+    private final double       repairTemperatureStep;
+    private final double       repairTemperatureMax;
     // Sampling temperature for the INITIAL attempt; null = provider default. A low value (~0) makes
     // the first attempt deterministic and structured rather than creative.
     private final Double       generationTemperature;
     // When true, send the ModelSpec/SpecEvolution JSON Schema as the provider response_format so the
     // model's output shape is provider-enforced (clients without native support ignore it).
     private final boolean      structuredOutput;
+    // Adaptive truncation recovery: the client's configured max_tokens and the hard ceiling to raise it
+    // to on the first truncation (both null = feature off → the old "smaller spec" fallback only).
+    private final Integer      maxTokens;
+    private final Integer      maxTokensHard;
     private final WebTool      webTool;   // null → no tool use
 
     public SpecGenerator(LlmClient llm, ObjectMapper mapper) {
@@ -85,6 +102,23 @@ public final class SpecGenerator {
     public SpecGenerator(LlmClient llm, ObjectMapper mapper, int maxRetries, int maxRetriesHard,
                          double repairTemperature, Double generationTemperature,
                          boolean structuredOutput, WebTool webTool) {
+        this(llm, mapper, maxRetries, maxRetriesHard, repairTemperature, generationTemperature,
+                structuredOutput, null, null, webTool);
+    }
+
+    public SpecGenerator(LlmClient llm, ObjectMapper mapper, int maxRetries, int maxRetriesHard,
+                         double repairTemperature, Double generationTemperature,
+                         boolean structuredOutput, Integer maxTokens, Integer maxTokensHard,
+                         WebTool webTool) {
+        this(llm, mapper, maxRetries, maxRetriesHard, repairTemperature, generationTemperature,
+                structuredOutput, maxTokens, maxTokensHard,
+                DEFAULT_REPAIR_TEMPERATURE_STEP, DEFAULT_REPAIR_TEMPERATURE_MAX, webTool);
+    }
+
+    public SpecGenerator(LlmClient llm, ObjectMapper mapper, int maxRetries, int maxRetriesHard,
+                         double repairTemperature, Double generationTemperature,
+                         boolean structuredOutput, Integer maxTokens, Integer maxTokensHard,
+                         double repairTemperatureStep, double repairTemperatureMax, WebTool webTool) {
         this.llm                   = llm;
         this.mapper                = mapper;
         this.maxRetries            = maxRetries;
@@ -92,6 +126,10 @@ public final class SpecGenerator {
         this.repairTemperature     = repairTemperature;
         this.generationTemperature = generationTemperature;
         this.structuredOutput      = structuredOutput;
+        this.maxTokens             = maxTokens;
+        this.maxTokensHard         = maxTokensHard;
+        this.repairTemperatureStep = Math.max(0.0, repairTemperatureStep);
+        this.repairTemperatureMax  = Math.max(repairTemperature, repairTemperatureMax);
         this.webTool               = webTool;
     }
 
@@ -144,7 +182,8 @@ public final class SpecGenerator {
      */
     public GenerationResult generate(String modelId, String domainDescription, boolean includeView,
                                      Consumer<LlmProgressEvent> onProgress) {
-        String prompt   = SpecGenerationPrompt.initialPrompt(modelId, domainDescription, includeView);
+        SpecGenerationPrompt.PromptParts prompt =
+                SpecGenerationPrompt.initialPromptParts(modelId, domainDescription, includeView);
         String rawResp  = null;
         int    attempts = 0;
         // Errors from the repaired JSON on the last attempt; more actionable than raw-response errors.
@@ -165,17 +204,21 @@ public final class SpecGenerator {
         // return this rather than failing generation outright — a valid spec beats no spec.
         ModelSpec bestEffortSpec = null;
         int       bestEffortFailCount = Integer.MAX_VALUE;
+        // Adaptive truncation recovery: the first truncation retries the SAME prompt with a raised token
+        // budget; a second truncation falls back to the "smaller spec" prompt.
+        int       truncationCount = 0;
+        Integer   maxTokensOverride = null;
 
         for (int i = 0; i < maxRetriesHard; i++) {
             attempts++;
             if (i > 0) onProgress.accept(new LlmProgressEvent.Retrying(attempts, maxRetriesHard));
             onProgress.accept(new LlmProgressEvent.LlmRequesting(attempts));
-            rawResp = callLlm(prompt, executor, i > 0, responseSchema, onProgress);
+            rawResp = callLlm(prompt, executor, i, responseSchema, maxTokensOverride, onProgress);
             String cleanJson    = extractJson(rawResp);
             String repairedJson = repairConstraintPolicy(
                     fixExpressions(repairJson(collapseStringNewlines(cleanJson))), mapper);
 
-            String nextPrompt;
+            SpecGenerationPrompt.PromptParts nextPrompt;
             int    currentErrorCount;
 
             ModelSpec spec;
@@ -189,9 +232,23 @@ public final class SpecGenerator {
                         ModelSpecValidator.Severity.ERROR));
                 onProgress.accept(new LlmProgressEvent.ValidationFailed(attempts,
                         List.of("Response was not valid JSON: " + parseEx.getOriginalMessage())));
-                nextPrompt = truncated
-                        ? SpecGenerationPrompt.repairPromptTruncated(modelId, domainDescription, includeView)
-                        : SpecGenerationPrompt.repairPrompt(modelId, rawResp, lastErrors, includeView);
+                if (truncated) {
+                    truncationCount++;
+                    Integer elevated = elevatedMaxTokens();
+                    if (truncationCount == 1 && elevated != null && elevated > (maxTokens == null ? 0 : maxTokens)) {
+                        // First truncation with headroom: keep the SAME prompt, just raise the budget.
+                        maxTokensOverride = elevated;
+                        nextPrompt = prompt;
+                    } else {
+                        // Repeated truncation (or no headroom): demand a smaller spec, reset the budget.
+                        maxTokensOverride = null;
+                        nextPrompt = SpecGenerationPrompt.repairPromptTruncatedParts(
+                                modelId, domainDescription, includeView);
+                    }
+                } else {
+                    maxTokensOverride = null;
+                    nextPrompt = SpecGenerationPrompt.repairPromptParts(modelId, rawResp, lastErrors, includeView);
+                }
                 // A parse failure is not measurable "progress"; never let it unlock extra budget.
                 currentErrorCount = Integer.MAX_VALUE;
                 if (stopAfterBaseBudget(i, currentErrorCount, prevErrorCount)) break;
@@ -199,6 +256,9 @@ public final class SpecGenerator {
                 prompt = nextPrompt;
                 continue;
             }
+
+            // A parseable response resets any transient token-budget elevation.
+            maxTokensOverride = null;
 
             onProgress.accept(new LlmProgressEvent.Validating(attempts));
             ModelSpecValidator.ValidationResult validation = ModelSpecValidator.validate(spec);
@@ -220,8 +280,8 @@ public final class SpecGenerator {
                     bestEffortFailCount = verifiable.size();
                     bestEffortSpec = spec;
                 }
-                nextPrompt = SpecGenerationPrompt.testRepairPrompt(
-                        modelId, repairedJson, verifiable, spec.derivations());
+                nextPrompt = SpecGenerationPrompt.testRepairPromptParts(
+                        modelId, repairedJson, verifiable, spec.derivations(), includeView);
                 currentErrorCount = verifiable.size();
             } else {
                 onProgress.accept(new LlmProgressEvent.ValidationFailed(attempts,
@@ -229,7 +289,7 @@ public final class SpecGenerator {
                                 .limit(5)
                                 .map(e -> e.location() + ": " + e.message())
                                 .toList()));
-                nextPrompt = SpecGenerationPrompt.repairPrompt(
+                nextPrompt = SpecGenerationPrompt.repairPromptParts(
                         modelId, repairedJson, annotateErrors(validation.errors()), includeView);
                 currentErrorCount = validation.errors().size();
             }
@@ -283,13 +343,30 @@ public final class SpecGenerator {
      */
     public SpecEvolution generateEvolution(ModelSpec currentSpec, String evolutionRequest,
                                            Consumer<LlmProgressEvent> onProgress) {
+        return generateEvolution(currentSpec, evolutionRequest, false, onProgress);
+    }
+
+    /**
+     * Generates a {@link SpecEvolution} with real-time progress events, optionally evolving the
+     * {@code viewDefinition} too.
+     *
+     * @param currentSpec      the spec to evolve
+     * @param evolutionRequest natural-language description of the desired changes
+     * @param includeView      when {@code true}, uses view-aware evolution prompts throughout the loop
+     *                         so the model can add/replace {@code newViewDefinition}/{@code
+     *                         upsertComponents} — and repair prompts keep the view catalog in scope
+     * @param onProgress       receives {@link LlmProgressEvent}s during generation; never null
+     * @return the parsed {@link SpecEvolution}, or throws on repeated failure
+     */
+    public SpecEvolution generateEvolution(ModelSpec currentSpec, String evolutionRequest,
+                                           boolean includeView, Consumer<LlmProgressEvent> onProgress) {
         String currentSpecJson = writeJson(currentSpec);
         // Tell the model which paths are already computed so it upserts by the same path rather than
         // redeclaring a derived field as a writable property.
         List<String> derivedPaths = currentSpec.derivations().stream()
                 .map(DerivationSpec::path).toList();
-        String prompt = SpecGenerationPrompt.evolutionPrompt(
-                currentSpec.id(), currentSpecJson, evolutionRequest, false, derivedPaths);
+        SpecGenerationPrompt.PromptParts prompt = SpecGenerationPrompt.evolutionPromptParts(
+                currentSpec.id(), currentSpecJson, evolutionRequest, includeView, derivedPaths);
         // One executor per call, shared across retries, so tool budgets span the whole session.
         LlmClient.ToolExecutor executor = webTool != null ? webTool.newExecutor() : null;
         // Structured-output schema (when enabled): provider-enforced SpecEvolution shape.
@@ -308,20 +385,20 @@ public final class SpecGenerator {
             attempts++;
             if (i > 0) onProgress.accept(new LlmProgressEvent.Retrying(attempts, maxRetriesHard));
             onProgress.accept(new LlmProgressEvent.LlmRequesting(attempts));
-            String rawResp      = callLlm(prompt, executor, i > 0, responseSchema, onProgress);
+            String rawResp      = callLlm(prompt, executor, i, responseSchema, null, onProgress);
             String repairedJson = repairConstraintPolicy(
                     fixExpressions(repairJson(collapseStringNewlines(extractJson(rawResp)))), mapper);
             SpecEvolution evolution = parseEvolution(repairedJson);
 
-            String nextPrompt;
+            SpecGenerationPrompt.PromptParts nextPrompt;
             int    currentErrorCount;
 
             if (evolution == null) {
                 lastError  = "Response was not a valid SpecEvolution JSON object.";
                 onProgress.accept(new LlmProgressEvent.ValidationFailed(attempts, List.of(lastError)));
-                nextPrompt = SpecGenerationPrompt.evolutionRepairPrompt(
+                nextPrompt = SpecGenerationPrompt.evolutionRepairPromptParts(
                         currentSpec.id(), currentSpecJson, evolutionRequest, rawResp, lastError,
-                        false, derivedPaths);
+                        includeView, derivedPaths);
                 currentErrorCount = Integer.MAX_VALUE; // a parse failure is not measurable progress
             } else {
                 onProgress.accept(new LlmProgressEvent.Validating(attempts));
@@ -334,10 +411,13 @@ public final class SpecGenerator {
                     lastError    = e.getMessage();
                     onProgress.accept(new LlmProgressEvent.ValidationFailed(attempts, List.of(lastError)));
                     String hint  = hintFor(lastError);
-                    nextPrompt   = SpecGenerationPrompt.evolutionRepairPrompt(
+                    nextPrompt   = SpecGenerationPrompt.evolutionRepairPromptParts(
                             currentSpec.id(), currentSpecJson, evolutionRequest, repairedJson,
-                            hint == null ? lastError : lastError + hint, false, derivedPaths);
-                    currentErrorCount = countErrors(lastError);
+                            hint == null ? lastError : lastError + hint, includeView, derivedPaths);
+                    // Structured error count for the convergence gate: a validation failure carries the
+                    // exact error list; a shape violation is a single error. No message string-parsing.
+                    currentErrorCount = (e instanceof SpecEvolution.SpecEvolutionException se)
+                            ? Math.max(1, se.errors().size()) : 1;
                     if (stopAfterBaseBudget(i, currentErrorCount, prevErrorCount)) break;
                     prevErrorCount = currentErrorCount;
                     prompt = nextPrompt;
@@ -372,9 +452,9 @@ public final class SpecGenerator {
                         + "self-tests:\n" + SpecGenerationPrompt.testFailureFeedback(verifiable, merged.derivations())
                         + "\nEither a derivation expr is wrong or a test's expect value is wrong — fix "
                         + "whichever does not match.";
-                nextPrompt = SpecGenerationPrompt.evolutionRepairPrompt(
+                nextPrompt = SpecGenerationPrompt.evolutionRepairPromptParts(
                         currentSpec.id(), currentSpecJson, evolutionRequest, repairedJson, feedback,
-                        false, derivedPaths);
+                        includeView, derivedPaths);
                 currentErrorCount = verifiable.size();
             }
 
@@ -389,12 +469,6 @@ public final class SpecGenerator {
         throw new LlmClient.LlmException(
                 "Failed to generate a valid SpecEvolution after " + maxRetriesHard
                 + " attempts: " + lastError);
-    }
-
-    /** Rough error count from a validation summary (errors joined by ';') for convergence tracking. */
-    private static int countErrors(String summary) {
-        if (summary == null || summary.isBlank()) return 1;
-        return summary.split(";").length;
     }
 
     /**
@@ -440,22 +514,50 @@ public final class SpecGenerator {
 
     /**
      * Sends a prompt to the LLM, using tool-calling when a web tool and executor are present.
-     * On repair attempts ({@code lowerTemperature == true}) a low sampling temperature is requested
-     * so the model focuses on fixing the reported errors rather than re-generating creatively; the
-     * initial attempt uses {@link #generationTemperature} ({@code null} = provider default). When
+     * On repair attempts ({@code attemptIndex > 0}) an escalating temperature ({@link
+     * #repairTemperatureFor}) is requested so a stuck model escapes the previous attempts' rut instead
+     * of re-emitting them; the initial attempt uses {@link #generationTemperature} ({@code null} =
+     * provider default). When
      * {@code responseSchema} is non-null and structured output is enabled, it is sent as the provider
      * {@code response_format} so the output shape is provider-enforced.
      */
-    private String callLlm(String prompt, LlmClient.ToolExecutor executor, boolean lowerTemperature,
-                           JsonNode responseSchema, Consumer<LlmProgressEvent> onProgress) {
-        // Box repairTemperature so the ternary's type is Double — a (double : Double) ternary would
-        // unbox a null generationTemperature and NPE.
-        Double temperature = lowerTemperature ? Double.valueOf(repairTemperature) : generationTemperature;
+    private String callLlm(SpecGenerationPrompt.PromptParts prompt, LlmClient.ToolExecutor executor,
+                           int attemptIndex, JsonNode responseSchema, Integer maxTokensOverride,
+                           Consumer<LlmProgressEvent> onProgress) {
+        // Attempt 0 is the initial generation (generationTemperature; null = provider default). Each
+        // repair attempt escalates the temperature so a stuck model gets more room to escape the rut.
+        // Box so the ternary's type is Double — a (double : Double) ternary would unbox a null
+        // generationTemperature and NPE.
+        Double temperature = attemptIndex == 0
+                ? generationTemperature
+                : Double.valueOf(repairTemperatureFor(attemptIndex));
         JsonNode schema    = structuredOutput ? responseSchema : null;
-        LlmClient.CompletionOptions options = new LlmClient.CompletionOptions(temperature, schema);
+        LlmClient.CompletionOptions options =
+                new LlmClient.CompletionOptions(temperature, schema, maxTokensOverride);
         return webTool != null && executor != null
                 ? llm.completeWithTools(prompt, webTool.definitions(), executor, options, onProgress)
                 : llm.complete(prompt, options);
+    }
+
+    /**
+     * The repair temperature for the repair attempt at 1-based {@code attemptIndex} (attempt 1 = first
+     * repair): {@code repairTemperature + (attemptIndex - 1) × step}, clamped to
+     * {@code repairTemperatureMax}. Rising each retry lets a model that keeps re-emitting the same
+     * failing output diverge instead of repeating it.
+     */
+    double repairTemperatureFor(int attemptIndex) {
+        double t = repairTemperature + (attemptIndex - 1) * repairTemperatureStep;
+        return Math.min(t, repairTemperatureMax);
+    }
+
+    /**
+     * The raised token budget for a first-truncation retry: {@code min(2 × maxTokens, maxTokensHard)},
+     * or {@code null} when the feature is off (no configured budgets). Keeping the same prompt with a
+     * bigger budget preserves the work instead of demanding a permanently smaller spec.
+     */
+    private Integer elevatedMaxTokens() {
+        if (maxTokens == null || maxTokensHard == null) return null;
+        return Math.min(2 * maxTokens, maxTokensHard);
     }
 
     /**
@@ -588,6 +690,18 @@ public final class SpecGenerator {
      * JVM runtime requires {@code {}} for the function body, not {@code ()}.
      */
     public static String fixExpressions(String json) {
+        return ExpressionRepairer.fixDocument(json);
+    }
+
+    /**
+     * The raw whole-document JSONata-syntax passes (phase 1 string replacements + the structure-aware
+     * phase 2 passes). Historically this was {@code fixExpressions}; it now runs only in two narrow
+     * cases — on a single re-encoded expression string ({@link ExpressionRepairer#repair}) and as the
+     * last-ditch rescue when a response will not parse as a JSON object
+     * ({@link ExpressionRepairer#fixDocument}). Applying it to a whole parseable document is what used
+     * to corrupt non-expression strings, so the parse-and-walk path is preferred whenever possible.
+     */
+    static String rawExpressionPasses(String json) {
         // Phase 1: simple string replacements (applied globally to the JSON)
         String s = json
                 .replace("$currentYear()", "$substring($now(), 0, 4)~>$number()")
@@ -1209,17 +1323,22 @@ public final class SpecGenerator {
         try {
             JsonNode root = mapper.readTree(json);
             if (!root.isObject()) return json;
-            JsonNode constraints = root.path("constraints");
-            if (constraints.isArray()) {
-                for (JsonNode constraint : constraints) {
-                    if (constraint.isObject() && !constraint.has("policy")) {
-                        ((ObjectNode) constraint).put("policy", "rollback");
-                    }
-                }
-            }
+            // Cover a full spec's "constraints" and a SpecEvolution's "upsertConstraints".
+            defaultConstraintPolicy(root.path("constraints"));
+            defaultConstraintPolicy(root.path("upsertConstraints"));
             return mapper.writeValueAsString(root);
         } catch (JsonProcessingException e) {
             return json;
+        }
+    }
+
+    /** Adds a default {@code "policy":"rollback"} to every policy-less constraint object in an array. */
+    private static void defaultConstraintPolicy(JsonNode constraints) {
+        if (!constraints.isArray()) return;
+        for (JsonNode constraint : constraints) {
+            if (constraint.isObject() && !constraint.has("policy")) {
+                ((ObjectNode) constraint).put("policy", "rollback");
+            }
         }
     }
 
@@ -1300,14 +1419,6 @@ public final class SpecGenerator {
             }
         }
         return depth != 0;
-    }
-
-    private ModelSpec parseSpec(String json) {
-        try {
-            return mapper.readValue(json, ModelSpec.class);
-        } catch (JsonProcessingException e) {
-            return null;
-        }
     }
 
     private SpecEvolution parseEvolution(String json) {

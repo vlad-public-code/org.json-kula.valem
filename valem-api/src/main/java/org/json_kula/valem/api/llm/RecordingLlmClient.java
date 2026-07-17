@@ -2,6 +2,7 @@ package org.json_kula.valem.api.llm;
 
 import org.json_kula.valem.core.llm.LlmClient;
 import org.json_kula.valem.core.llm.LlmProgressEvent;
+import org.json_kula.valem.core.llm.SpecGenerationPrompt;
 
 import java.time.Instant;
 import java.util.List;
@@ -69,15 +70,39 @@ public class RecordingLlmClient implements LlmClient {
                 () -> delegate.completeWithTools(prompt, tools, executor, options, onProgress), getFacts);
     }
 
+    // ── PromptParts (system/user split) — record the two halves separately ──────
+
+    @Override
+    public String complete(SpecGenerationPrompt.PromptParts parts, CompletionOptions options)
+            throws LlmException {
+        return doRecord(parts.system(), parts.user(), parts.concatenated(),
+                () -> delegate.complete(parts, options), List::of);
+    }
+
+    @Override
+    public String completeWithTools(SpecGenerationPrompt.PromptParts parts, List<ToolDefinition> tools,
+                                    ToolExecutor executor, CompletionOptions options,
+                                    Consumer<LlmProgressEvent> onProgress) throws LlmException {
+        Supplier<List<WebFetchFact>> getFacts =
+                executor instanceof FactProvider fp ? fp::facts : List::of;
+        return doRecord(parts.system(), parts.user(), parts.concatenated(),
+                () -> delegate.completeWithTools(parts, tools, executor, options, onProgress), getFacts);
+    }
+
     private String doRecord(String prompt, LlmCallable call, Supplier<List<WebFetchFact>> getFacts) {
+        return doRecord(null, prompt, prompt, call, getFacts);
+    }
+
+    private String doRecord(String system, String user, String prompt, LlmCallable call,
+                            Supplier<List<WebFetchFact>> getFacts) {
         long start = System.currentTimeMillis();
         try {
             String response = call.call();
-            log.record(new LlmInteractionRecord(Instant.now(), prompt, response, null,
+            log.record(new LlmInteractionRecord(Instant.now(), system, user, prompt, response, null,
                     System.currentTimeMillis() - start, getFacts.get()));
             return response;
         } catch (LlmException e) {
-            log.record(new LlmInteractionRecord(Instant.now(), prompt, null, e.getMessage(),
+            log.record(new LlmInteractionRecord(Instant.now(), system, user, prompt, null, e.getMessage(),
                     System.currentTimeMillis() - start, getFacts.get()));
             throw e;
         }

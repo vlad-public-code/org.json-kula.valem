@@ -55,7 +55,11 @@ public class GenerateStreamController {
 
     record GenerateStreamRequest(String modelId, String domainDescription, boolean includeView) {}
 
-    record EvolveAiStreamRequest(String description) {}
+    /**
+     * {@code includeView} is nullable: {@code null} (default) auto-enables view evolution when the
+     * current spec already has a {@code viewDefinition}; {@code true}/{@code false} force it.
+     */
+    record EvolveAiStreamRequest(String description, Boolean includeView) {}
 
     // ── Generate ──────────────────────────────────────────────────────────────
 
@@ -153,8 +157,10 @@ public class GenerateStreamController {
         Thread.ofVirtual().name("llm-evolve-stream").start(() -> {
             try {
                 ModelSpec currentSpec = modelService.getSpec(id);
+                boolean includeView = req.includeView() != null
+                        ? req.includeView() : currentSpec.viewDefinition() != null;
                 var evolution = specGenerator.get().generateEvolution(
-                        currentSpec, req.description(),
+                        currentSpec, req.description(), includeView,
                         event -> sendProgress(emitter, event));
 
                 ModelSpec evolved = modelService.evolveSpec(id, evolution);

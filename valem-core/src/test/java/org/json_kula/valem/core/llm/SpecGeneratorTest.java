@@ -347,9 +347,8 @@ class SpecGeneratorTest {
 
     @Test
     void fix_expressions_converts_power_to_reduce_end_to_end() {
-        // Full pipeline: (base)**n wrapped then converted — no ** in output
-        String json = "{\"expr\":\"P * r * (1 + r) ** n / ((1 + r) ** n - 1)\"}";
-        String result = SpecGenerator.fixExpressions(json);
+        // Full pipeline on a decoded expression: (base)**n wrapped then converted — no ** in output
+        String result = ExpressionRepairer.repair("P * r * (1 + r) ** n / ((1 + r) ** n - 1)");
         assertThat(result).doesNotContain("**");
         assertThat(result).contains("$reduce");
     }
@@ -450,10 +449,9 @@ class SpecGeneratorTest {
 
     @Test
     void fix_expressions_fixes_object_literal_semicolons_end_to_end() {
-        // Full pipeline: object literal with semicolons → corrected to commas
-        String json = "{\"expr\":\"($rates := {\\\"A\\\": 50; \\\"B\\\": 100}, $rates.A)\"}";
-        String result = SpecGenerator.fixExpressions(json);
-        assertThat(result).contains("{\\\"A\\\": 50, \\\"B\\\": 100}");
+        // Full pipeline on a decoded expression: object literal with semicolons → corrected to commas
+        String result = ExpressionRepairer.repair("($rates := {\"A\": 50; \"B\": 100}, $rates.A)");
+        assertThat(result).contains("{\"A\": 50, \"B\": 100}");
     }
 
     // ── fixExpressions: == equality operator ──────────────────────────────────
@@ -1017,6 +1015,29 @@ class SpecGeneratorTest {
     }
 
     @Test
+    void shape_exemplar_word_boundaries_avoid_substring_false_positives() {
+        // "rank" must not fire on Frankfurt/franking; "tier" not on frontier; "tally" not on totally.
+        assertThat(SpecGenerationPrompt.shapeExemplars("weather forecast for Frankfurt")).isEmpty();
+        assertThat(SpecGenerationPrompt.shapeExemplars("explore the final frontier")).isEmpty();
+        assertThat(SpecGenerationPrompt.shapeExemplars("a totally normal calculator")).isEmpty();
+        // a generic (non-per-period) breakdown must go to group-by, NOT the schedule exemplar.
+        assertThat(SpecGenerationPrompt.shapeExemplars("cost breakdown by category"))
+                .doesNotContain("one row per period");
+    }
+
+    @Test
+    void shape_exemplar_word_boundaries_keep_true_positives() {
+        assertThat(SpecGenerationPrompt.shapeExemplars("leaderboard rank of each player"))
+                .contains("RANK / PERCENTILE");
+        assertThat(SpecGenerationPrompt.shapeExemplars("assign a pricing tier"))
+                .contains("DERIVES a label");
+        assertThat(SpecGenerationPrompt.shapeExemplars("tally votes by candidate"))
+                .contains("GROUP-BY");
+        assertThat(SpecGenerationPrompt.shapeExemplars("show a monthly payment breakdown table"))
+                .contains("one row per period");
+    }
+
+    @Test
     void test_repair_prompt_quotes_the_offending_derivation_expr() throws Exception {
         var failures = java.util.List.of(new org.json_kula.valem.core.engine.TestCaseRunner.FieldFailure(
                 "$.total", MAPPER.valueToTree(100), MAPPER.valueToTree(90), "$.total expected 100 but was 90"));
@@ -1031,7 +1052,101 @@ class SpecGeneratorTest {
         assertThat(prompt).contains("derivation at $.total is: subtotal + tax");
     }
 
+    // ── PromptParts split (item 1) + view context (item 4) ─────────────────────
+
+    @Test
+    void initial_prompt_parts_split_roundtrips_and_separates_roles() {
+        var parts = SpecGenerationPrompt.initialPromptParts("m", "a counter", false);
+        // system carries the stable rules; user carries the task
+        assertThat(parts.system()).contains("You are an expert in Valem");
+        assertThat(parts.user()).contains("a counter").doesNotContain("You are an expert in Valem");
+        // concatenation reproduces the legacy single string exactly
+        assertThat(parts.concatenated()).isEqualTo(SpecGenerationPrompt.initialPrompt("m", "a counter", false));
+    }
+
+    @Test
+    void test_repair_prompt_includes_view_catalog_only_when_view_on() {
+        var failures = java.util.List.of(new org.json_kula.valem.core.engine.TestCaseRunner.FieldFailure(
+                "$.total", MAPPER.valueToTree(1), MAPPER.valueToTree(2), "mismatch"));
+        var failed = java.util.List.of(
+                new org.json_kula.valem.core.engine.TestCaseRunner.TestResult("t", false, failures));
+
+        var withView = SpecGenerationPrompt.testRepairPromptParts("m", "{}", failed, java.util.List.of(), true);
+        var noView   = SpecGenerationPrompt.testRepairPromptParts("m", "{}", failed, java.util.List.of(), false);
+
+        assertThat(withView.system()).contains("viewDefinition").contains("COMPONENT CATALOG");
+        assertThat(noView.system()).doesNotContain("COMPONENT CATALOG");
+    }
+
+    @Test
+    void evolution_prompt_lists_view_fields_only_when_view_on() {
+        var withView = SpecGenerationPrompt.evolutionPromptParts(
+                "m", "{}", "add a screen", true, java.util.List.of());
+        var noView = SpecGenerationPrompt.evolutionPromptParts(
+                "m", "{}", "add a field", false, java.util.List.of());
+
+        assertThat(withView.user()).contains("newViewDefinition").contains("upsertComponents");
+        assertThat(noView.user()).doesNotContain("newViewDefinition");
+    }
+
     // ── Malformed JSON → repair prompt ────────────────────────────────────────
+
+    @Test
+    void repair_temperature_escalates_across_successive_failed_attempts() {
+        java.util.List<Double> temps = new java.util.ArrayList<>();
+        LlmClient stub = new LlmClient() {
+            @Override public String complete(String prompt) { return "not json"; }
+            @Override public String complete(SpecGenerationPrompt.PromptParts parts, CompletionOptions options) {
+                temps.add(options == null ? null : options.temperature());
+                return "not json at all";   // always fails to parse → keeps retrying
+            }
+        };
+        // generation-temp 0.0, repair base 0.2, step 0.15, cap 0.8; 4 hard attempts.
+        SpecGenerator gen = new SpecGenerator(stub, MAPPER, 4, 4, 0.2, 0.0, false, null, null, 0.15, 0.8, null);
+
+        gen.generate("m", "some model");
+
+        var within = org.assertj.core.data.Offset.offset(1e-9);
+        assertThat(temps).hasSizeGreaterThanOrEqualTo(4);
+        assertThat(temps.get(0)).isEqualTo(0.0);            // initial attempt: generation temperature
+        assertThat(temps.get(1)).isCloseTo(0.2, within);    // first repair: base
+        assertThat(temps.get(2)).isCloseTo(0.35, within);   // second repair: +step
+        assertThat(temps.get(3)).isCloseTo(0.5, within);    // third repair: +2·step
+    }
+
+    @Test
+    void repair_temperature_is_clamped_to_the_configured_max() {
+        SpecGenerator gen = new SpecGenerator(new LlmClient() {
+            @Override public String complete(String p) { return ""; }
+        }, MAPPER, 3, 12, 0.2, 0.0, false, null, null, 0.15, 0.5, null);
+        var within = org.assertj.core.data.Offset.offset(1e-9);
+        // 0.2, 0.35, 0.5, then clamped at 0.5 forever.
+        assertThat(gen.repairTemperatureFor(1)).isCloseTo(0.2, within);
+        assertThat(gen.repairTemperatureFor(3)).isCloseTo(0.5, within);
+        assertThat(gen.repairTemperatureFor(9)).isCloseTo(0.5, within);
+    }
+
+    @Test
+    void truncation_raises_max_tokens_before_smaller_spec_fallback() {
+        java.util.List<Integer> budgets = new java.util.ArrayList<>();
+        LlmClient stub = new LlmClient() {
+            int calls = 0;
+            @Override public String complete(String prompt) { return ""; }
+            @Override public String complete(SpecGenerationPrompt.PromptParts parts, CompletionOptions options) {
+                budgets.add(options == null ? null : options.maxTokens());
+                // First response is truncated (unbalanced braces); second is a valid minimal spec.
+                return ++calls == 1 ? "{ \"id\": \"m\", \"schema\": {" : "{ \"id\": \"m\", \"schema\": {} }";
+            }
+        };
+        // base max-tokens 8192, hard 16384 → first truncation retries the same prompt at 16384.
+        SpecGenerator gen = new SpecGenerator(stub, MAPPER, 3, 6, 0.2, 0.0, false, 8192, 16384, null);
+
+        var result = gen.generate("m", "some model");
+
+        assertThat(result).isInstanceOf(GenerationResult.Success.class);
+        assertThat(budgets.get(0)).isNull();          // first call uses the client default budget
+        assertThat(budgets.get(1)).isEqualTo(16384);  // second call: budget raised, same prompt
+    }
 
     @Test
     void generate_retries_on_malformed_json() {

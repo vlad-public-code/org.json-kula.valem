@@ -8,7 +8,7 @@ import java.util.function.Consumer;
 /**
  * Minimal interface for a text-completion LLM.
  *
- * <p>Implementations may call the Claude API, a local model, or a stub for testing.
+ * <p>Implementations may call a provider API, a local model, or a stub for testing.
  * Only a single synchronous method is required; streaming is handled at the application layer.
  *
  * <p>Implementations that support native tool calling should override
@@ -87,13 +87,39 @@ public interface LlmClient {
         return completeWithTools(prompt, tools, executor, options);
     }
 
+    // ── System/user split (prompt caching) ─────────────────────────────────────
+
+    /**
+     * Completion from a {@link SpecGenerationPrompt.PromptParts} (separate {@code system} + {@code
+     * user}). The default concatenates them and delegates, so every existing implementation keeps
+     * working unchanged; provider clients override this to send the system context as a distinct role
+     * (Anthropic caches its stable prefix; OpenAI-compatible providers auto-cache long prefixes).
+     */
+    default String complete(SpecGenerationPrompt.PromptParts parts, CompletionOptions options)
+            throws LlmException {
+        return complete(parts.concatenated(), options);
+    }
+
+    /** Tool-calling variant of {@link #complete(SpecGenerationPrompt.PromptParts, CompletionOptions)}. */
+    default String completeWithTools(SpecGenerationPrompt.PromptParts parts, List<ToolDefinition> tools,
+                                     ToolExecutor executor, CompletionOptions options,
+                                     Consumer<LlmProgressEvent> onProgress) throws LlmException {
+        return completeWithTools(parts.concatenated(), tools, executor, options, onProgress);
+    }
+
     // ── Tool-calling types ────────────────────────────────────────────────────
 
     /**
      * Per-call completion options. {@code temperature} {@code null} = provider default;
-     * {@code responseSchema} {@code null} = no structured-output constraint (plain JSON object).
+     * {@code responseSchema} {@code null} = no structured-output constraint (plain JSON object);
+     * {@code maxTokens} {@code null} = the client's configured default (raised transiently on a
+     * truncation retry so a too-tight budget does not force a permanently smaller spec).
      */
-    record CompletionOptions(Double temperature, JsonNode responseSchema) {}
+    record CompletionOptions(Double temperature, JsonNode responseSchema, Integer maxTokens) {
+        public CompletionOptions(Double temperature, JsonNode responseSchema) {
+            this(temperature, responseSchema, null);
+        }
+    }
 
     /** Describes a single tool the LLM may call. */
     record ToolDefinition(String name, String description, JsonNode inputSchema) {}

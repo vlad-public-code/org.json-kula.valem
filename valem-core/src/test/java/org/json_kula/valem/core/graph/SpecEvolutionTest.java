@@ -227,6 +227,43 @@ class SpecEvolutionTest {
                 .hasMessageContaining("validation");
     }
 
+    @Test
+    void explicit_json_null_newSchema_does_not_block_a_schema_node_diff() throws Exception {
+        ModelSpec src = base("""
+                { "id": "m", "schema": { "type": "object",
+                    "properties": { "loan": { "type": "object", "properties": {} } } } }
+                """);
+        // A schema-node diff with an EXPLICIT "newSchema": null — the shape produced when an evolution
+        // object round-trips through JSON serialization (generate -> serialize -> POST back).
+        SpecEvolution diff = MAPPER.readValue("""
+                { "newSchema": null,
+                  "upsertSchemaNodes": [
+                    { "path": "$.loan.extraDownPayment", "schema": { "type": "number" }, "required": false }
+                  ]}
+                """, SpecEvolution.class);
+
+        assertThat(diff.touchesSchema()).isTrue();
+        ModelSpec evolved = diff.applyTo(src);   // must NOT throw "newSchema cannot be combined"
+        assertThat(evolved.schema().path("properties").path("loan")
+                .path("properties").has("extraDownPayment")).isTrue();
+    }
+
+    @Test
+    void validation_failure_throws_SpecEvolutionException_carrying_the_error_list() throws Exception {
+        ModelSpec src = base("""
+                { "id": "m", "schema": {} }
+                """);
+        // A derivation with a broken expression fails validation (expression compilation).
+        SpecEvolution diff = MAPPER.readValue("""
+                { "upsertDerivations": [ { "path": "$.x", "expr": "a +" } ]}
+                """, SpecEvolution.class);
+
+        assertThatThrownBy(() -> diff.applyTo(src))
+                .isInstanceOf(SpecEvolution.SpecEvolutionException.class)
+                .satisfies(e -> assertThat(
+                        ((SpecEvolution.SpecEvolutionException) e).errors()).isNotEmpty());
+    }
+
     // ── Version update ─────────────────────────────────────────────────────────
 
     @Test

@@ -141,8 +141,12 @@ public record SpecEvolution(
                 removeDefaultValues   != null ? List.copyOf(removeDefaultValues)   : List.of(),
                 upsertDefaultValues   != null ? List.copyOf(upsertDefaultValues)   : List.of(),
                 newConstants,   // null = keep existing; a (possibly empty) map fully replaces
-                newSchema,
-                newViewDefinition,
+                // Treat an explicit JSON null (a NullNode, produced when the field round-trips through
+                // serialization) as "absent" — otherwise newSchema/newViewDefinition would read as
+                // non-null and, e.g., falsely trip the "newSchema cannot be combined with schema diff"
+                // guard when only a schema-node diff was intended.
+                absentIfNull(newSchema),
+                absentIfNull(newViewDefinition),
                 backfill              != null ? Map.copyOf(backfill)               : Map.of(),
                 removeEffects         != null ? List.copyOf(removeEffects)         : List.of(),
                 upsertEffects         != null ? List.copyOf(upsertEffects)         : List.of(),
@@ -160,6 +164,11 @@ public record SpecEvolution(
                 removeComponents      != null ? List.copyOf(removeComponents)      : List.of(),
                 upsertConstants       != null ? new LinkedHashMap<>(upsertConstants) : Map.of(),
                 removeConstants       != null ? List.copyOf(removeConstants)       : List.of());
+    }
+
+    /** Normalizes an explicit JSON {@code null} ({@link JsonNode#isNull()}) to a Java {@code null}. */
+    private static JsonNode absentIfNull(JsonNode node) {
+        return node == null || node.isNull() ? null : node;
     }
 
     /** True when this evolution changes the schema (wholesale or via any diff tier). */
@@ -205,10 +214,33 @@ public record SpecEvolution(
             String summary = validation.errors().stream()
                     .map(e -> e.location() + ": " + e.message())
                     .collect(Collectors.joining("; "));
-            throw new IllegalArgumentException("Evolved spec failed validation: " + summary);
+            throw new SpecEvolutionException(
+                    "Evolved spec failed validation: " + summary, validation.errors());
         }
 
         return evolved;
+    }
+
+    /**
+     * Thrown by {@link #applyTo} when the <em>evolved</em> spec fails validation, carrying the exact
+     * {@link ModelSpecValidator.ValidationError} list so callers (the generation loop's convergence
+     * gate) can count errors structurally instead of parsing the message string. Extends
+     * {@link IllegalArgumentException} so existing {@code catch (IllegalArgumentException)} sites —
+     * which also handle the evolution-shape violations thrown as plain {@code IllegalArgumentException}
+     * — keep working unchanged.
+     */
+    public static final class SpecEvolutionException extends IllegalArgumentException {
+        private final transient List<ModelSpecValidator.ValidationError> errors;
+
+        public SpecEvolutionException(String message,
+                                      List<ModelSpecValidator.ValidationError> errors) {
+            super(message);
+            this.errors = errors == null ? List.of() : List.copyOf(errors);
+        }
+
+        public List<ModelSpecValidator.ValidationError> errors() {
+            return errors;
+        }
     }
 
     // ── Schema evolution ─────────────────────────────────────────────────────────

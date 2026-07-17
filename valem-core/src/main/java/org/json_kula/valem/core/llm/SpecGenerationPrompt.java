@@ -6,6 +6,7 @@ import org.json_kula.valem.core.model.DerivationSpec;
 
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -23,6 +24,26 @@ import java.util.stream.Collectors;
 public final class SpecGenerationPrompt {
 
     private SpecGenerationPrompt() {}
+
+    /**
+     * A prompt split into its stable {@code system} context (the spec-format instructions and,
+     * optionally, the view catalog) and the per-call {@code user} text (task, spec JSON, error
+     * feedback, exemplars). Provider clients send these as separate roles — improving instruction
+     * adherence, enabling Anthropic prompt caching of the large stable prefix, and separating trusted
+     * instructions from user-controlled text. {@link #concatenated()} reproduces the legacy single
+     * string ({@code system + "\n\n" + user}) for the default {@link LlmClient} path and the UI
+     * preview endpoint.
+     */
+    public record PromptParts(String system, String user) {
+        public String concatenated() {
+            return system + "\n\n" + user;
+        }
+    }
+
+    /** The system context for the given view mode: spec-format instructions, plus the view catalog. */
+    private static String systemContext(boolean includeView) {
+        return includeView ? SYSTEM_CONTEXT + SYSTEM_CONTEXT_VIEW : SYSTEM_CONTEXT;
+    }
 
     /**
      * Supplemental context describing the {@code viewDefinition} component catalog.
@@ -425,13 +446,18 @@ public final class SpecGenerationPrompt {
      *                          so the LLM will generate a {@code viewDefinition} section
      */
     public static String initialPrompt(String modelId, String domainDescription, boolean includeView) {
-        String systemContext = includeView ? SYSTEM_CONTEXT + SYSTEM_CONTEXT_VIEW : SYSTEM_CONTEXT;
+        return initialPromptParts(modelId, domainDescription, includeView).concatenated();
+    }
+
+    /** {@link #initialPrompt(String, String, boolean)} split into {@link PromptParts}. */
+    public static PromptParts initialPromptParts(String modelId, String domainDescription,
+                                                 boolean includeView) {
         String idLine = (modelId != null && !modelId.isBlank())
                 ? "Model ID: " + modelId
                 : "Model ID: choose one yourself - a concise, descriptive lower-case kebab-case slug of "
                   + "2-4 words (e.g. \"mortgage-calculator\") that names this domain, and set it as the "
                   + "spec's \"id\" field.";
-        return systemContext + "\n\n" + """
+        String user = """
                 Generate a Valem model spec for the following domain:
 
                 """ + idLine + """
@@ -444,6 +470,7 @@ public final class SpecGenerationPrompt {
 
                 Output only the JSON spec, nothing else.
                 """);
+        return new PromptParts(systemContext(includeView), user);
     }
 
     /**
@@ -467,57 +494,49 @@ public final class SpecGenerationPrompt {
         return out.toString();
     }
 
-    private static boolean wantsSchedule(String d) {
-        return d.contains("schedule") || d.contains("amortiz") || d.contains("amortis")
-                || d.contains("installment") || d.contains("instalment") || d.contains("repayment")
-                || d.contains("per month") || d.contains("per-month") || d.contains("monthly breakdown")
-                || d.contains("per period") || d.contains("per-period") || d.contains("time series")
-                || d.contains("timeseries") || d.contains("payment plan") || d.contains("breakdown")
-                // per-period enumeration phrasing ("details on each month", "month-by-month")
-                || d.contains("each month") || d.contains("every month") || d.contains("each period")
-                || d.contains("every period") || d.contains("month by month") || d.contains("month-by-month");
-    }
+    // Word-boundary keyword matchers per exemplar group. Bare String.contains fired on substrings —
+    // "rank" on Frankfurt/franking, "tier" on frontier, "tally" on totally — and a bare "breakdown"
+    // dragged the schedule exemplar into group-by domains ("cost breakdown by category"). Each group is
+    // one precompiled alternation; keep this table next to the *_EXEMPLAR strings it selects. A comment
+    // marks each non-obvious inclusion.
+    private static final Pattern SCHEDULE_KEYS = Pattern.compile(
+            "\\b(schedule|amorti[sz]\\w*|insta(l|ll)ment|repayment|time\\s*series|payment\\s+plan"
+          + "|per[-\\s]month|per[-\\s]period|each\\s+(month|period)|every\\s+(month|period)"
+          + "|month[-\\s]by[-\\s]month"
+          // "breakdown" ONLY when qualified as a per-period one (not a generic cost/category breakdown)
+          + "|(monthly|per[-\\s]period|month[-\\s]by[-\\s]month|payment)\\s+breakdown)\\b");
 
-    private static boolean wantsGroupBy(String d) {
-        return d.contains("group by") || d.contains("group-by") || d.contains("grouped")
-                || d.contains("aggregate") || d.contains("aggregation") || d.contains("sum by")
-                || d.contains("count by") || d.contains("per category") || d.contains("by category")
-                || d.contains("subtotal") || d.contains("tally") || d.contains("by group");
-    }
+    private static final Pattern GROUP_BY_KEYS = Pattern.compile(
+            "\\b(group(ed)?[-\\s]?by|grouped|aggregat(e|ion)|sum\\s+by|count\\s+by"
+          + "|per\\s+category|by\\s+category|subtotal|tally|by\\s+group)\\b");
 
-    private static boolean wantsDateMath(String d) {
-        return d.contains("days between") || d.contains("days until") || d.contains("days since")
-                || d.contains("date difference") || d.contains("difference between dates")
-                || d.contains("duration") || d.contains("elapsed") || d.contains("months between")
-                || d.contains("years between") || d.contains("time between") || d.contains("how many days")
-                || d.contains("number of days") || d.contains("age in years") || d.contains("age in days");
-    }
+    private static final Pattern DATE_MATH_KEYS = Pattern.compile(
+            "\\b(days\\s+(between|until|since)|date\\s+difference|difference\\s+between\\s+dates"
+          + "|duration|elapsed|(months|years|time)\\s+between|how\\s+many\\s+days|number\\s+of\\s+days"
+          + "|age\\s+in\\s+(years|days))\\b");
 
-    private static boolean wantsClassification(String d) {
-        return d.contains("classify") || d.contains("classification") || d.contains("risk level")
-                || d.contains("priority level") || d.contains("rating band") || d.contains("tax bracket")
-                || d.contains("tier") || d.contains("status based on") || d.contains("category based on")
-                || d.contains("grade based on") || d.contains("assign a grade");
-    }
+    private static final Pattern CLASSIFICATION_KEYS = Pattern.compile(
+            "\\b(classif(y|ication)|risk\\s+level|priority\\s+level|rating\\s+band|tax\\s+bracket"
+          + "|tiers?|status\\s+based\\s+on|category\\s+based\\s+on|grade\\s+based\\s+on|assign\\s+a\\s+grade)\\b");
 
-    private static boolean wantsCurrency(String d) {
-        return d.contains("exchange rate") || d.contains("currency conversion")
-                || d.contains("convert currency") || d.contains("conversion rate") || d.contains("forex")
-                || d.contains("fx rate") || d.contains("usd to") || d.contains("eur to") || d.contains("gbp to");
-    }
+    private static final Pattern CURRENCY_KEYS = Pattern.compile(
+            "\\b(exchange\\s+rate|currency\\s+conversion|convert\\s+currency|conversion\\s+rate|forex"
+          + "|fx\\s+rate|usd\\s+to|eur\\s+to|gbp\\s+to)\\b");
 
-    private static boolean wantsStatus(String d) {
-        return d.contains("state machine") || d.contains("status transition")
-                || d.contains("state transition") || d.contains("allowed transition")
-                || d.contains("next state") || d.contains("next status") || d.contains("workflow")
-                || d.contains("lifecycle") || d.contains("approval process") || d.contains("status changes");
-    }
+    private static final Pattern STATUS_KEYS = Pattern.compile(
+            "\\b(state\\s+machine|status\\s+transition|state\\s+transition|allowed\\s+transition"
+          + "|next\\s+state|next\\s+status|workflow|lifecycle|approval\\s+process|status\\s+changes)\\b");
 
-    private static boolean wantsRank(String d) {
-        return d.contains("percentile") || d.contains("rank") || d.contains("leaderboard")
-                || d.contains("quartile") || d.contains("top n") || d.contains("top-n")
-                || d.contains("nth highest") || d.contains("median");
-    }
+    private static final Pattern RANK_KEYS = Pattern.compile(
+            "\\b(percentile|rank(s|ed|ing)?|leaderboard|quartile|top[-\\s]n|nth\\s+highest|median)\\b");
+
+    private static boolean wantsSchedule(String d)       { return SCHEDULE_KEYS.matcher(d).find(); }
+    private static boolean wantsGroupBy(String d)        { return GROUP_BY_KEYS.matcher(d).find(); }
+    private static boolean wantsDateMath(String d)       { return DATE_MATH_KEYS.matcher(d).find(); }
+    private static boolean wantsClassification(String d) { return CLASSIFICATION_KEYS.matcher(d).find(); }
+    private static boolean wantsCurrency(String d)       { return CURRENCY_KEYS.matcher(d).find(); }
+    private static boolean wantsStatus(String d)         { return STATUS_KEYS.matcher(d).find(); }
+    private static boolean wantsRank(String d)           { return RANK_KEYS.matcher(d).find(); }
 
     private static final String SCHEDULE_EXEMPLAR = """
 
@@ -608,13 +627,21 @@ public final class SpecGenerationPrompt {
             String previousSpec,
             List<ModelSpecValidator.ValidationError> errors,
             boolean includeView) {
+        return repairPromptParts(modelId, previousSpec, errors, includeView).concatenated();
+    }
 
-        String systemContext = includeView ? SYSTEM_CONTEXT + SYSTEM_CONTEXT_VIEW : SYSTEM_CONTEXT;
+    /** {@link #repairPrompt(String, String, List, boolean)} split into {@link PromptParts}. */
+    public static PromptParts repairPromptParts(
+            String modelId,
+            String previousSpec,
+            List<ModelSpecValidator.ValidationError> errors,
+            boolean includeView) {
+
         String errorList = errors.stream()
                 .map(e -> "  - [" + e.location() + "] " + e.message())
                 .collect(Collectors.joining("\n"));
 
-        return systemContext + "\n\n" + """
+        String user = """
                 Your previous model spec for '""" + modelId + """
                 ' contained the following validation errors:
 
@@ -627,6 +654,7 @@ public final class SpecGenerationPrompt {
 
                 Fix all errors and output only the corrected JSON spec, nothing else.
                 """;
+        return new PromptParts(systemContext(includeView), user);
     }
 
     /** Calls {@link #repairPrompt(String, String, List, boolean)} without view context. */
@@ -649,8 +677,13 @@ public final class SpecGenerationPrompt {
      */
     public static String repairPromptTruncated(String modelId, String domainDescription,
                                                boolean includeView) {
-        String systemContext = includeView ? SYSTEM_CONTEXT + SYSTEM_CONTEXT_VIEW : SYSTEM_CONTEXT;
-        return systemContext + "\n\n" + """
+        return repairPromptTruncatedParts(modelId, domainDescription, includeView).concatenated();
+    }
+
+    /** {@link #repairPromptTruncated(String, String, boolean)} split into {@link PromptParts}. */
+    public static PromptParts repairPromptTruncatedParts(String modelId, String domainDescription,
+                                                         boolean includeView) {
+        String user = """
                 Your previous response for '""" + modelId + """
                 ' was cut off before the JSON was complete — it exceeded the output token limit.
 
@@ -667,6 +700,7 @@ public final class SpecGenerationPrompt {
 
                 Output only the JSON spec, nothing else.
                 """;
+        return new PromptParts(systemContext(includeView), user);
     }
 
     /** @deprecated use {@link #testRepairPrompt(String, String, List, List)} which quotes the
@@ -695,10 +729,25 @@ public final class SpecGenerationPrompt {
             String previousSpec,
             List<TestCaseRunner.TestResult> failedTests,
             List<DerivationSpec> derivations) {
+        return testRepairPromptParts(modelId, previousSpec, failedTests, derivations, false)
+                .concatenated();
+    }
+
+    /**
+     * View-aware {@link PromptParts} variant of {@link #testRepairPrompt}. When {@code includeView}
+     * is {@code true} the system context includes the ViewDefinition catalog, so a spec carrying a
+     * {@code viewDefinition} is repaired with the view documentation in scope rather than blind.
+     */
+    public static PromptParts testRepairPromptParts(
+            String modelId,
+            String previousSpec,
+            List<TestCaseRunner.TestResult> failedTests,
+            List<DerivationSpec> derivations,
+            boolean includeView) {
 
         String failureList = testFailureFeedback(failedTests, derivations);
 
-        return SYSTEM_CONTEXT + "\n\n" + """
+        String user = """
                 Your model spec for '""" + modelId + """
                 ' passed structural validation but the following test cases failed:
 
@@ -714,6 +763,7 @@ public final class SpecGenerationPrompt {
                 match (you may correct the `expr` OR the `expect` value, not just the expression). \
                 Output only the corrected JSON spec, nothing else.
                 """;
+        return new PromptParts(systemContext(includeView), user);
     }
 
     /**
@@ -788,10 +838,19 @@ public final class SpecGenerationPrompt {
             String evolutionRequest,
             boolean includeView,
             List<String> derivedPaths) {
+        return evolutionPromptParts(modelId, currentSpec, evolutionRequest, includeView, derivedPaths)
+                .concatenated();
+    }
 
-        String systemContext = includeView ? SYSTEM_CONTEXT + SYSTEM_CONTEXT_VIEW : SYSTEM_CONTEXT;
+    /** {@link #evolutionPrompt(String, String, String, boolean, List)} split into {@link PromptParts}. */
+    public static PromptParts evolutionPromptParts(
+            String modelId,
+            String currentSpec,
+            String evolutionRequest,
+            boolean includeView,
+            List<String> derivedPaths) {
 
-        return systemContext + "\n\n" + """
+        String user = """
                 The current Valem model spec for '""" + modelId + """
                 ' is:
                 ```json
@@ -812,6 +871,7 @@ public final class SpecGenerationPrompt {
 
                 Output only the JSON SpecEvolution, nothing else.
                 """;
+        return new PromptParts(systemContext(includeView), user);
     }
 
     /** Calls {@link #evolutionPrompt(String, String, String, boolean, List)} with no derived paths. */
@@ -849,10 +909,21 @@ public final class SpecGenerationPrompt {
             String feedback,
             boolean includeView,
             List<String> derivedPaths) {
+        return evolutionRepairPromptParts(modelId, currentSpec, evolutionRequest, previousEvolution,
+                feedback, includeView, derivedPaths).concatenated();
+    }
 
-        String systemContext = includeView ? SYSTEM_CONTEXT + SYSTEM_CONTEXT_VIEW : SYSTEM_CONTEXT;
+    /** {@link #evolutionRepairPrompt} split into {@link PromptParts}. */
+    public static PromptParts evolutionRepairPromptParts(
+            String modelId,
+            String currentSpec,
+            String evolutionRequest,
+            String previousEvolution,
+            String feedback,
+            boolean includeView,
+            List<String> derivedPaths) {
 
-        return systemContext + "\n\n" + """
+        String user = """
                 You are evolving the Valem model spec for '""" + modelId + """
                 '. Your previous SpecEvolution was rejected:
 
@@ -878,6 +949,7 @@ public final class SpecGenerationPrompt {
 
                 Output only the corrected JSON SpecEvolution, nothing else.
                 """;
+        return new PromptParts(systemContext(includeView), user);
     }
 
     /** The optional-field list for a SpecEvolution, with view fields only when views are on. */
