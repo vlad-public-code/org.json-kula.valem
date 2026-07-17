@@ -49,7 +49,8 @@ import java.util.Map;
  * ({@code validate_spec}, {@code eval_expression}, {@code test_spec}, {@code dry_run}) never reach this
  * class in any mode (see {@code ToolRegistry}), so they work before, during, and after pairing.
  */
-final class SandboxSessionModelOperations implements ModelOperations, BrowserPairable {
+final class SandboxSessionModelOperations implements ModelOperations, BrowserPairable,
+        org.json_kula.valem.service.ChangeSubscribable {
 
     /** How long one {@code pair_browser} call blocks waiting for the developer to approve. */
     private static final Duration POLL_BUDGET = Duration.ofSeconds(60);
@@ -97,7 +98,12 @@ final class SandboxSessionModelOperations implements ModelOperations, BrowserPai
     // ── Pairing ───────────────────────────────────────────────────────────────
 
     @Override
-    public synchronized PairResult pairBrowser() {
+    public PairResult pairBrowser() {
+        return pairBrowser(ProgressHandle.NONE);
+    }
+
+    @Override
+    public synchronized PairResult pairBrowser(ProgressHandle progress) {
         if (delegate != null) return PairResult.alreadyPaired(namespaceId);
 
         PendingPairing p = pending;
@@ -106,12 +112,13 @@ final class SandboxSessionModelOperations implements ModelOperations, BrowserPai
             pending = p;
         }
 
-        Instant deadline = minInstant(Instant.now().plus(pollBudget), p.expiresAt());
+        Instant start    = Instant.now();
+        Instant deadline = minInstant(start.plus(pollBudget), p.expiresAt());
+        long    budgetSec = Math.max(1, Duration.between(start, deadline).toSeconds());
         while (true) {
             // Poll first, sleep after: on the documented "call again once approved" resume path the
-            // approval has usually already happened, and this call blocks the single-threaded MCP
-            // loop — an up-front interval would burn it for nothing (RFC 8628's interval spaces
-            // consecutive polls, it is not a pre-delay).
+            // approval has usually already happened. In the async server path this runs on a worker
+            // thread, so the read loop stays free to receive notifications/cancelled (§3.2).
             PollOutcome outcome = poll(p.pairCode(), p.deviceSecret());
             if (outcome.paired()) {
                 ValemClient client = new ValemClient(baseUrl, outcome.sessionToken(), "X-Session-Token");
@@ -125,12 +132,36 @@ final class SandboxSessionModelOperations implements ModelOperations, BrowserPai
                 throw new IllegalStateException(
                         "Pairing failed (" + outcome.error() + ") — call pair_browser again for a fresh link.");
             }
-            // authorization_pending — keep polling until the local budget or the pairing's TTL lapses
-            if (!Instant.now().isBefore(deadline)) break;
-            sleep(Math.max(1, p.intervalSec()) * 1000L);
+            // authorization_pending. Hand the verification link to the developer out-of-band via URL-mode
+            // elicitation when the client supports it (the handle dedupes, so this fires at most once).
+            progress.elicitUrl(p.verificationUri(),
+                    "Open this link in your browser and enter code " + p.userCode()
+                    + " to approve pairing this agent with your Valem sandbox session.");
+            // keep polling until the local budget/TTL lapses or the client cancels.
+            if (progress.cancelled() || !Instant.now().isBefore(deadline)) break;
+            long elapsed = Math.min(budgetSec, Duration.between(start, Instant.now()).toSeconds());
+            progress.report(elapsed, (double) budgetSec,
+                    "Waiting for browser approval (" + elapsed + "/" + budgetSec + "s)");
+            if (!sleepChecking(Math.max(1, p.intervalSec()) * 1000L, progress)) break;   // cancelled
         }
         long remaining = Math.max(0, Duration.between(Instant.now(), p.expiresAt()).toSeconds());
         return PairResult.pending(p.verificationUri(), p.userCode(), remaining);
+    }
+
+    /**
+     * Sleeps up to {@code millis}, in short slices, aborting early (returning {@code false}) if the
+     * request is cancelled meanwhile — so cancellation is honoured within a fraction of a second rather
+     * than only at the next poll boundary.
+     */
+    private static boolean sleepChecking(long millis, ProgressHandle progress) {
+        long slice = 250;
+        long slept = 0;
+        while (slept < millis) {
+            if (progress.cancelled()) return false;
+            sleep(Math.min(slice, millis - slept));
+            slept += slice;
+        }
+        return !progress.cancelled();
     }
 
     private PendingPairing mint() {
@@ -222,6 +253,34 @@ final class SandboxSessionModelOperations implements ModelOperations, BrowserPai
     @Override
     public List<DerivationTrace> explain(String id, String path) {
         return requireDelegate().explain(toServer(id), path);
+    }
+
+    @Override
+    public JsonNode getAudit(String id, String pathPrefix, Instant from, Instant to, int limit) {
+        JsonNode audit = requireDelegate().getAudit(toServer(id), pathPrefix, from, to, limit);
+        // Translate each record's namespaced modelId back to the plain id the agent used.
+        if (audit != null && audit.isArray()) {
+            for (JsonNode rec : audit) {
+                if (rec.isObject() && rec.has("modelId")) {
+                    ((ObjectNode) rec).put("modelId", fromServer(rec.path("modelId").asText()));
+                }
+            }
+        }
+        return audit;
+    }
+
+    @Override
+    public JsonNode verifyAudit(String id) {
+        return requireDelegate().verifyAudit(toServer(id));
+    }
+
+    @Override
+    public AutoCloseable subscribeChanges(String modelId, java.util.function.Consumer<String> onChange) {
+        // The paired delegate (RemoteModelOperations over the sandbox session) is ChangeSubscribable;
+        // subscribe with the server-namespaced id and translate the changed id back for the agent.
+        org.json_kula.valem.service.ChangeSubscribable subscribable =
+                (org.json_kula.valem.service.ChangeSubscribable) requireDelegate();
+        return subscribable.subscribeChanges(toServer(modelId), changedId -> onChange.accept(fromServer(changedId)));
     }
 
     @Override

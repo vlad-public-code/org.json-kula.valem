@@ -75,22 +75,38 @@ class McpServerE2ETest {
                 request(9, "tools/call", toolCall("get_field", args -> {
                     args.put("id", "e2e-order");
                     args.put("path", "$.doubleTotal");
+                })),
+                request(10, "tools/call", toolCall("patch_model", args -> {
+                    args.put("id", "e2e-order");
+                    args.putArray("patch").addObject().put("op", "add").put("path", "/note")
+                            .put("value", "shipped");
+                })),
+                request(11, "tools/call", toolCall("get_state", args -> {
+                    args.put("id", "e2e-order");
+                    args.putArray("paths").add("$.note");   // project only the patched field
                 }))
         );
 
         Map<Integer, JsonNode> byId = exchange(requests);
 
-        // 9 requests carry an id → 9 responses; the notification produced none.
-        assertThat(byId).hasSize(9);
+        // 11 requests carry an id → 11 responses; the notification produced none.
+        assertThat(byId).hasSize(11);
 
         // initialize: negotiated version + server info.
         assertThat(byId.get(1).path("result").path("protocolVersion").asText()).isEqualTo("2025-06-18");
         assertThat(byId.get(1).path("result").path("serverInfo").path("name").asText()).isEqualTo("valem");
 
-        // tools/list surfaces the tool catalogue.
+        // tools/list surfaces the tool catalogue (including the new tools) and declares outputSchema.
         List<String> toolNames = new ArrayList<>();
-        byId.get(2).path("result").path("tools").forEach(t -> toolNames.add(t.path("name").asText()));
-        assertThat(toolNames).contains("create_model", "mutate", "get_state", "explain", "evolve_spec");
+        JsonNode mutateTool = null;
+        for (JsonNode t : byId.get(2).path("result").path("tools")) {
+            toolNames.add(t.path("name").asText());
+            if ("mutate".equals(t.path("name").asText())) mutateTool = t;
+        }
+        assertThat(toolNames).contains("create_model", "mutate", "patch_model", "get_state",
+                "explain", "evolve_spec", "get_effective_schema", "snapshot");
+        assertThat(mutateTool).isNotNull();
+        assertThat(mutateTool.path("outputSchema").path("type").asText()).isEqualTo("object");
 
         // create_model returns the model info (id + counts).
         assertThat(byId.get(3).path("result").path("isError").asBoolean()).isFalse();
@@ -123,6 +139,15 @@ class McpServerE2ETest {
         // evolve_spec succeeds and the new derivation computes against the (rolled-back) state: 30 * 2 = 60.
         assertThat(byId.get(8).path("result").path("isError").asBoolean()).isFalse();
         assertThat(payload(byId.get(9)).asInt()).isEqualTo(60);
+
+        // patch_model (RFC 6902) adds $.note through the process boundary.
+        assertThat(byId.get(10).path("result").path("isError").asBoolean()).isFalse();
+        assertThat(payload(byId.get(10)).path("success").asBoolean()).isTrue();
+
+        // get_state with a paths projection returns only the requested subtree.
+        JsonNode projected = payload(byId.get(11));
+        assertThat(projected.path("note").asText()).isEqualTo("shipped");
+        assertThat(projected.has("total")).isFalse();
     }
 
     // ── process driver ────────────────────────────────────────────────────────────
@@ -157,6 +182,8 @@ class McpServerE2ETest {
                 if (line.isBlank()) continue;
                 JsonNode resp = MAPPER.readTree(line);
                 assertThat(resp.path("jsonrpc").asText()).isEqualTo("2.0");
+                // Skip server-initiated notifications (e.g. notifications/message) — they carry no id.
+                if (resp.has("method") || !resp.has("id")) continue;
                 byId.put(resp.path("id").asInt(), resp);
             }
         }

@@ -56,7 +56,9 @@ valem/                   ← parent POM (multi-module Maven)
 │                                + filesystem by default; add an adapter jar (or -Pweb-postgres|web-
 │                                mongo|web-redis|web-s3) for other backends. Builds valem-ui (the
 │                                management SPA) via frontend-maven-plugin and serves it at / (skip
-│                                with -Dskip.frontend=true).
+│                                with -Dskip.frontend=true). Also hosts McpHttpController — the MCP
+│                                surface over Streamable HTTP at /mcp (reuses valem-mcp's McpHttpSession;
+│                                shared models, valem.api.key gate, valem.mcp.allowed-origins).
 │
 ├── valem-effects-noop/  ← reference effect-kind plugin: ServiceLoader EffectKind + auto-configured
 │                                EffectExecutor bean; proves the pluggable-effects SPI (drop-in jar, no
@@ -80,12 +82,21 @@ valem/                   ← parent POM (multi-module Maven)
 │
 ├── valem-mcp/           ← MCP server (Model Context Protocol over stdio, no Spring; same
 │   src/main/java/org/json_kula/valem/mcp/   deps as console: service + jackson only)
-│   ├── McpServer             ← JSON-RPC 2.0 stdio transport + initialize/tools/resources handshake
-│   ├── ToolRegistry          ← 16 tools → ModelService: model CRUD (create/mutate/get_state/explain/
-│   │                            evolve_spec/…) + authoring/verify (validate_spec/eval_expression/
-│   │                            test_spec/dry_run) — the agent generates, Valem verifies;
-│   │                            + pair_browser in remote_with_browser mode (--url --browser)
-│   └── ResourceRegistry      ← MCP resources: spec-format guide + JSON schemas + bundled example specs
+│   ├── McpServer             ← JSON-RPC 2.0 stdio transport + protocol core (initialize/tools/resources/
+│   │                            logging handshake; negotiates up to 2025-11-25; resources subscribe +
+│   │                            templates/list; async pair_browser worker w/ progress+cancellation +
+│   │                            URL-mode elicitation; swappable notification sink for reuse over HTTP)
+│   ├── McpHttpSession        ← reuses McpServer's core for the Streamable-HTTP endpoint (see valem-web)
+│   ├── ToolRegistry          ← 24 tools → ModelService: model CRUD (create/mutate/patch_model/
+│   │                            get_state[paths,depth]/explain/snapshot/restore/get_effective_schema/
+│   │                            get_audit/verify_audit/upload_blob/download_blob/evolve_spec/…) +
+│   │                            authoring/verify (validate_spec/eval_expression/test_spec/dry_run) —
+│   │                            the agent generates, Valem verifies; opt-in mutate traces, outputSchema
+│   │                            decls, result-size guard, structured errors; + pair_browser in
+│   │                            remote_with_browser mode (--url --browser)
+│   └── ResourceRegistry      ← MCP resources: spec-format/jsonata-gotchas/spec-evolution/view-system
+│                                guides + JSON schemas + bundled example specs + valem://state/{id}
+│                                subscribable resource (+ examples/state uriTemplates)
 │
 ├── valem-client/        ← thin Java SDK over REST/WS (jackson + JDK java.net.http only;
 │                                ValemClient, reconnecting subscribe, audit; no engine dep)

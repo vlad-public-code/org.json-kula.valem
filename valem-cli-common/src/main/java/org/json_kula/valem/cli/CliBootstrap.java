@@ -89,7 +89,13 @@ public final class CliBootstrap {
         if (opts.remote()) {
             return new RemoteModelOperations(new ValemClient(opts.url(), opts.apiKey()), mapper);
         }
-        return new ModelService(new ModelRegistry(), new InMemoryBlobStore());
+        ModelService service = new ModelService(new ModelRegistry(), new InMemoryBlobStore());
+        // Wire an in-memory audit trail so the embedded get_audit/verify_audit tools have real data
+        // (remote mode gets it from the server's durable AuditStore over REST instead).
+        InMemoryCliAudit audit = new InMemoryCliAudit(mapper);
+        service.setAuditSink(audit);
+        service.setAuditReader(audit);
+        return service;
     }
 
     private static String requireValue(String[] args, int i, String flag) {

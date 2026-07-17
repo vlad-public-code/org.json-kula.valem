@@ -21,4 +21,14 @@ interface BrowserPairable {
      * developer to approve it and simply call this tool again.
      */
     PairResult pairBrowser();
+
+    /**
+     * Same as {@link #pairBrowser()} but reports progress while waiting and aborts early if the client
+     * cancels the request (§3.2). The default ignores the handle (for facades that do not support
+     * progress); {@link SandboxSessionModelOperations} overrides it to emit a heartbeat each poll and
+     * honour cancellation.
+     */
+    default PairResult pairBrowser(ProgressHandle progress) {
+        return pairBrowser();
+    }
 }

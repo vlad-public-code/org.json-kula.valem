@@ -167,25 +167,75 @@ JSON Path, exactly as the REST API and console are.
 | `create_model` | `POST /models` | `spec` (a full ModelSpec) | — |
 | `get_model_info` | `GET /models/{id}` | `id` | — |
 | `get_spec` | `GET /models/{id}/spec` | `id` | — |
-| `get_state` | `GET /models/{id}/state` | `id` | `at` (ISO-8601) |
+| `get_state` | `GET /models/{id}/state` | `id` | `at` (ISO-8601), `paths` (project subtrees), `depth` (cap nesting) |
 | `get_field` | `GET /models/{id}/state/{path}` | `id`, `path` | — |
-| `mutate` | `POST /models/{id}/mutations` | `id`, `mutations` (`{"$.path": value}`) | — |
-| `explain` | `GET /models/{id}/explain/{path}` | `id`, `path` | — |
+| `get_effective_schema` | `GET /models/{id}/schema/{path}` | `id`, `path` | — |
+| `mutate` | `POST /models/{id}/mutations` | `id`, `mutations` (`{"$.path": value}`) | `includeTraces` |
+| `patch_model` | `POST /models/{id}/mutations/patch` | `id`, `patch` (RFC 6902 JSON Patch) | `includeTraces` |
+| `explain` | `GET /models/{id}/explain/{path}` | `id`, `path` | `limit` |
 | `get_history` | `GET /models/{id}/history` | `id` | — |
+| `get_audit` | `GET /models/{id}/audit` | `id` | `pathPrefix`, `from`, `to`, `limit` |
+| `verify_audit` | `GET /models/{id}/audit/verify` | `id` | — |
+| `snapshot` | `POST /models/{id}/snapshot` | `id` | — |
+| `restore` | `POST /models/{id}/restore` | `id`, `snapshot` | — |
 | `evolve_spec` | `POST /models/{id}/spec/evolve` | `id`, `evolution` (a SpecEvolution) | — |
 | `delete_model` | `DELETE /models/{id}` | `id` | — |
 | `get_view` | `GET /models/{id}/view[/{viewId}]` | `id` | `viewId` |
+| `upload_blob` | `POST /models/blobs` | `data` (base64) | `mediaType` |
+| `download_blob` | `GET /models/{id}/blobs/{blobId}` | `blobId` | `modelId` |
 | `pair_browser` | `POST /sandbox/pair` + `/token` | — | — |
 
-Blobs and snapshot/restore are intentionally **not** exposed — the MCP surface targets the
-agent-state use case (create, mutate, read, explain, evolve), and binary/base64 payloads are a poor
-fit for a tool-call channel. Use the REST API for those.
+`patch_model` closes the array-manipulation gap the flat `mutations` map cannot express: its `patch`
+is an RFC 6902 JSON Patch (`add`/`remove`/`replace`/`move`/`copy`/`test`), so an agent can insert,
+remove, or reorder array elements (`{"op":"add","path":"/items/-","value":{…}}`). Note the `path`
+fields there are **RFC 6901 JSON Pointer** (`/items/0`, `-` for append), not the `$.`-rooted address
+form the other tools use.
+
+`get_effective_schema` returns a field's schema overlaid with **live** meta-derived constraints
+(current min/max/required/…), so an agent can check what the pipeline will accept before writing
+rather than discovering an invalid value only by getting a schema-violation error.
+
+`snapshot`/`restore` are a matched pair: `snapshot` captures an immutable point-in-time copy of a
+model's state, and `restore` rolls the state back to a snapshot handed back verbatim — a natural
+safety step around a risky `evolve_spec`.
+
+`get_audit`/`verify_audit` expose the **durable, append-only audit trail** — one record per committed
+reactive cycle (mutations, `derivedUpdated`, traces, flagged constraints, dispatched effects, `source`,
+`sequence`), the queryable superset of the bounded `get_history`/`explain` ring buffer. `get_audit`
+filters by `pathPrefix` + ISO-8601 `from`/`to` window + `limit`; `verify_audit` walks the tamper-evident
+hash chain and reports the first altered/reordered/deleted record. In remote/paired mode these read the
+server's durable `AuditStore`; the embedded server keeps an in-memory trail for the session (no hash
+chain, so `verify_audit` reports valid).
+
+`upload_blob`/`download_blob` move binary content (base64 in `data`) in and out of the
+content-addressed blob store — niche, for specs that reference binary fields; large blobs may trip the
+result-size guard, so this channel suits small binaries only.
 
 `pair_browser` only appears in [`remote_with_browser` mode](#pairing-with-a-browser-remote_with_browser-mode)
 (`--url ... --browser`) — embedded mode and plain `--url` remote mode never advertise it.
 
 `create_model` returns the model info (id + version + derivation/meta/constraint/effect counts);
 `evolve_spec` returns the new version.
+
+### Token economy
+
+Response size — not latency — is the dominant cost of driving a model over a long agent session,
+so several tools let the agent hold down the bytes it pulls back:
+
+- **`get_state` projection.** On a large model `get_state` is the biggest context burner. Pass
+  `paths` (canonical addresses, e.g. `["$.order","$.totals"]`) to return only those subtrees,
+  spliced back into a pruned document at their addresses; absent addresses are skipped. Pass `depth`
+  (an integer ≥ 0) to cap nesting — containers deeper than the limit collapse to a compact marker
+  (`"<object: 5 fields>"` / `"<array: 3 items>"`). The two combine (`paths` first, then `depth`).
+- **Opt-in `mutate`/`patch_model` traces.** By default a write returns only the actionable summary
+  (`success`, `mutatedPaths`, `derivedUpdated`, `metaUpdated`, `flaggedConstraints`,
+  `dispatchedEffects`). The full derivation/constraint `traces` — the same payload `explain` serves —
+  are included only with `includeTraces: true`. Call `explain` when a value looks wrong; don't pay for
+  the trace on every write.
+- **`explain` limit.** Trace records can be bulky; `limit` returns only the most recent N.
+- **Result-size guard.** Any tool result whose pretty-printed JSON would exceed ~50 KB is withheld and
+  replaced with a compact note (`{"error":"Result too large", …, "hint": …}`) telling the agent how to
+  narrow it, so one oversized read can't wreck the session.
 
 ### Authoring & verification tools
 
@@ -213,6 +263,13 @@ the runtime's own `SpecGenerationSchema`) as their `inputSchema`, so a generatin
 structure it must produce rather than a bare `"type":"object"` — the single biggest lever on
 first-try generation success.
 
+Tools whose result is always a JSON object also declare an **`outputSchema`** (a 2025-06-18 feature),
+so a client can validate the `structuredContent` and the model knows the result shape *before* calling
+— e.g. `mutate`/`patch_model` (the mutation-result fields), `create_model`/`get_model_info`
+(`ModelInfo`), `validate_spec`, `test_spec`, `eval_expression`. Tools that return an array or scalar
+(`list_models`, `get_history`, `explain`, a scalar `get_field`) carry no `outputSchema`, since they
+emit no `structuredContent`.
+
 ### Result shape
 
 A successful `tools/call` returns a `text` content block whose text is the operation's JSON result
@@ -223,11 +280,15 @@ structured content is defined as an object.)
 
 A tool-level failure — an unknown model id, a schema violation, a ROLLBACK constraint — is returned as
 a result with `isError: true` (per the MCP tool-error convention), **not** as a JSON-RPC protocol
-error, so the model sees the failure and can react. A ROLLBACK constraint violation is surfaced
-**structurally**: both the text block and `structuredContent` carry
-`{ "error": "Constraint violation", "violations": [ { "constraintId", "message", "policy" } ] }`, so
-the agent knows exactly which constraint failed and why. Malformed protocol requests (bad method,
-missing `name`) return JSON-RPC errors.
+error, so the model sees the failure and can react. Three failure kinds an agent needs to react to
+*programmatically* are surfaced **structurally** — both the text block and `structuredContent` carry
+the parsed shape rather than a flattened string:
+
+- **ROLLBACK constraint** — `{ "error": "Constraint violation", "violations": [ { "constraintId", "message", "policy" } ] }`.
+- **Schema violation** (`mutate`/`patch_model`) — `{ "error": "Schema violation", "violations": [ { "path", "keyword", "message" } ] }`, so the agent can fix the offending field and retry.
+- **Version conflict** (`evolve_spec` with a stale `expectedVersion`) — `{ "error": "Version conflict", "expected", "actual" }`, so the agent can re-read the current version and retry instead of guessing.
+
+Malformed protocol requests (bad method, missing `name`) return JSON-RPC errors.
 
 ## Worked example (raw protocol)
 
@@ -258,12 +319,31 @@ pull in while authoring a spec (the same substrate the runtime's own generator f
 | URI | mimeType | Content |
 |---|---|---|
 | `valem://guide/model-spec-format` | `text/markdown` | The ModelSpec authoring guide (sections, path notation, JSONata rules and gotchas). |
+| `valem://guide/jsonata-gotchas` | `text/markdown` | JSONata pitfalls cheatsheet (bindings, singleton sequences, missing-vs-null, path dialect). |
+| `valem://guide/spec-evolution` | `text/markdown` | How to author a SpecEvolution diff (targeted upserts vs wholesale, `expectedVersion`). |
+| `valem://guide/view-system` | `text/markdown` | View-system orientation (component tree, `bind`, what `get_view` returns). |
 | `valem://schema/model-spec` | `application/json` | The full ModelSpec JSON Schema. |
 | `valem://schema/spec-evolution` | `application/json` | The SpecEvolution JSON Schema. |
 | `valem://examples/<name>` | `application/json` | Each bundled example spec (e.g. `insurance-quote`, `car-loan-calculator`) — working models to learn from. |
 
 Standard MCP flow: `resources/list` enumerates them, `resources/read` (with a `uri`) returns
-`{ contents: [ { uri, mimeType, text } ] }`. An unknown uri returns JSON-RPC error `-32002`.
+`{ contents: [ { uri, mimeType, text } ] }`. An unknown uri returns JSON-RPC error `-32002`. The
+bundled examples and the model-state resource are advertised as **resource templates** —
+`resources/templates/list` returns `valem://examples/{name}` and `valem://state/{modelId}` — so a client
+need not enumerate them by name.
+
+### Subscribing to model state (§4.2)
+
+The server advertises `resources.subscribe`, and a model's live merged state is a subscribable resource:
+
+- `resources/read` on `valem://state/<modelId>` returns the current merged state.
+- `resources/subscribe` on that uri opens a change subscription; every committed mutation then emits a
+  `notifications/resources/updated` for the uri, and `resources/unsubscribe` stops it.
+
+This closes the loop in a **paired session**: when the developer edits the model in the browser, the
+agent gets a `resources/updated` push and can re-read without polling — instead of only seeing the
+change on its next `get_state`. (It also fires in embedded/plain-remote mode for the agent's own
+mutations.)
 
 ## Protocol notes
 
@@ -272,9 +352,49 @@ Standard MCP flow: `resources/list` enumerates them, `resources/read` (with a `u
 - **Handshake** — `initialize` → capabilities + server info + usage `instructions`;
   `notifications/initialized` is accepted with no reply; `ping` returns `{}`. A leading UTF-8 BOM on
   the input stream (some Windows launchers prepend one) is tolerated.
-- **Protocol version** — the server negotiates `2024-11-05`, `2025-03-26`, or `2025-06-18`, echoing
-  the client's requested version when supported and otherwise falling back to the newest.
-- **Capabilities** — `tools` and `resources` are advertised (no prompts).
+- **Protocol version** — the server negotiates `2024-11-05`, `2025-03-26`, `2025-06-18`, or
+  `2025-11-25` (the current revision, the default), echoing the client's requested version when
+  supported and otherwise falling back to the newest.
+- **Capabilities** — `tools`, `resources` (with `subscribe`), and `logging` are advertised (no prompts).
+- **Logging** — the server advertises the `logging` capability and emits `notifications/message`
+  (a one-line readiness/mode log after `notifications/initialized`); a client can raise the minimum
+  severity with `logging/setLevel` (below-floor messages are suppressed).
+- **Progress & cancellation** — `pair_browser` (the one long-poll tool) runs off the read loop: it emits
+  `notifications/progress` while it waits (when the client passed a `progressToken`) and honours
+  `notifications/cancelled` to abort the wait promptly.
+- **URL-mode elicitation** — when the client advertises the `elicitation` capability with URL mode
+  (2025-11-25), `pair_browser` hands the developer the verification link via a URL-mode
+  `elicitation/create` request (and a `notifications/elicitation/complete` once paired) instead of
+  relaying the link and code through the model.
+
+## HTTP transport: an MCP endpoint on the server (§4.1)
+
+Besides the stdio jar, `valem-web` exposes the **same MCP tool/resource surface over Streamable HTTP**
+at `/mcp`, so hosted or remote agents can connect without a local jar and **share one server's models**
+with each other and with the REST API. It reuses the exact protocol core the stdio server runs (same 24
+tools, resources, negotiation, structured errors) — only the transport differs.
+
+| Method | Purpose |
+|---|---|
+| `POST /mcp` | Send a JSON-RPC request (or batch); the response comes back as `application/json`. A body of only notifications returns `202 Accepted`. An `initialize` establishes a session — the response carries an `Mcp-Session-Id` header the client echoes on subsequent calls. |
+| `GET /mcp` | Opens a `text/event-stream` the server pushes notifications on (log / progress / `resources/updated`), keyed by `Mcp-Session-Id`. |
+| `DELETE /mcp` | Terminates a session. |
+
+```bash
+# initialize → note the Mcp-Session-Id response header, then reuse it
+curl -sS localhost:8080/mcp -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25"}}' -i
+
+curl -sS localhost:8080/mcp -H 'Content-Type: application/json' -H 'Mcp-Session-Id: <id>' \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+```
+
+Auth rides the same `valem.api.key` gate as every other endpoint. Per the MCP spec the endpoint
+validates the `Origin` header to prevent DNS-rebinding: a browser `Origin` must be listed in
+`valem.mcp.allowed-origins` (comma-separated) — unless that list is empty, in which case the endpoint is
+open, matching the API's open-by-default development posture (set it in production). Unlike the stdio
+server (in-memory, one process per client), the HTTP endpoint's models are the server's shared, durable
+models — the point of an in-server endpoint.
 
 ## Storage caveat
 

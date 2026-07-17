@@ -73,6 +73,12 @@ public interface ModelOperations {
     /** @see ModelService#explain(String, String) */
     List<DerivationTrace> explain(String id, String path);
 
+    /** @see ModelService#getAudit(String, String, Instant, Instant, int) */
+    JsonNode getAudit(String id, String pathPrefix, Instant from, Instant to, int limit);
+
+    /** @see ModelService#verifyAudit(String) */
+    JsonNode verifyAudit(String id);
+
     // ── Snapshot ──────────────────────────────────────────────────────────────
 
     /** @see ModelService#snapshot(String) */

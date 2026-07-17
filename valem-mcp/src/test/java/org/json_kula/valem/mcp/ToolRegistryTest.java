@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.json_kula.valem.core.blob.InMemoryBlobStore;
+import org.json_kula.valem.core.model.ModelSpec;
 import org.json_kula.valem.service.ModelRegistry;
 import org.json_kula.valem.service.ModelService;
 import org.junit.jupiter.api.BeforeEach;
@@ -41,6 +42,27 @@ class ToolRegistryTest {
             }
             """;
 
+    /** A model with nested objects, for projection (paths/depth) tests. */
+    private static final String NESTED_SPEC = """
+            {
+              "id": "nested",
+              "version": "1.0.0",
+              "schema": {},
+              "derivations": [ {"path": "$.order.total", "expr": "order.price * order.qty"} ],
+              "constraints": [], "metaDerivations": [], "tests": []
+            }
+            """;
+
+    /** A model whose base schema types a field, for schema-violation tests. */
+    private static final String TYPED_SPEC = """
+            {
+              "id": "typed",
+              "version": "1.0.0",
+              "schema": { "type": "object", "properties": { "qty": { "type": "integer" } } },
+              "derivations": [], "constraints": [], "metaDerivations": [], "tests": []
+            }
+            """;
+
     private ToolRegistry registry;
 
     @BeforeEach
@@ -55,7 +77,9 @@ class ToolRegistryTest {
     void exposes_the_expected_tool_surface() {
         assertThat(registry.toolNames()).containsExactlyInAnyOrder(
                 "list_models", "create_model", "get_model_info", "get_spec",
-                "get_state", "get_field", "mutate", "explain", "get_history",
+                "get_state", "get_field", "mutate", "patch_model", "explain", "get_history",
+                "get_audit", "verify_audit", "get_effective_schema", "snapshot", "restore",
+                "upload_blob", "download_blob",
                 "evolve_spec", "delete_model", "get_view",
                 "validate_spec", "eval_expression", "test_spec", "dry_run");
     }
@@ -400,10 +424,369 @@ class ToolRegistryTest {
         assertThat(result.path("isError").asBoolean()).isTrue();
     }
 
+    // ── get_state projection (§1.1) ───────────────────────────────────────────────
+
+    @Test
+    void get_state_paths_projects_only_the_named_subtrees() {
+        createNested();
+        mutateNested();
+
+        ObjectNode args = MAPPER.createObjectNode();
+        args.put("id", "nested");
+        args.putArray("paths").add("$.order.total");
+        JsonNode state = payload(registry.call("get_state", args));
+
+        // only $.order.total survives, spliced back at its address
+        assertThat(state.path("order").path("total").asInt()).isEqualTo(20);
+        assertThat(state.path("order").has("price")).isFalse();
+        assertThat(state.has("meta")).isFalse();
+    }
+
+    @Test
+    void get_state_paths_skips_absent_addresses() {
+        createNested();
+        mutateNested();
+        ObjectNode args = MAPPER.createObjectNode();
+        args.put("id", "nested");
+        args.putArray("paths").add("$.order").add("$.does.not.exist");
+        JsonNode state = payload(registry.call("get_state", args));
+        assertThat(state.path("order").path("qty").asInt()).isEqualTo(4);
+        assertThat(state.has("does")).isFalse();
+    }
+
+    @Test
+    void get_state_depth_collapses_deeper_containers_to_a_marker() {
+        createNested();
+        mutateNested();
+        ObjectNode args = MAPPER.createObjectNode();
+        args.put("id", "nested");
+        args.put("depth", 1);
+        JsonNode state = payload(registry.call("get_state", args));
+        // top-level 'order' is a container nested deeper than depth 1 → collapsed to a marker string
+        assertThat(state.path("order").isTextual()).isTrue();
+        assertThat(state.path("order").asText()).contains("object").contains("fields");
+    }
+
+    // ── opt-in mutate traces (§1.2) ───────────────────────────────────────────────
+
+    @Test
+    void mutate_omits_traces_by_default() {
+        createModel();
+        ObjectNode args = MAPPER.createObjectNode();
+        args.put("id", "mcp-test");
+        args.putObject("mutations").put("$.price", 5.0).put("$.qty", 4);
+        JsonNode payload = payload(registry.call("mutate", args));
+        assertThat(payload.has("traces")).isFalse();
+        // actionable parts stay
+        assertThat(payload.path("derivedUpdated").toString()).contains("$.total");
+        assertThat(payload.has("flaggedConstraints")).isTrue();
+        assertThat(payload.has("dispatchedEffects")).isTrue();
+    }
+
+    @Test
+    void mutate_includes_traces_when_requested() {
+        createModel();
+        ObjectNode args = MAPPER.createObjectNode();
+        args.put("id", "mcp-test");
+        args.put("includeTraces", true);
+        args.putObject("mutations").put("$.price", 5.0).put("$.qty", 4);
+        JsonNode payload = payload(registry.call("mutate", args));
+        assertThat(payload.has("traces")).isTrue();
+        assertThat(payload.path("traces").isArray()).isTrue();
+    }
+
+    // ── patch_model (§2 RFC 6902) ─────────────────────────────────────────────────
+
+    @Test
+    void patch_model_applies_json_patch_with_array_ops() {
+        createNested();
+        ObjectNode args = MAPPER.createObjectNode();
+        args.put("id", "nested");
+        var patch = args.putArray("patch");
+        // build the items array, then append an element (array op mutate cannot express)
+        patch.addObject().put("op", "add").put("path", "/items").set("value", MAPPER.createArrayNode());
+        patch.addObject().put("op", "add").put("path", "/items/-")
+                .set("value", MAPPER.createObjectNode().put("sku", "a"));
+        ObjectNode result = registry.call("patch_model", args);
+        assertThat(result.path("isError").asBoolean()).isFalse();
+        assertThat(payload(result).path("success").asBoolean()).isTrue();
+
+        ObjectNode stateArgs = MAPPER.createObjectNode();
+        stateArgs.put("id", "nested");
+        JsonNode state = payload(registry.call("get_state", stateArgs));
+        assertThat(state.path("items").get(0).path("sku").asText()).isEqualTo("a");
+    }
+
+    @Test
+    void patch_model_omits_traces_by_default() {
+        createNested();
+        ObjectNode args = MAPPER.createObjectNode();
+        args.put("id", "nested");
+        args.putArray("patch").addObject().put("op", "add").put("path", "/order")
+                .set("value", MAPPER.createObjectNode().put("price", 2).put("qty", 3));
+        assertThat(payload(registry.call("patch_model", args)).has("traces")).isFalse();
+    }
+
+    // ── get_effective_schema (§2) ─────────────────────────────────────────────────
+
+    @Test
+    void get_effective_schema_returns_the_field_schema() {
+        create(TYPED_SPEC);
+        ObjectNode args = MAPPER.createObjectNode();
+        args.put("id", "typed");
+        args.put("path", "$.qty");
+        ObjectNode result = registry.call("get_effective_schema", args);
+        assertThat(result.path("isError").asBoolean()).isFalse();
+        assertThat(payload(result).path("type").asText()).isEqualTo("integer");
+    }
+
+    // ── snapshot / restore (§2) ───────────────────────────────────────────────────
+
+    @Test
+    void snapshot_then_restore_rolls_state_back() {
+        createModel();
+        ObjectNode m1 = MAPPER.createObjectNode();
+        m1.put("id", "mcp-test");
+        m1.putObject("mutations").put("$.price", 5.0).put("$.qty", 4);
+        registry.call("mutate", m1);
+
+        // capture a snapshot at price=5, qty=4 (total=20)
+        ObjectNode snapArgs = MAPPER.createObjectNode();
+        snapArgs.put("id", "mcp-test");
+        JsonNode snapshot = payload(registry.call("snapshot", snapArgs));
+        assertThat(snapshot.path("modelId").asText()).isEqualTo("mcp-test");
+
+        // move state forward
+        ObjectNode m2 = MAPPER.createObjectNode();
+        m2.put("id", "mcp-test");
+        m2.putObject("mutations").put("$.qty", 9);
+        registry.call("mutate", m2);
+
+        // restore the earlier snapshot
+        ObjectNode restoreArgs = MAPPER.createObjectNode();
+        restoreArgs.put("id", "mcp-test");
+        restoreArgs.set("snapshot", snapshot);
+        ObjectNode restoreResult = registry.call("restore", restoreArgs);
+        assertThat(restoreResult.path("isError").asBoolean()).isFalse();
+        assertThat(payload(restoreResult).path("restored").asBoolean()).isTrue();
+
+        ObjectNode stateArgs = MAPPER.createObjectNode();
+        stateArgs.put("id", "mcp-test");
+        JsonNode state = payload(registry.call("get_state", stateArgs));
+        assertThat(state.path("qty").asInt()).isEqualTo(4);
+        assertThat(state.path("total").asInt()).isEqualTo(20);
+    }
+
+    // ── explain limit (§1.3) ──────────────────────────────────────────────────────
+
+    @Test
+    void explain_limit_caps_to_most_recent_records() {
+        createModel();
+        for (int i = 1; i <= 5; i++) {
+            ObjectNode m = MAPPER.createObjectNode();
+            m.put("id", "mcp-test");
+            m.putObject("mutations").put("$.price", i).put("$.qty", i);
+            registry.call("mutate", m);
+        }
+        ObjectNode unlimited = MAPPER.createObjectNode();
+        unlimited.put("id", "mcp-test");
+        unlimited.put("path", "$.total");
+        int all = payload(registry.call("explain", unlimited)).size();
+        assertThat(all).isGreaterThan(2);
+
+        ObjectNode limited = MAPPER.createObjectNode();
+        limited.put("id", "mcp-test");
+        limited.put("path", "$.total");
+        limited.put("limit", 2);
+        assertThat(payload(registry.call("explain", limited)).size()).isEqualTo(2);
+    }
+
+    // ── result-size guard (§1.3) ──────────────────────────────────────────────────
+
+    @Test
+    void oversized_result_is_replaced_with_a_narrowing_note() {
+        // a spec whose single derivation produces a very large array (> 50 KB pretty-printed)
+        String bigSpec = """
+                { "id": "big", "version": "1.0.0", "schema": {},
+                  "derivations": [ {"path": "$.big", "expr": "[1..20000]"} ],
+                  "constraints": [], "metaDerivations": [], "tests": [] }
+                """;
+        create(bigSpec);
+        // trigger the derivation with a mutation so it materialises
+        ObjectNode m = MAPPER.createObjectNode();
+        m.put("id", "big");
+        m.putObject("mutations").put("$.seed", 1);
+        registry.call("mutate", m);
+
+        ObjectNode args = MAPPER.createObjectNode();
+        args.put("id", "big");
+        ObjectNode result = registry.call("get_state", args);
+        assertThat(result.path("isError").asBoolean()).isFalse();
+        assertThat(result.has("structuredContent")).isFalse();
+        JsonNode payload = payload(result);
+        assertThat(payload.path("error").asText()).isEqualTo("Result too large");
+        assertThat(payload.path("hint").asText()).contains("paths");
+    }
+
+    // ── outputSchema declarations (§3.1) ──────────────────────────────────────────
+
+    @Test
+    void tools_with_object_results_declare_an_output_schema() {
+        assertThat(toolByName("mutate").path("outputSchema").path("type").asText()).isEqualTo("object");
+        assertThat(toolByName("mutate").path("outputSchema").path("properties").has("derivedUpdated"))
+                .isTrue();
+        assertThat(toolByName("create_model").path("outputSchema").path("properties").has("derivationCount"))
+                .isTrue();
+        assertThat(toolByName("validate_spec").path("outputSchema").path("properties").has("valid")).isTrue();
+        // array/scalar-returning tools do not declare an output schema
+        assertThat(toolByName("list_models").has("outputSchema")).isFalse();
+        assertThat(toolByName("get_field").has("outputSchema")).isFalse();
+    }
+
+    // ── structured errors (§3.3) ──────────────────────────────────────────────────
+
+    @Test
+    void schema_violation_is_surfaced_structurally() {
+        create(TYPED_SPEC);
+        ObjectNode args = MAPPER.createObjectNode();
+        args.put("id", "typed");
+        args.putObject("mutations").put("$.qty", "not-an-integer");
+        ObjectNode result = registry.call("mutate", args);
+        assertThat(result.path("isError").asBoolean()).isTrue();
+        JsonNode structured = result.path("structuredContent");
+        assertThat(structured.path("error").asText()).isEqualTo("Schema violation");
+        JsonNode v0 = structured.path("violations").get(0);
+        assertThat(v0.path("path").asText()).contains("qty");
+        assertThat(v0.path("keyword").asText()).isNotBlank();
+    }
+
+    @Test
+    void evolve_spec_version_conflict_is_surfaced_structurally() {
+        createModel();
+        ObjectNode args = MAPPER.createObjectNode();
+        args.put("id", "mcp-test");
+        ObjectNode evolution = args.putObject("evolution");
+        evolution.put("expectedVersion", "9.9.9");   // does not match live 1.0.0
+        evolution.putArray("upsertDerivations").addObject()
+                .put("path", "$.doubleTotal").put("expr", "total * 2");
+        ObjectNode result = registry.call("evolve_spec", args);
+        assertThat(result.path("isError").asBoolean()).isTrue();
+        JsonNode structured = result.path("structuredContent");
+        assertThat(structured.path("error").asText()).isEqualTo("Version conflict");
+        assertThat(structured.path("expected").asText()).isEqualTo("9.9.9");
+        assertThat(structured.path("actual").asText()).isEqualTo("1.0.0");
+    }
+
+    // ── audit tools (§2) ──────────────────────────────────────────────────────────
+
+    @Test
+    void get_audit_forwards_filters_and_returns_reader_records() {
+        ModelService service = new ModelService(new ModelRegistry(), new InMemoryBlobStore());
+        // an inline reader that echoes the query it received, so we can assert forwarding
+        service.setAuditReader(new ModelService.AuditReader() {
+            @Override public JsonNode query(String id, String prefix, java.time.Instant from,
+                                            java.time.Instant to, int limit) {
+                com.fasterxml.jackson.databind.node.ArrayNode arr = MAPPER.createArrayNode();
+                ObjectNode rec = arr.addObject();
+                rec.put("modelId", id);
+                rec.put("pathPrefix", prefix);
+                rec.put("limit", limit);
+                return arr;
+            }
+            @Override public JsonNode verify(String id) { return MAPPER.createObjectNode().put("valid", true); }
+        });
+        ToolRegistry reg = new ToolRegistry(service, MAPPER);
+        service.createModel(specOf(SIMPLE_SPEC));
+
+        ObjectNode args = MAPPER.createObjectNode();
+        args.put("id", "mcp-test");
+        args.put("pathPrefix", "$.total");
+        args.put("limit", 7);
+        JsonNode audit = payload(reg.call("get_audit", args));
+        assertThat(audit.isArray()).isTrue();
+        assertThat(audit.get(0).path("pathPrefix").asText()).isEqualTo("$.total");
+        assertThat(audit.get(0).path("limit").asInt()).isEqualTo(7);
+    }
+
+    @Test
+    void get_audit_without_a_reader_returns_empty_array() {
+        createModel();
+        ObjectNode args = MAPPER.createObjectNode();
+        args.put("id", "mcp-test");
+        JsonNode audit = payload(registry.call("get_audit", args));
+        assertThat(audit.isArray()).isTrue();
+        assertThat(audit).isEmpty();
+    }
+
+    @Test
+    void verify_audit_without_a_reader_reports_valid_disabled() {
+        createModel();
+        ObjectNode args = MAPPER.createObjectNode();
+        args.put("id", "mcp-test");
+        JsonNode v = payload(registry.call("verify_audit", args));
+        assertThat(v.path("valid").asBoolean()).isTrue();
+        assertThat(v.path("detail").asText()).contains("not enabled");
+    }
+
+    // ── blob tools (§2) ─────────────────────────────────────────────────────────────
+
+    @Test
+    void upload_then_download_blob_round_trips() {
+        String content = "hello blob";
+        String b64 = java.util.Base64.getEncoder().encodeToString(content.getBytes());
+
+        ObjectNode up = MAPPER.createObjectNode();
+        up.put("data", b64);
+        up.put("mediaType", "text/plain");
+        ObjectNode upResult = registry.call("upload_blob", up);
+        assertThat(upResult.path("isError").asBoolean()).isFalse();
+        JsonNode ref = payload(upResult);
+        assertThat(ref.path("$blobId").asText()).startsWith("sha256:");
+        assertThat(ref.path("$mediaType").asText()).isEqualTo("text/plain");
+
+        ObjectNode down = MAPPER.createObjectNode();
+        down.put("blobId", ref.path("$blobId").asText());
+        JsonNode dl = payload(registry.call("download_blob", down));
+        String decoded = new String(java.util.Base64.getDecoder().decode(dl.path("data").asText()));
+        assertThat(decoded).isEqualTo(content);
+        assertThat(dl.path("bytes").asInt()).isEqualTo(content.length());
+    }
+
+    @Test
+    void upload_blob_rejects_bad_base64() {
+        ObjectNode up = MAPPER.createObjectNode();
+        up.put("data", "!!! not base64 !!!");
+        ObjectNode result = registry.call("upload_blob", up);
+        assertThat(result.path("isError").asBoolean()).isTrue();
+    }
+
     // ── helpers ────────────────────────────────────────────────────────────────
 
     private ObjectNode createModel() {
         return create(SIMPLE_SPEC);
+    }
+
+    private static ModelSpec specOf(String json) {
+        try {
+            return MAPPER.treeToValue(MAPPER.readTree(json), ModelSpec.class);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private ObjectNode createNested() {
+        return create(NESTED_SPEC);
+    }
+
+    /** Seeds the nested model: order.price=5, order.qty=4 (order.total→20), plus a meta subtree. */
+    private void mutateNested() {
+        ObjectNode args = MAPPER.createObjectNode();
+        args.put("id", "nested");
+        ObjectNode muts = args.putObject("mutations");
+        muts.put("$.order.price", 5);
+        muts.put("$.order.qty", 4);
+        muts.put("$.meta.note", "hi");
+        registry.call("mutate", args);
     }
 
     private ObjectNode createConstrained() {

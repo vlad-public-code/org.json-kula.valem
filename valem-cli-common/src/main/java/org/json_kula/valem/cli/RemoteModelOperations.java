@@ -48,7 +48,8 @@ import java.util.function.Supplier;
  * mutation outcome reports an empty {@code metaUpdated} list (the meta values are still applied
  * server-side).
  */
-public final class RemoteModelOperations implements ModelOperations {
+public final class RemoteModelOperations implements ModelOperations,
+        org.json_kula.valem.service.ChangeSubscribable {
 
     private final ValemClient client;
     private final ObjectMapper     mapper;
@@ -122,6 +123,32 @@ public final class RemoteModelOperations implements ModelOperations {
         return call(() -> client.explain(id, path)).stream()
                 .map(RemoteModelOperations::toCoreTrace)
                 .toList();
+    }
+
+    @Override
+    public JsonNode getAudit(String id, String pathPrefix, Instant from, Instant to, int limit) {
+        ValemTypes.AuditQuery query = new ValemTypes.AuditQuery(
+                blankToNull(pathPrefix), from, to, limit > 0 ? limit : null);
+        return mapper.valueToTree(call(() -> client.audit(id, query)));
+    }
+
+    @Override
+    public JsonNode verifyAudit(String id) {
+        return mapper.valueToTree(call(() -> client.verifyAudit(id)));
+    }
+
+    // ── Change streaming (ChangeSubscribable) ────────────────────────────────────
+
+    @Override
+    public AutoCloseable subscribeChanges(String modelId, java.util.function.Consumer<String> onChange) {
+        // Reconnecting WebSocket subscription; each ChangeEvent notifies with the changed model id.
+        org.json_kula.valem.client.Subscription sub =
+                client.subscribe(modelId, event -> onChange.accept(event.modelId()));
+        return sub::close;
+    }
+
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s;
     }
 
     // ── Snapshot ──────────────────────────────────────────────────────────────

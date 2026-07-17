@@ -43,8 +43,10 @@ import java.util.stream.Stream;
  */
 class ResourceRegistry {
 
-    private static final String EXAMPLES_DIR   = "examples";
-    private static final String EXAMPLE_PREFIX = "valem://examples/";
+    private static final String EXAMPLES_DIR    = "examples";
+    private static final String EXAMPLE_PREFIX  = "valem://examples/";
+    /** The uriTemplate advertised by {@code resources/templates/list} for the bundled examples. */
+    private static final String EXAMPLE_TEMPLATE = "valem://examples/{name}";
 
     private record Resource(String uri, String name, String title, String description,
                             String mimeType, Supplier<String> body) {}
@@ -76,6 +78,27 @@ class ResourceRegistry {
             "The JSON Schema for a SpecEvolution diff (used by the evolve_spec tool).",
             "application/json",
             () -> pretty(SpecGenerationSchema.specEvolution(mapper)));
+
+        add("valem://guide/jsonata-gotchas", "jsonata-gotchas",
+            "JSONata gotchas cheatsheet",
+            "The JSONata pitfalls that most often break Valem expressions (bindings, singleton arrays, "
+            + "path dialect). Skim before writing a derivation/constraint expr.",
+            "text/markdown",
+            () -> JSONATA_GOTCHAS);
+
+        add("valem://guide/spec-evolution", "spec-evolution",
+            "Spec-evolution authoring guide",
+            "How to author a SpecEvolution diff: targeted upserts vs wholesale sections, expectedVersion, "
+            + "and state-preserving schema changes. Read before calling evolve_spec.",
+            "text/markdown",
+            () -> SPEC_EVOLUTION_GUIDE);
+
+        add("valem://guide/view-system", "view-system",
+            "View-system reference",
+            "How an embedded viewDefinition maps model state to a component tree, and the shape get_view "
+            + "returns. Read before authoring or reading a view.",
+            "text/markdown",
+            () -> VIEW_SYSTEM_GUIDE);
     }
 
     // ── Transport-facing operations ───────────────────────────────────────────────
@@ -92,6 +115,30 @@ class ResourceRegistry {
                     "A ready-to-run example ModelSpec (" + name + ").",
                     "application/json"));
         }
+        return arr;
+    }
+
+    /**
+     * Builds the {@code resourceTemplates} array for a {@code resources/templates/list} response. The
+     * bundled examples are exposed as a single {@code valem://examples/{name}} uriTemplate (§3.4) —
+     * cheaper than enumerating each, and the natural pairing for a client's completions capability.
+     */
+    ArrayNode templatesNode() {
+        ArrayNode arr = mapper.createArrayNode();
+        ObjectNode ex = arr.addObject();
+        ex.put("uriTemplate", EXAMPLE_TEMPLATE);
+        ex.put("name", "example-spec");
+        ex.put("title", "Example spec by name");
+        ex.put("description", "A bundled example ModelSpec by base name (see resources/list for names).");
+        ex.put("mimeType", "application/json");
+        // A model's live merged state, readable and subscribable (§4.2): valem://state/<modelId>.
+        ObjectNode st = arr.addObject();
+        st.put("uriTemplate", "valem://state/{modelId}");
+        st.put("name", "model-state");
+        st.put("title", "Model state by id");
+        st.put("description", "A model's live merged state; subscribe to get notifications/resources/"
+                + "updated when it changes (e.g. the browser's edits in a paired session).");
+        st.put("mimeType", "application/json");
         return arr;
     }
 
@@ -210,4 +257,82 @@ class ResourceRegistry {
     private static String stripJson(String fileName) {
         return fileName.substring(0, fileName.length() - ".json".length());
     }
+
+    // ── Bundled guide bodies (§3.4) ─────────────────────────────────────────────────
+
+    private static final String JSONATA_GOTCHAS = """
+            # JSONata gotchas in Valem
+
+            Expressions (`expr` / `trigger` / meta `expr`) are JSONata, evaluated against the merged
+            document. Addresses (spec `path`, mutation keys, view `bind`) are NOT JSONata — they are
+            canonical JSON Path (`$.a.b[0]`). Do not mix the two.
+
+            - **No leading `$` in expressions.** Write `order.total`, not `$.order.total`. The `$.`
+              form is an address; inside an `expr` it means "the whole document, then field total".
+            - **Bindings available in every expression:** `$const.<name>` (named constants),
+              and in a wildcard (`$.items[*].x`) derivation `$parent` = the current array element.
+              In `defaultValues`, `$parent` = the new container's JSON parent and `$self` = its
+              caller-provided fields.
+            - **A derivation reading only `$const` never recomputes** (constants create no dependency
+              edge). Reference an input alongside it if it must react.
+            - **Singleton sequences flatten.** A path/predicate that matches exactly one node yields
+              that node, not a one-element array. Force an array with `[ ... ]` or `$append([], x)`
+              when a downstream step needs one.
+            - **Missing vs null.** A path with no match evaluates to JSONata *undefined* (nothing),
+              which drops the field — it is not `null`. Guard with `field ? a : b` or `$exists(field)`.
+            - **Same-level derivations can't see each other.** Derivations evaluate in topological
+              level order against prior levels only; two fields in the same level cannot reference one
+              another. Split into dependent levels by referencing the other field.
+            - **Constraints/effects see derived fields.** They evaluate against the merged document,
+              so `total` (a derived field) is visible in a constraint `expr`.
+            - **Verify before committing.** Use `eval_expression` (same compiler the runtime validates
+              against) for a single expr, and `test_spec` / `dry_run` for the whole reactive cascade.
+            """;
+
+    private static final String SPEC_EVOLUTION_GUIDE = """
+            # Authoring a SpecEvolution
+
+            `evolve_spec` applies an incremental diff and preserves live state — prefer it over
+            delete+recreate. Set `newVersion`; optionally set `expectedVersion` to the version you read
+            (the call fails with a Version conflict `{expected, actual}` if the model moved under you —
+            re-read and retry).
+
+            **Prefer targeted diffs over wholesale replacement** (they are mutually exclusive per
+            section within one evolution):
+
+            - **Derivations / constraints / effects / metaDerivations:** `upsert<Section>` (by path/id)
+              and `remove<Section>` lists.
+            - **Schema:** `upsertSchemaDefs` / `removeSchemaDefs` (by `$defs` name) or
+              `upsertSchemaNodes` / `removeSchemaNodes` (by canonical data path, `required` tri-state) —
+              or `newSchema` wholesale. A schema change that would strand existing state is rejected
+              (422-equivalent); `dry_run` the evolved spec against current inputs first.
+            - **View:** `upsertViews` / `removeViews` / `newDefaultView`, or `upsertComponents` /
+              `removeComponents` (by id, with `parentId` / `beforeId` placement) — or `newViewDefinition`.
+            - **Constants:** `upsertConstants` / `removeConstants` (removal blocked while `$const.<name>`
+              is still referenced) — or `newConstants`.
+
+            Unchanged expressions are carried forward and not recompiled. Additive evolutions backfill
+            new fields where absent without overwriting existing values.
+            """;
+
+    private static final String VIEW_SYSTEM_GUIDE = """
+            # View system
+
+            A spec may embed a `viewDefinition`: a tree of components describing a UI over the model.
+            `get_view` evaluates it against the current merged document and returns a renderer-agnostic
+            `EvaluatedView` (a resolved component tree), not raw view spec.
+
+            - **Components** have a `type` (container/text/field/list/…), an optional `bind` (a canonical
+              address into the model, e.g. `$.order.total`) whose value is resolved at evaluation time,
+              and children.
+            - **Named views.** A definition may hold several views; `get_view` takes an optional `viewId`
+              and falls back to the default view. Ids must be unique; a dangling `defaultView`/`itemView`
+              is rejected at write time.
+            - **Lists** render a child `itemView` per element of a bound array.
+            - Evolve a view with targeted `upsertComponents` / `removeComponents` (see the spec-evolution
+              guide) rather than resending the whole `viewDefinition`.
+
+            The full component catalog and `EvaluatedView` contract live in the published view-system
+            reference; this is the orientation an agent needs to read or author one.
+            """;
 }

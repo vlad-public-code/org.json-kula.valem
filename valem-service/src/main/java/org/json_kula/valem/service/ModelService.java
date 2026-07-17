@@ -56,7 +56,7 @@ import java.util.stream.Stream;
  * A mutation request that cannot acquire a permit (queue full) immediately throws
  * {@link MutationQueueFullException} rather than blocking indefinitely.
  */
-public class ModelService implements ModelOperations {
+public class ModelService implements ModelOperations, ChangeSubscribable {
 
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ModelService.class);
 
@@ -149,6 +149,27 @@ public class ModelService implements ModelOperations {
     }
 
     /**
+     * Read seam for the durable audit trail — the symmetric counterpart to {@link AuditSink}. Returns
+     * already-serialised {@link JsonNode} (mirroring {@link #getView}'s rationale: the audit record's
+     * durable shape lives in the persistence layer, so the service carries the resolved tree rather
+     * than coupling to that type). {@code null} reader ⇒ audit querying is unavailable (embedded with no
+     * audit wiring, or a store-less deployment).
+     */
+    public interface AuditReader {
+        /** Records touching {@code pathPrefix} within the time window, newest-first, capped at {@code limit}. */
+        JsonNode query(String modelId, String pathPrefix, Instant from, Instant to, int limit);
+        /** The audit hash-chain verification result for {@code modelId}. */
+        JsonNode verify(String modelId);
+    }
+
+    private volatile AuditReader auditReader;
+
+    /** Registers the audit read hook (or {@code null} to disable audit querying). */
+    public void setAuditReader(AuditReader reader) {
+        this.auditReader = reader;
+    }
+
+    /**
      * Appends a durable audit record under the caller-held model lock. No-op when no sink is
      * registered or the cycle produced no writes (e.g. an empty patch).
      */
@@ -179,6 +200,18 @@ public class ModelService implements ModelOperations {
     public AutoCloseable addChangeListener(ChangeListener listener) {
         changeListeners.add(listener);
         return () -> changeListeners.remove(listener);
+    }
+
+    /**
+     * {@link ChangeSubscribable}: fires {@code onChange} with the model id after each committed cycle for
+     * {@code modelId}. In embedded mode the only mutator is the caller, so this mainly closes the loop
+     * for remote/paired facades; provided uniformly so the MCP subscribe path works in every mode.
+     */
+    @Override
+    public AutoCloseable subscribeChanges(String modelId, java.util.function.Consumer<String> onChange) {
+        return addChangeListener((id, result) -> {
+            if (id.equals(modelId)) onChange.accept(id);
+        });
     }
 
     private void notifyChange(String id, ModelRuntime.MutationResult result) {
@@ -537,6 +570,39 @@ public class ModelService implements ModelOperations {
         synchronized (rt) {
             return rt.explain(path);
         }
+    }
+
+    /**
+     * Durable audit trail for a model (newest-first), filtered by an optional path prefix and time
+     * window. Returns an empty array when no {@link AuditReader} is registered.
+     *
+     * @throws ModelNotFoundException if the model does not exist
+     */
+    public JsonNode getAudit(String id, String pathPrefix, Instant from, Instant to, int limit) {
+        requireRuntime(id);   // 404 semantics parity with the REST endpoint
+        AuditReader r = auditReader;
+        if (r == null) return com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.arrayNode();
+        return r.query(id, pathPrefix, from, to, limit);
+    }
+
+    /**
+     * Verifies the tamper-evident hash chain of a model's audit trail. When no {@link AuditReader} is
+     * registered, reports a valid (empty) result flagged as unavailable.
+     *
+     * @throws ModelNotFoundException if the model does not exist
+     */
+    public JsonNode verifyAudit(String id) {
+        requireRuntime(id);
+        AuditReader r = auditReader;
+        if (r == null) {
+            ObjectNode node = com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode();
+            node.put("valid", true);
+            node.put("recordsChecked", 0);
+            node.putNull("firstBrokenSequence");
+            node.put("detail", "audit not enabled for this model");
+            return node;
+        }
+        return r.verify(id);
     }
 
     // ── Snapshot ──────────────────────────────────────────────────────────────

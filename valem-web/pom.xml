@@ -35,6 +35,13 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!-- MCP protocol core, reused by the in-server Streamable-HTTP MCP endpoint (McpHttpController). -->
+        <dependency>
+            <groupId>io.github.vlad-public-code</groupId>
+            <artifactId>valem-mcp</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- Default, turnkey persistence backends (a-la-carte swap point): memory + filesystem work
              with zero extra config. To use another backend, add its adapter jar here (e.g.
              valem-persistence-postgres) and set valem.storage.* — the PersistenceProvider
