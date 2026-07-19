@@ -264,6 +264,26 @@ public final class SpecGenerator {
             ModelSpecValidator.ValidationResult validation = ModelSpecValidator.validate(spec);
             lastErrors = validation.errors();
             if (validation.isValid()) {
+                // Initial-state gate: the freshly-created state (after "$" defaultValues) must satisfy
+                // every ROLLBACK constraint — the same check ModelService.create() applies — or the
+                // spec would 409 at POST /models. The prompt already instructs this, but models often
+                // zero-seed a field a constraint requires positive; re-prompt with the concrete
+                // violation so the retry loop repairs the defaults deterministically.
+                List<ModelSpecValidator.ValidationError> initErrors = initialStateRollbackErrors(spec);
+                if (!initErrors.isEmpty()) {
+                    lastErrors = initErrors;
+                    onProgress.accept(new LlmProgressEvent.ValidationFailed(attempts,
+                            initErrors.stream().limit(5)
+                                    .map(e -> e.location() + ": " + e.message()).toList()));
+                    nextPrompt = SpecGenerationPrompt.repairPromptParts(
+                            modelId, repairedJson, annotateErrors(initErrors), includeView);
+                    currentErrorCount = initErrors.size();
+                    if (stopAfterBaseBudget(i, currentErrorCount, prevErrorCount)) break;
+                    prevErrorCount = currentErrorCount;
+                    prompt = nextPrompt;
+                    continue;
+                }
+
                 onProgress.accept(new LlmProgressEvent.TestRunning(attempts));
                 List<TestCaseRunner.TestResult> failed = TestCaseRunner.run(spec, spec.tests())
                         .stream().filter(TestCaseRunner.TestResult::failed).toList();
@@ -318,6 +338,33 @@ public final class SpecGenerator {
     private boolean stopAfterBaseBudget(int i, int currentErrorCount, int prevErrorCount) {
         if (i + 1 < maxRetries) return false;          // still within the guaranteed base budget
         return currentErrorCount >= prevErrorCount;    // not converging → stop
+    }
+
+    /**
+     * Checks whether the freshly-created initial state (after "$" defaultValues) satisfies every
+     * ROLLBACK constraint — the same gate {@code ModelService.create()} applies via
+     * {@link ModelRuntime#initialize()}. Returns a repair-guiding error when it does not, or an empty
+     * list when the model would register cleanly. A spec that cannot be compiled/initialised here for
+     * an unrelated reason yields an empty list — structural validation already passed and the create
+     * path / embedded tests surface anything else, so this gate never blocks on non-constraint issues.
+     */
+    private List<ModelSpecValidator.ValidationError> initialStateRollbackErrors(ModelSpec spec) {
+        try {
+            CompiledModel model = ModelSpecCompiler.compile(spec);
+            ModelRuntime runtime = new ModelRuntime(model, new ModelState(model, new InMemoryBlobStore()));
+            runtime.initialize();
+            return List.of();
+        } catch (ConstraintEvaluator.ConstraintViolationException cve) {
+            return List.of(new ModelSpecValidator.ValidationError(
+                    "defaultValues",
+                    "Initial state violates rollback constraint(s) at creation: " + cve.getMessage()
+                    + ". Seed defaultValues at \"$\" so the initial state satisfies every rollback "
+                    + "constraint — e.g. a positive value for any field a constraint requires to be > 0. "
+                    + "Do NOT zero-seed such a field.",
+                    ModelSpecValidator.Severity.ERROR));
+        } catch (RuntimeException e) {
+            return List.of();
+        }
     }
 
     // ── Evolution ─────────────────────────────────────────────────────────────

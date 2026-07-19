@@ -572,6 +572,67 @@ class SpecGeneratorTest {
         assertThat(success.attemptsUsed()).isEqualTo(2);
     }
 
+    // ── Initial-state rollback gate ───────────────────────────────────────────
+
+    private static final String HEAT_SCHEMA =
+            "\"schema\": { \"type\": \"object\", \"properties\": { \"floorArea\": { \"type\": \"number\" } } },";
+    private static final String FLOOR_POSITIVE_CONSTRAINT =
+            "\"constraints\": [ { \"id\": \"floor-positive\", \"expr\": \"floorArea > 0\", "
+          + "\"message\": \"Floor area must be positive\", \"policy\": \"rollback\" } ]";
+
+    /** A structurally-valid spec whose "$" seed sets floorArea to {@code seed}. */
+    private static String heatSpec(double seed) {
+        return "{ \"id\": \"heat\", " + HEAT_SCHEMA
+             + " \"defaultValues\": [ { \"path\": \"$\", \"expr\": \"{ \\\"floorArea\\\": " + seed + " }\" } ], "
+             + FLOOR_POSITIVE_CONSTRAINT + " }";
+    }
+
+    @Test
+    void generate_retries_when_initial_state_violates_a_rollback_constraint() {
+        AtomicInteger calls = new AtomicInteger();
+        LlmClient stub = prompt -> {
+            // First attempt zero-seeds floorArea (violates floorArea > 0 at creation); then a good seed.
+            return calls.incrementAndGet() == 1 ? heatSpec(0) : heatSpec(50);
+        };
+
+        var result = new SpecGenerator(stub, MAPPER, 3).generate("heat", "house heating model");
+
+        assertThat(result).isInstanceOf(GenerationResult.Success.class);
+        var success = (GenerationResult.Success) result;
+        assertThat(success.attemptsUsed()).isEqualTo(2);
+        // The accepted spec is the one whose initial state satisfies the rollback constraint.
+        assertThat(success.spec().defaultValues().get(0).expr()).contains("50");
+    }
+
+    @Test
+    void repair_prompt_names_the_rollback_violation() {
+        AtomicInteger calls = new AtomicInteger();
+        StringBuilder secondPrompt = new StringBuilder();
+        LlmClient stub = prompt -> {
+            if (calls.incrementAndGet() == 1) return heatSpec(0);
+            secondPrompt.append(prompt);
+            return heatSpec(50);
+        };
+
+        new SpecGenerator(stub, MAPPER, 2).generate("heat", "house heating model");
+
+        assertThat(secondPrompt.toString()).contains("rollback constraint");
+        assertThat(secondPrompt.toString()).contains("Floor area must be positive");
+    }
+
+    @Test
+    void generate_accepts_first_spec_when_initial_state_satisfies_rollback_constraints() {
+        AtomicInteger calls = new AtomicInteger();
+        LlmClient stub = prompt -> { calls.incrementAndGet(); return heatSpec(50); };
+
+        var result = new SpecGenerator(stub, MAPPER, 3).generate("heat", "house heating model");
+
+        assertThat(result).isInstanceOf(GenerationResult.Success.class);
+        // No spurious retry: a satisfying initial state passes the gate on the first attempt.
+        assertThat(((GenerationResult.Success) result).attemptsUsed()).isEqualTo(1);
+        assertThat(calls.get()).isEqualTo(1);
+    }
+
     // ── Repair prompt contains error details ──────────────────────────────────
 
     @Test

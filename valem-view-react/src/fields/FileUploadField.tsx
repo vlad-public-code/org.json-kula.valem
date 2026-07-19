@@ -52,6 +52,12 @@ function FileRow({
   onRemove: () => void;
   readOnly: boolean;
 }) {
+  // Show a thumbnail for images; if the blob was GC'd server-side the <img> errors and we fall back
+  // to the plain filename link below.
+  const [thumbFailed, setThumbFailed] = useState(false);
+  const isImage = typeof blobRef.$mediaType === 'string' && blobRef.$mediaType.startsWith('image/');
+  const showThumb = isImage && !thumbFailed;
+
   return (
     <div style={{
       display: 'flex',
@@ -63,6 +69,22 @@ function FileRow({
       background: '#f9fafb',
       fontSize: 13,
     }}>
+      {showThumb && (
+        <a
+          href={blobDownloadUrl(blobRef.$blobId)}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ flexShrink: 0, display: 'flex' }}
+        >
+          <img
+            src={blobDownloadUrl(blobRef.$blobId)}
+            alt={blobRef.$fileName ?? 'uploaded image'}
+            loading="lazy"
+            onError={() => setThumbFailed(true)}
+            style={{ maxHeight: 72, maxWidth: 96, borderRadius: 4, objectFit: 'cover', display: 'block' }}
+          />
+        </a>
+      )}
       <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
         <a
           href={blobDownloadUrl(blobRef.$blobId)}

@@ -75,6 +75,7 @@ and household-driven threshold scaling.
 | `customer-satisfaction-survey.json` | Conditional field visibility (`relevant` meta) + a rollback constraint. |
 | `personal-budget-tracker.json` | Multiple named views; income-vs-spending breakdown. |
 | `energy-consumption-heating.json` | A four-level mathematical derivation pipeline. |
+| `savings-growth.json` | A compound-growth projection (`$map` over a `[0..years]` range) rendered as a live **line chart** (`dataChart`) plus a year-by-year `dataTable` — drag the return slider and the curve reshapes instantly. |
 | `daily-wellness.json` | Conditionally read-only fields; per-field gating. |
 | `support-ticket-triage.json` | All four effect executors together (`llm` classify, `server` SLA lookup, `caller` alert, `timer` auto-escalate). |
 | `world-clock.json` | A minimal, focused pair: only `server` (http) and `timer` effects composing into a **self-refreshing poll** — the http effect fetches the current date/time for a chosen country from a real public API ([timeapi.io](https://timeapi.io)), and the timer re-arms every 10s by bumping a tick the http effect is keyed to, so the clock keeps updating itself. |

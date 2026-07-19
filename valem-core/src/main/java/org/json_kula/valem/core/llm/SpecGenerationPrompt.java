@@ -184,6 +184,11 @@ public final class SpecGenerationPrompt {
                                                      // fields; $parent = its JSON parent (the array
                                                      // for an element). Use "$" to seed initial state,
                                                      // e.g. { "path": "$", "expr": "{ \\"width\\": 0 }" }.
+                                                     // IMPORTANT: the "$" seed must make the initial
+                                                     // state satisfy every rollback constraint (see the
+                                                     // INITIAL-STATE RULE under "constraints" below) —
+                                                     // seed positive/non-empty values for any field a
+                                                     // rollback constraint requires to be so.
                 }
               ],
               "derivations": [                       // computed read-only fields
@@ -224,6 +229,31 @@ public final class SpecGenerationPrompt {
                   //
                   // RULE: DEFAULT to global constraints (no path). Only add path when you
                   // explicitly need per-field dirty tracking. If you add path, use $ in expr.
+                  //
+                  // ╔══════════════════════════════════════════════════════════════════════╗
+                  // ║  INITIAL-STATE RULE — rollback constraints are evaluated against the  ║
+                  // ║  freshly-created state. A rollback constraint that fails on the       ║
+                  // ║  initial state causes 409 at create. The initial state (after your    ║
+                  // ║  "$" defaultValues are applied) MUST satisfy EVERY rollback           ║
+                  // ║  constraint.                                                          ║
+                  // ╚══════════════════════════════════════════════════════════════════════╝
+                  // If a rollback constraint requires a field to be positive / non-empty /
+                  // in-range (e.g. floorArea > 0, quantity >= 1, name != ""), you MUST seed
+                  // that field with a satisfying value via a "$" defaultValues rule — an
+                  // unseeded number defaults to 0 and an unseeded string/array to absent,
+                  // which fails such constraints and rejects creation.
+                  //   constraint  { "expr": "floorArea > 0" }
+                  //   REQUIRES     defaultValues [{ "path": "$", "expr": "{ \\"floorArea\\": 50 }" }]
+                  //
+                  // #1 CAUSE OF 409: a "$" seed that zero-initializes EVERY numeric field.
+                  // NEVER seed 0 for a field a rollback constraint requires to be positive —
+                  // seed a realistic positive value instead. It is fine to seed 0 ONLY for
+                  // fields with no positive-rollback constraint.
+                  //   WRONG: "$" seed { "floorArea": 0,  "wallHeight": 0, ... }  ← 409, floorArea>0 fails
+                  //   RIGHT: "$" seed { "floorArea": 50, "wallHeight": 2.5, ... } ← registers cleanly
+                  // Prefer policy "flag" for invariants a user is expected to fix by editing;
+                  // reserve "rollback" for hard invariants, and ALWAYS seed defaults that
+                  // satisfy every "rollback" constraint so the model registers cleanly.
                 }
               ],
               "effects": [                           // OPTIONAL: side effects run by a SHELL, not the pure core.

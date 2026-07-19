@@ -68,6 +68,27 @@ class ConsoleExamplesIntegrationTest {
         }
     }
 
+    // ── savings-growth ─────────────────────────────────────────────────────────
+
+    @Test
+    void savings_growth_spec_test_cases() throws Exception {
+        ModelSpec spec = loadSpec("savings-growth.json");
+        assertThat(spec.tests()).isNotEmpty();
+
+        for (TestCase tc : spec.tests()) {
+            Context ctx = fresh(spec);
+            applyGiven(ctx, tc.given());
+            ObjectNode state = ctx.service().getState(ctx.id(), null);
+            assertExpect(tc.description(), state, tc.expect());
+
+            // Additional: the projection covers year 0 through `years` inclusive.
+            JsonNode projection = state.path("projection");
+            assertThat(projection.isArray()).as("projection must be an array").isTrue();
+            int years = tc.given().get("$.years").asInt();
+            assertThat(projection.size()).as("projection has years+1 rows").isEqualTo(years + 1);
+        }
+    }
+
     // ── daily-wellness ────────────────────────────────────────────────────────
 
     @Test

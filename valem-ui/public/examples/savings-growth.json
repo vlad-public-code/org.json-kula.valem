@@ -1,0 +1,102 @@
+{
+  "_name": "Savings Growth Projector",
+  "_description": "Compound-growth projection over time — drag the return slider and watch a 30-year line chart re-shape instantly.",
+  "id": "savings-growth",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "initialBalance": { "type": "number", "minimum": 0 },
+      "monthlyContribution": { "type": "number", "minimum": 0 },
+      "annualReturnPct": { "type": "number", "minimum": 0, "maximum": 15 },
+      "years": { "type": "integer", "minimum": 1, "maximum": 40 },
+      "monthlyRate": { "type": "number" },
+      "projection": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "year": { "type": "integer" },
+            "contributed": { "type": "number" },
+            "balance": { "type": "number" }
+          }
+        }
+      }
+    }
+  },
+  "defaultValues": [
+    { "path": "$", "expr": "{\"initialBalance\": 10000, \"monthlyContribution\": 300, \"annualReturnPct\": 6, \"years\": 30}" }
+  ],
+  "derivations": [
+    { "path": "$.monthlyRate", "expr": "annualReturnPct / 1200" },
+    {
+      "path": "$.projection",
+      "expr": "$map([0..years], function($y) {{\"year\": $y, \"contributed\": $round(initialBalance + monthlyContribution * 12 * $y, 2), \"balance\": $round(monthlyRate = 0 ? initialBalance + monthlyContribution * 12 * $y : initialBalance * $power(1 + monthlyRate, 12 * $y) + monthlyContribution * ($power(1 + monthlyRate, 12 * $y) - 1) / monthlyRate, 2)}})"
+    }
+  ],
+  "constraints": [
+    { "id": "years-positive", "expr": "years > 0", "message": "Projection needs at least one year", "policy": "rollback" }
+  ],
+  "viewDefinition": {
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "Projection",
+        "layout": "vertical",
+        "components": [
+          { "id": "title", "type": "staticText", "text": "'Project how a balance grows with regular contributions and compound returns.'" },
+          { "id": "initialBalance", "type": "numericField", "label": "Starting balance", "bind": "$.initialBalance", "placeholder": "10000" },
+          { "id": "monthlyContribution", "type": "numericField", "label": "Monthly contribution", "bind": "$.monthlyContribution", "placeholder": "300" },
+          { "id": "annualReturnPct", "type": "sliderField", "label": "Annual return (%)", "bind": "$.annualReturnPct", "min": 0, "max": 15, "step": 0.5 },
+          { "id": "years", "type": "sliderField", "label": "Years", "bind": "$.years", "min": 1, "max": 40, "step": 1 },
+          { "id": "sep1", "type": "separatorLine" },
+          {
+            "id": "growthChart",
+            "type": "dataChart",
+            "label": "Balance vs. contributions",
+            "chartType": "line",
+            "bind": "$.projection",
+            "chartX": "year",
+            "chartSeries": [
+              { "field": "balance", "label": "Balance" },
+              { "field": "contributed", "label": "Contributed" }
+            ]
+          },
+          {
+            "id": "growthTable",
+            "type": "dataTable",
+            "label": "Year-by-year",
+            "bind": "$.projection",
+            "tableColumns": [
+              { "field": "year", "header": "Year" },
+              { "field": "contributed", "header": "Contributed" },
+              { "field": "balance", "header": "Balance" }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "$10k start, $300/mo, 6% annual return over 30 years — compound growth",
+      "given": { "$.initialBalance": 10000, "$.monthlyContribution": 300, "$.annualReturnPct": 6, "$.years": 30 },
+      "expect": {
+        "$.monthlyRate": 0.005,
+        "$.projection[0].contributed": 10000,
+        "$.projection[0].balance": 10000,
+        "$.projection[1].balance": 14317.45,
+        "$.projection[30].balance": 361580.26
+      }
+    },
+    {
+      "description": "0% return grows only by contributions",
+      "given": { "$.initialBalance": 10000, "$.monthlyContribution": 300, "$.annualReturnPct": 0, "$.years": 30 },
+      "expect": {
+        "$.projection[10].contributed": 46000,
+        "$.projection[10].balance": 46000
+      }
+    }
+  ]
+}
