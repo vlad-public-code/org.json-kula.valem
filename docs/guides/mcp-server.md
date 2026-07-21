@@ -94,8 +94,10 @@ java -jar valem-mcp-1.0.0-SNAPSHOT.jar --url https://valem.onrender.com --browse
 
 1. Ask the agent to pair (or call the `pair_browser` tool directly). The MCP mints a pairing on the
    host and prints a **verification link** plus a short **confirmation code**.
-2. Open the link in a browser. It shows an **Approve** screen — type the confirmation code the
-   agent printed (the page never displays it; only you and the agent know it), then approve.
+2. Open the link in a browser. It shows an **Approve** screen. The link the agent shows you is
+   normally the *complete* one ([RFC 8628's `verification_uri_complete`](https://www.rfc-editor.org/rfc/rfc8628#section-3.3.1)),
+   which fills the confirmation code in for you — check it matches what the agent printed, then
+   approve. If your host serves only the plain link, type the code instead.
 3. Call `pair_browser` again (it resumes the *same* pairing rather than minting a new one) if the
    first call reported `"pending"`. Once you've approved, it returns `{"status":"paired", ...}` and
    every other model tool now drives the shared session.
@@ -106,14 +108,22 @@ that transparently. `list_models` is scoped to the paired session, not the whole
 authoring tools (`validate_spec`, `eval_expression`, `test_spec`, `dry_run`) still run locally and
 need no pairing.
 
-A pairing is one-time, short-lived (a few minutes), and gated by two secrets that never appear
-together anywhere an observer could combine them: a `deviceSecret` known only to the MCP process
-(gates polling) and a `userCode` the agent prints and the human types into the Approve screen —
-the server never reveals it to the browser, and wrong-code attempts are capped, so even someone
-who intercepts the verification link cannot approve the pairing (the link itself carries neither
-secret). If the host evicts the session (idle
-timeout or redeploy) mid-loop, the browser's own local recovery copy rebuilds the model, and
-re-running `pair_browser` re-establishes the live link.
+A pairing is one-time, short-lived (a few minutes), and rests on three things. Polling is gated by a
+`deviceSecret` known only to the MCP process, so only the process that minted a pairing can collect
+its session. The `pairCode` in the verification link is 128 bits, so the link cannot be guessed. And
+the pairing is only ever established by a **human clicking Approve in their own browser** — that is
+the control that matters, and no amount of link handling replaces it.
+
+The `userCode` is a second factor on top of that. In the complete link it rides in the URL
+*fragment*, which browsers never transmit, so it cannot reach a server access log; the page reads it,
+then strips it from the address bar and history before you approve. The server never reveals it to
+the browser on its own (the peek endpoint returns only an expiry), and wrong-code attempts are
+capped. Be aware of what it does *not* buy you: the agent receives the link and the code together and
+shows you both, so if the agent's transcript leaks, both halves leak with it. The second factor
+protects the channels that leak a URL *alone* — browser history, `Referer`, a pasted link.
+
+If the host evicts the session (idle timeout or redeploy) mid-loop, the browser's own local recovery
+copy rebuilds the model, and re-running `pair_browser` re-establishes the live link.
 
 ## Register with an MCP client
 

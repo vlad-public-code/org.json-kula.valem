@@ -200,7 +200,7 @@ record EventHandler(String mutations, String navigate)
 | `dateField` | — | date picker |
 | `dateTimeField` | — | date + time picker |
 | `timeField` | — | time-only picker (HH:mm) |
-| `sliderField` | `min`, `max`, `step` | range slider; mutation sent on blur/debounce |
+| `sliderField` | `min`, `max`, `step` | range slider; dragging only updates the local draft — the mutation is sent when the thumb is released (pointer-up / key-up), or on blur/debounce as a backstop |
 | `fileUploadField` | `accept`, `multiple`, `minFiles`/`maxFiles`, `minSize`/`maxSize`, `allowedMediaTypes` | POSTs multipart to `/blobs`; stores `BlobRef` `{$blobId,$mediaType,$bytes}` in bound field. `minFiles`/`maxFiles`/`minSize`/`maxSize`/`allowedMediaTypes` fall back to a `minItems`/`maxItems`/`minSize`/`maxSize`/`allowedMediaTypes` metaDerivation on the bind path when unset on the component (`ViewEvaluator` meta-cache lookup, same pattern as `readOnly`/`required`) |
 | `countrySelector` | — | fetches from restcountries.com automatically |
 | `countryRegionSelector` | `dependsOn` | `dependsOn` = bind path of countrySelector |

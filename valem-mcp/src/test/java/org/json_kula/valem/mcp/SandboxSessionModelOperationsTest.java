@@ -34,6 +34,8 @@ class SandboxSessionModelOperationsTest {
     private final AtomicInteger pollCount = new AtomicInteger();
     private final List<String> sessionTokensSeen = new CopyOnWriteArrayList<>();
     private volatile int pendingPollsBeforeSuccess = 0;
+    /** False stands in for a host predating verification_uri_complete, which serves only the plain link. */
+    private volatile boolean serveCompleteUri = true;
 
     private static final String NAMESPACE = "nabc1234567";
     private static final String SESSION_TOKEN = "s-test-token";
@@ -50,6 +52,10 @@ class SandboxSessionModelOperationsTest {
                 String body = ("{\"pairCode\":\"" + PAIR_CODE + "\",\"deviceSecret\":\"" + DEVICE_SECRET
                         + "\",\"userCode\":\"" + USER_CODE + "\","
                         + "\"verificationUri\":\"http://example/?pair=" + PAIR_CODE + "\","
+                        + (serveCompleteUri
+                            ? "\"verificationUriComplete\":\"http://example/?pair=" + PAIR_CODE
+                              + "#c=" + USER_CODE + "\","
+                            : "")
                         + "\"expiresInSec\":600,\"intervalSec\":0}");
                 respond(ex, 200, body);
                 return;
@@ -164,6 +170,37 @@ class SandboxSessionModelOperationsTest {
         assertThat(second.status()).isEqualTo("pending");
         // Same pairing resumed — not a second mint.
         assertThat(mintCount.get()).isEqualTo(1);
+    }
+
+    @Test
+    void pairBrowser_surfacesTheOneLinkUri_soTheDeveloperOnlyHasToApprove() throws IOException {
+        pendingPollsBeforeSuccess = Integer.MAX_VALUE;
+        String baseUrl = startServer();
+        SandboxSessionModelOperations ops =
+                new SandboxSessionModelOperations(baseUrl, MAPPER, Duration.ofMillis(200));
+
+        PairResult pending = ops.pairBrowser();
+        // The complete link carries the confirmation code in its fragment (never sent to a server),
+        // and the plain link is still offered for anyone who cannot use it.
+        assertThat(pending.verificationUriComplete()).isEqualTo(
+                "http://example/?pair=" + PAIR_CODE + "#c=" + USER_CODE);
+        assertThat(pending.verificationUri()).isEqualTo("http://example/?pair=" + PAIR_CODE);
+        assertThat(pending.userCode()).isEqualTo(USER_CODE);
+    }
+
+    @Test
+    void pairBrowser_fallsBackToThePlainLink_whenTheHostDoesNotOfferACompleteOne() throws IOException {
+        pendingPollsBeforeSuccess = Integer.MAX_VALUE;
+        serveCompleteUri = false;
+        String baseUrl = startServer();
+        SandboxSessionModelOperations ops =
+                new SandboxSessionModelOperations(baseUrl, MAPPER, Duration.ofMillis(200));
+
+        PairResult pending = ops.pairBrowser();
+        assertThat(pending.verificationUriComplete()).isNull();
+        assertThat(pending.verificationUri()).isEqualTo("http://example/?pair=" + PAIR_CODE);
+        // The typed-code path stays intact: the agent still has a code to show.
+        assertThat(pending.userCode()).isEqualTo(USER_CODE);
     }
 
     // ── id namespacing transparency ──────────────────────────────────────────

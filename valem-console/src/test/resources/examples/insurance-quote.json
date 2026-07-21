@@ -132,10 +132,10 @@
         "label": "Get a Quote",
         "layout": "vertical",
         "components": [
-          { "id": "age",      "type": "numberField", "label": "Age",            "bind": "$.quote.applicant.age" },
-          { "id": "smoker",   "type": "checkbox",    "label": "Smoker",         "bind": "$.quote.applicant.smoker" },
+          { "id": "age",      "type": "numericField", "label": "Age",            "bind": "$.quote.applicant.age" },
+          { "id": "smoker",   "type": "checkboxField",    "label": "Smoker",         "bind": "$.quote.applicant.smoker" },
           { "id": "region",   "type": "textField",   "label": "Region",         "bind": "$.quote.applicant.region", "placeholder": "e.g. EU-WEST" },
-          { "id": "coverage", "type": "numberField", "label": "Coverage amount","bind": "$.quote.coverage" },
+          { "id": "coverage", "type": "numericField", "label": "Coverage amount","bind": "$.quote.coverage" },
           { "id": "sep1",     "type": "separatorLine" },
           { "id": "decision", "type": "label", "label": "Decision",             "bind": "$.quote.decision" },
           { "id": "annual",   "type": "label", "label": "Annual premium ($)",   "bind": "$.quote.annualPremium" },

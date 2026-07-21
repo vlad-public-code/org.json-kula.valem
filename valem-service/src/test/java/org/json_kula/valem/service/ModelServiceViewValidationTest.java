@@ -31,7 +31,7 @@ class ModelServiceViewValidationTest {
               "viewDefinition": {
                 "renderer": "builtin", "defaultView": "main",
                 "views": [ { "id": "main", "label": "Main", "components": [
-                    { "id": "qty", "type": "numberField", "bind": "$.qty", "label": "Qty" }
+                    { "id": "qty", "type": "numericField", "bind": "$.qty", "label": "Qty" }
                 ] } ]
               }
             }
@@ -87,7 +87,7 @@ class ModelServiceViewValidationTest {
         service.createModel(spec(VALID));
         SpecEvolution ok = MAPPER.readValue("""
                 { "upsertComponents": [
-                    { "viewId": "main", "component": { "id": "qty", "type": "numberField",
+                    { "viewId": "main", "component": { "id": "qty", "type": "numericField",
                       "bind": "$.qty", "label": "Quantity" } } ]}
                 """, SpecEvolution.class);
         ModelSpec evolved = service.evolveSpec("m", ok);

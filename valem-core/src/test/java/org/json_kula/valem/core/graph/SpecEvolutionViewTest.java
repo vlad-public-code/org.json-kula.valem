@@ -35,7 +35,7 @@ class SpecEvolutionViewTest {
                   { "id": "main", "label": "Main", "components": [
                     { "id": "title",  "type": "label", "text": "Hello" },
                     { "id": "section", "type": "fieldSet", "legend": "S", "components": [
-                      { "id": "qty", "type": "numberField", "bind": "$.qty", "label": "Qty" }
+                      { "id": "qty", "type": "numericField", "bind": "$.qty", "label": "Qty" }
                     ]},
                     { "id": "footer", "type": "label", "text": "Bye" }
                   ]}
@@ -111,7 +111,7 @@ class SpecEvolutionViewTest {
         ModelSpec evolved = diff("""
                 { "upsertComponents": [
                     { "viewId": "main", "beforeId": "footer",
-                      "component": { "id": "qty", "type": "numberField", "bind": "$.qty", "label": "Quantity" } }
+                      "component": { "id": "qty", "type": "numericField", "bind": "$.qty", "label": "Quantity" } }
                 ]}
                 """).applyTo(base(VIEW_SPEC));
         JsonNode comps = mainComponents(evolved);

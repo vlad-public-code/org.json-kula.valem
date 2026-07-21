@@ -329,7 +329,7 @@ class McpServerTest {
                 if (waitForCancel) { try { Thread.sleep(20); } catch (InterruptedException e) { break; } }
             }
             return returnPaired ? PairResult.paired("ns-1")
-                    : PairResult.pending("http://x/?pair=CODE", "WXYZ-1234", 600);
+                    : PairResult.pending("http://x/?pair=CODE", "http://x/?pair=CODE#c=WXYZ-1234", "WXYZ-1234", 600);
         }
     }
 
