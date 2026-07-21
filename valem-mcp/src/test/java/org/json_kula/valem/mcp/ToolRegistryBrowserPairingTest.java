@@ -22,7 +22,7 @@ class ToolRegistryBrowserPairingTest {
 
     /** A minimal ModelOperations that ALSO implements BrowserPairable, standing in for the real facade. */
     private static final class FakePairableOperations extends ModelService implements BrowserPairable {
-        private PairResult next = PairResult.pending("http://x/?pair=CODE", "WXYZ-1234", 600);
+        private PairResult next = PairResult.pending("http://x/?pair=CODE", "http://x/?pair=CODE#c=WXYZ-1234", "WXYZ-1234", 600);
 
         FakePairableOperations() { super(new ModelRegistry(), new InMemoryBlobStore()); }
 

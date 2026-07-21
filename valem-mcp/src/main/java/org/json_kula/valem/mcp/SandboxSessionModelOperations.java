@@ -65,7 +65,18 @@ final class SandboxSessionModelOperations implements ModelOperations, BrowserPai
     private volatile PendingPairing pending;
 
     private record PendingPairing(String pairCode, String deviceSecret, String userCode,
-                                  String verificationUri, Instant expiresAt, int intervalSec) {}
+                                  String verificationUri, String verificationUriComplete,
+                                  Instant expiresAt, int intervalSec) {
+
+        /**
+         * The link to put in front of the developer: the one-link form when the host offers it (RFC
+         * 8628 {@code verification_uri_complete} — nothing to type), otherwise the plain one.
+         */
+        String bestUri() {
+            return verificationUriComplete != null && !verificationUriComplete.isBlank()
+                    ? verificationUriComplete : verificationUri;
+        }
+    }
 
     // Exactly three outcomes — the factories keep an impossible paired-and-failed state
     // unconstructible (mirrors PairResult's style).
@@ -134,9 +145,10 @@ final class SandboxSessionModelOperations implements ModelOperations, BrowserPai
             }
             // authorization_pending. Hand the verification link to the developer out-of-band via URL-mode
             // elicitation when the client supports it (the handle dedupes, so this fires at most once).
-            progress.elicitUrl(p.verificationUri(),
-                    "Open this link in your browser and enter code " + p.userCode()
-                    + " to approve pairing this agent with your Valem sandbox session.");
+            progress.elicitUrl(p.bestUri(),
+                    "Open this link in your browser and click Approve to pair this agent with your "
+                    + "Valem sandbox session. The confirmation code shown there should read "
+                    + p.userCode() + ".");
             // keep polling until the local budget/TTL lapses or the client cancels.
             if (progress.cancelled() || !Instant.now().isBefore(deadline)) break;
             long elapsed = Math.min(budgetSec, Duration.between(start, Instant.now()).toSeconds());
@@ -145,7 +157,8 @@ final class SandboxSessionModelOperations implements ModelOperations, BrowserPai
             if (!sleepChecking(Math.max(1, p.intervalSec()) * 1000L, progress)) break;   // cancelled
         }
         long remaining = Math.max(0, Duration.between(Instant.now(), p.expiresAt()).toSeconds());
-        return PairResult.pending(p.verificationUri(), p.userCode(), remaining);
+        return PairResult.pending(p.verificationUri(), p.verificationUriComplete(),
+                p.userCode(), remaining);
     }
 
     /**
@@ -168,7 +181,7 @@ final class SandboxSessionModelOperations implements ModelOperations, BrowserPai
         JsonNode resp = postJson("/sandbox/pair", null);
         return new PendingPairing(
                 text(resp, "pairCode"), text(resp, "deviceSecret"), text(resp, "userCode"),
-                text(resp, "verificationUri"),
+                text(resp, "verificationUri"), text(resp, "verificationUriComplete"),
                 Instant.now().plusSeconds(resp.path("expiresInSec").asLong(600)),
                 resp.path("intervalSec").asInt(3));
     }
