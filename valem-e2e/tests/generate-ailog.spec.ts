@@ -43,7 +43,7 @@ test.describe('Generate panel', () => {
 
     await page.getByLabel('Model ID').fill(modelId);
     await page.getByLabel('Domain Description').fill('A simple counter model.');
-    await page.getByRole('button', { name: 'Preview Prompt →' }).click();
+    await page.getByRole('button', { name: 'Preview Prompt' }).click();
 
     // The assembled prompt must contain the model ID and the domain description
     const textarea = page.locator('textarea');
@@ -60,7 +60,7 @@ test.describe('Generate panel', () => {
 
     await page.getByLabel('Model ID').fill(modelId);
     await page.getByLabel('Domain Description').fill('A counter model.');
-    await page.getByRole('button', { name: 'Preview Prompt →' }).click();
+    await page.getByRole('button', { name: 'Preview Prompt' }).click();
     await page.getByRole('button', { name: 'Send to LLM →' }).click();
 
     // A real LLM call — allow generous time for spec generation to reach the "generated" phase.
@@ -76,7 +76,7 @@ test.describe('Generate panel', () => {
 
     await page.getByLabel('Model ID').fill(modelId);
     await page.getByLabel('Domain Description').fill('A counter model.');
-    await page.getByRole('button', { name: 'Preview Prompt →' }).click();
+    await page.getByRole('button', { name: 'Preview Prompt' }).click();
     await page.getByRole('button', { name: 'Send to LLM →' }).click();
     await expect(page.getByRole('button', { name: 'Register Model' })).toBeVisible({ timeout: 60_000 });
 
@@ -93,7 +93,7 @@ test.describe('Generate panel', () => {
 
     await page.getByLabel('Model ID').fill(modelId);
     await page.getByLabel('Domain Description').fill('A counter.');
-    await page.getByRole('button', { name: 'Preview Prompt →' }).click();
+    await page.getByRole('button', { name: 'Preview Prompt' }).click();
 
     await page.getByRole('button', { name: '← Back' }).click();
 
@@ -156,10 +156,11 @@ test.describe('AI Interaction Log', () => {
     const okBadge = page.locator('.card').filter({ hasText: 'OK' }).first();
     await expect(okBadge).toBeVisible({ timeout: 10_000 });
 
-    // Expand the entry and verify prompt + response are shown
+    // Expand the entry and verify prompt + response are shown. Exact match — the prompt/response
+    // <pre> bodies also contain the words "Prompt"/"Response" and would otherwise match too.
     await okBadge.click();
-    await expect(page.getByText('Prompt')).toBeVisible();
-    await expect(page.getByText('Response')).toBeVisible();
+    await expect(page.getByText('Prompt', { exact: true })).toBeVisible();
+    await expect(page.getByText('Response', { exact: true })).toBeVisible();
 
     // Prompt should mention the model ID
     const promptPre = page.locator('pre').first();

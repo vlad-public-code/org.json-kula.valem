@@ -94,6 +94,13 @@ The UI proxies `/models` and `/blobs` (and WebSocket) to the backend, which must
 mvn test                      # all modules
 mvn test -pl valem-core  # faster, no Spring context
 ```
-Browser E2E (Playwright) lives in `valem-e2e` (backend must be on :8080).
+Browser E2E (Playwright) lives in `valem-e2e` (backend must be on :8080). The UI is served from the
+Vite dev server (:5173) while the API answers on :8080, so a WebSocket handshake's `Origin` header
+is `http://localhost:5173` even though the proxy makes REST calls look same-origin. `WebSocketConfig`
+defaults to same-origin only and silently rejects that handshake (visible as `ws proxy socket error`
+in the Vite log), which breaks every e2e scenario that asserts a live push rather than relying on
+the UI's own optimistic update. Start the backend with
+`VALEM_WEBSOCKET_ALLOWED_ORIGINS=http://localhost:5173` (or `-Dvalem.websocket.allowed-origins=...`)
+before running the e2e suite.
 
 Next: [deployment-and-operations.md](deployment-and-operations.md) for persistence and production config.

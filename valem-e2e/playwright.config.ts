@@ -3,6 +3,10 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
+  // All spec files share one backend (:8080) and one Vite dev server; running files across
+  // multiple workers causes real resource contention (cold JSONata->Java compiles, LLM
+  // serialization) that manifests as spurious timeouts, not app bugs.
+  workers: 1,
   timeout: 30_000,
   expect: { timeout: 10_000 },
   reporter: [['list'], ['html', { open: 'never' }]],

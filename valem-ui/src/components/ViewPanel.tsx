@@ -124,6 +124,14 @@ export default function ViewPanel({ modelId }: Props) {
       ws = new WebSocket(buildSubscribeUrl(modelId));
       wsRef.current = ws;
 
+      // Resync on every (re)connect: a broadcast that lands while the socket is down (dropped
+      // connection, proxy hiccup) would otherwise go unnoticed forever, since onmessage is the
+      // only other trigger for a refetch and there's nothing to replay a missed one.
+      ws.onopen = () => {
+        loadState();
+        loadMeta();
+      };
+
       ws.onmessage = (e: MessageEvent) => {
         let kind = 'mutation';
         try {

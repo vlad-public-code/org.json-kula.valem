@@ -40,8 +40,10 @@ test.describe('State tab', () => {
 
     await openModel(page, modelId);
 
-    // total = 5 * 3 = 15, should appear in merged state
-    await expect(page.getByText('15')).toBeVisible();
+    // total = 5 * 3 = 15, should appear in merged state. Scoped to the JSON viewer — a plain
+    // page-wide getByText('15') can also match digits inside another model's timestamped id
+    // in the sidebar list.
+    await expect(page.locator('.json-viewer').getByText('15', { exact: true })).toBeVisible();
   });
 
   test('Take Snapshot shows snapshot/restore area', async ({ page }) => {
