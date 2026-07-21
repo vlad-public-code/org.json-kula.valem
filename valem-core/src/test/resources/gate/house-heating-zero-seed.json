@@ -1,0 +1,156 @@
+{
+  "id" : "house-heating-energy",
+  "version" : "1.0.0",
+  "schema" : {
+    "type" : "object",
+    "properties" : {
+      "floorArea" : {
+        "type" : "number"
+      },
+      "roofArea" : {
+        "type" : "number"
+      },
+      "wallHeight" : {
+        "type" : "number"
+      },
+      "glazingArea" : {
+        "type" : "number"
+      },
+      "wallUValue" : {
+        "type" : "number"
+      },
+      "ceilingUValue" : {
+        "type" : "number"
+      },
+      "glassUnit" : {
+        "type" : "string",
+        "enum" : [ "single", "double", "triple" ]
+      },
+      "outsideTemp" : {
+        "type" : "number"
+      },
+      "insideTemp" : {
+        "type" : "number"
+      },
+      "glazingUValue" : {
+        "type" : "number",
+        "readOnly" : true
+      },
+      "perimeterWallArea" : {
+        "type" : "number",
+        "readOnly" : true
+      },
+      "heatLossWalls" : {
+        "type" : "number",
+        "readOnly" : true
+      },
+      "heatLossRoof" : {
+        "type" : "number",
+        "readOnly" : true
+      },
+      "heatLossGlazing" : {
+        "type" : "number",
+        "readOnly" : true
+      },
+      "totalHeatLoss" : {
+        "type" : "number",
+        "readOnly" : true
+      },
+      "requiredHeatingPower" : {
+        "type" : "number",
+        "readOnly" : true
+      },
+      "annualEnergyConsumption" : {
+        "type" : "number",
+        "readOnly" : true
+      }
+    },
+    "required" : [ "floorArea", "roofArea", "wallHeight", "glazingArea", "wallUValue", "ceilingUValue", "glassUnit", "outsideTemp", "insideTemp" ]
+  },
+  "derivations" : [ {
+    "path" : "$.glazingUValue",
+    "expr" : "$const.glazingUValues[glassUnit]",
+    "evaluation" : "eager"
+  }, {
+    "path" : "$.perimeterWallArea",
+    "expr" : "4 * $sqrt(floorArea) * wallHeight",
+    "evaluation" : "eager"
+  }, {
+    "path" : "$.heatLossWalls",
+    "expr" : "perimeterWallArea * wallUValue * (insideTemp - outsideTemp)",
+    "evaluation" : "eager"
+  }, {
+    "path" : "$.heatLossRoof",
+    "expr" : "roofArea * ceilingUValue * (insideTemp - outsideTemp)",
+    "evaluation" : "eager"
+  }, {
+    "path" : "$.heatLossGlazing",
+    "expr" : "glazingArea * glazingUValue * (insideTemp - outsideTemp)",
+    "evaluation" : "eager"
+  }, {
+    "path" : "$.totalHeatLoss",
+    "expr" : "heatLossWalls + heatLossRoof + heatLossGlazing",
+    "evaluation" : "eager"
+  }, {
+    "path" : "$.requiredHeatingPower",
+    "expr" : "totalHeatLoss / 1000",
+    "evaluation" : "eager"
+  }, {
+    "path" : "$.annualEnergyConsumption",
+    "expr" : "totalHeatLoss * $const.heatingHoursPerYear / 1000",
+    "evaluation" : "eager"
+  } ],
+  "metaDerivations" : [ ],
+  "constraints" : [ {
+    "id" : "positive-floor-area",
+    "expr" : "floorArea > 0",
+    "message" : "Floor area must be positive",
+    "policy" : "rollback"
+  }, {
+    "id" : "non-negative-temperature-delta",
+    "expr" : "(insideTemp - outsideTemp) >= 0",
+    "message" : "Inside temperature must be greater than or equal to outside temperature",
+    "policy" : "rollback"
+  } ],
+  "tests" : [ {
+    "description" : "Calculate glazing U-value for double-glazed unit",
+    "given" : {
+      "$.glassUnit" : "double"
+    },
+    "expect" : {
+      "$.glazingUValue" : 2.8
+    }
+  }, {
+    "description" : "Calculate annual energy consumption for a sample house",
+    "given" : {
+      "$.ceilingUValue" : 0.2,
+      "$.wallUValue" : 0.3,
+      "$.roofArea" : 120,
+      "$.wallHeight" : 2.5,
+      "$.outsideTemp" : 5,
+      "$.floorArea" : 100,
+      "$.insideTemp" : 20,
+      "$.glazingArea" : 20,
+      "$.glassUnit" : "double"
+    },
+    "expect" : {
+      "$.annualEnergyConsumption" : 5010
+    }
+  } ],
+  "defaultValues" : [ {
+    "path" : "$",
+    "expr" : "{ \"floorArea\": 0, \"roofArea\": 0, \"wallHeight\": 0, \"glazingArea\": 0, \"wallUValue\": 0, \"ceilingUValue\": 0, \"glassUnit\": \"double\", \"outsideTemp\": 0, \"insideTemp\": 20 }"
+  } ],
+  "constants" : {
+    "heatingHoursPerYear" : 5000,
+    "glazingUValues" : {
+      "single" : 5.8,
+      "double" : 2.8,
+      "triple" : 1.1
+    }
+  },
+  "viewDefinition" : null,
+  "effects" : [ ],
+  "template" : null,
+  "lineage" : [ ]
+}
