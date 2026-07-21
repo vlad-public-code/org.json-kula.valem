@@ -95,8 +95,8 @@ class ResourceRegistry {
 
         add("valem://guide/view-system", "view-system",
             "View-system reference",
-            "How an embedded viewDefinition maps model state to a component tree, and the shape get_view "
-            + "returns. Read before authoring or reading a view.",
+            "How an embedded viewDefinition maps model state to a component tree, the full catalog of "
+            + "legal component types, and the shape get_view returns. Read before authoring a view.",
             "text/markdown",
             () -> VIEW_SYSTEM_GUIDE);
     }
@@ -322,7 +322,7 @@ class ResourceRegistry {
             `get_view` evaluates it against the current merged document and returns a renderer-agnostic
             `EvaluatedView` (a resolved component tree), not raw view spec.
 
-            - **Components** have a `type` (container/text/field/list/…), an optional `bind` (a canonical
+            - **Components** have a `type` from the closed catalog below, an optional `bind` (a canonical
               address into the model, e.g. `$.order.total`) whose value is resolved at evaluation time,
               and children.
             - **Named views.** A definition may hold several views; `get_view` takes an optional `viewId`
@@ -332,7 +332,60 @@ class ResourceRegistry {
             - Evolve a view with targeted `upsertComponents` / `removeComponents` (see the spec-evolution
               guide) rather than resending the whole `viewDefinition`.
 
-            The full component catalog and `EvaluatedView` contract live in the published view-system
-            reference; this is the orientation an agent needs to read or author one.
+            ## Component catalog (closed set — `validate_spec` rejects anything else)
+
+            Types are **camelCase** and exact. There is no `text`, `number-input`, `input`, `container`
+            or `list` type; the near-miss names are called out below.
+
+            **Fields** (need `bind`; `label`, `placeholder`, `helperText`, `tooltip`, `onChange` apply
+            to all of them):
+
+            | `type` | Extra fields |
+            |---|---|
+            | `textField` | — |
+            | `textAreaField` | `rows` |
+            | `numericField` | — (this is the number input) |
+            | `passwordField` | — |
+            | `emailField` | — |
+            | `phoneNumberField` | — |
+            | `checkboxField` | — (boolean) |
+            | `toggleField` | — (boolean switch) |
+            | `selectField` | `options`, `optionsExpr` |
+            | `radioField` | `options`, `optionsExpr` |
+            | `multiSelectField` | `options`, `optionsExpr` |
+            | `dateField` / `dateTimeField` / `timeField` | — |
+            | `sliderField` | `min`, `max`, `step` |
+            | `fileUploadField` | `accept`, `multiple`, `minFiles`/`maxFiles`, `minSize`/`maxSize` |
+            | `countrySelector` | — |
+            | `countryRegionSelector` | `dependsOn` (bind path of a `countrySelector`) |
+
+            **Output** (read-only):
+
+            | `type` | Extra fields |
+            |---|---|
+            | `label` | `text`, or `bind` to show a value |
+            | `staticText` | `text` (this is the literal-text component) |
+            | `badge` | `text`, `variant` |
+            | `separatorLine` | — |
+            | `dataTable` | `bind` (array), `tableColumns`, `pageSize` |
+            | `dataChart` | `bind` (array), `chartType`, `chartX`, `chartSeries` |
+            | `progressBar` | `bind`, `min`, `max`, `showValue`, `format` |
+
+            **Containers and actions:**
+
+            | `type` | Key fields |
+            |---|---|
+            | `group` | `layout`, `columns`, `components` (this is the generic container) |
+            | `fieldSet` | `legend`, `components` |
+            | `sectionList` | `bind` (array), `itemView`, `canAdd`, `canRemove` (this is the list) |
+            | `sectionItem` | `bind`, `components` |
+            | `button` | `label`, `variant`, `icon`, `onClick` |
+            | `menu` | `menuItems`, `orientation` |
+
+            Run `validate_spec` before `create_model` — an unknown `type` is reported there with the
+            closest legal spelling, whereas an unvalidated one renders as an error box in the UI.
+
+            The `EvaluatedView` contract and the per-component evaluation rules live in the published
+            view-system reference.
             """;
 }

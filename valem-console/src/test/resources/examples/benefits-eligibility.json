@@ -108,9 +108,9 @@
         "label": "Check Eligibility",
         "layout": "vertical",
         "components": [
-          { "id": "income",    "type": "numberField", "label": "Annual household income ($)", "bind": "$.application.income" },
-          { "id": "household", "type": "numberField", "label": "Household size",              "bind": "$.application.householdSize" },
-          { "id": "age",       "type": "numberField", "label": "Age",                          "bind": "$.application.age" },
+          { "id": "income",    "type": "numericField", "label": "Annual household income ($)", "bind": "$.application.income" },
+          { "id": "household", "type": "numericField", "label": "Household size",              "bind": "$.application.householdSize" },
+          { "id": "age",       "type": "numericField", "label": "Age",                          "bind": "$.application.age" },
           { "id": "sep1",      "type": "separatorLine" },
           { "id": "poverty",   "type": "label", "label": "Poverty line ($)",     "bind": "$.application.povertyLine" },
           { "id": "ratio",     "type": "label", "label": "Income ratio",         "bind": "$.application.incomeRatio" },

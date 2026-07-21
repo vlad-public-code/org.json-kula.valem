@@ -4,7 +4,7 @@ import type { BaseComponentProps } from '../ComponentRenderer';
 
 export function SliderField({ component: c, enabled, readOnly, required }: BaseComponentProps) {
   const { state } = useViewContext();
-  const { draft, schedule, handleBlur } = useDeferredMutate(c.bind, state);
+  const { draft, schedule, handleBlur, commit } = useDeferredMutate(c.bind, state);
 
   const min = c.min ?? 0;
   const max = c.max ?? 100;
@@ -35,6 +35,12 @@ export function SliderField({ component: c, enabled, readOnly, required }: BaseC
               schedule(e.target.value, n);
             }
           }}
+          // Dragging fires onChange per pixel, so the drag only schedules; releasing the thumb is the
+          // real "I meant this value" signal and commits immediately, so dependent derivations
+          // recompute without the user having to move focus away. Pointer events cover mouse, touch
+          // and pen; onKeyUp covers arrow-key nudges; onBlur remains the backstop.
+          onPointerUp={commit}
+          onKeyUp={commit}
           onBlur={handleBlur}
         />
         <span style={{ fontSize: 13, fontWeight: 500, minWidth: 36, textAlign: 'right' }}>

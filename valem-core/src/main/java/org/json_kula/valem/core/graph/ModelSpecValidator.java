@@ -14,6 +14,7 @@ import org.json_kula.valem.core.model.MetaDerivationSpec;
 import org.json_kula.valem.core.model.ModelCoordinate;
 import org.json_kula.valem.core.model.ModelSpec;
 import org.json_kula.valem.core.model.TargetSpec;
+import org.json_kula.valem.core.model.ViewComponentTypes;
 import org.json_kula.valem.core.state.PathConverter;
 import org.json_kula.valem.core.util.SemVer;
 
@@ -247,6 +248,7 @@ public final class ModelSpecValidator {
             }
             Set<String> componentIds = new LinkedHashSet<>();
             collectComponentIds(view.get("components"), vid, componentIds, out);
+            checkComponentTypes(view.get("components"), vid, out);
         }
 
         String defaultView = textField(vd, "defaultView");
@@ -270,6 +272,35 @@ public final class ModelSpecValidator {
                         "Duplicate component id in view '" + viewId + "': " + id));
             }
             collectComponentIds(c.get("components"), viewId, ids, out);
+        }
+    }
+
+    /**
+     * Rejects a component whose {@code type} is missing or outside {@link ViewComponentTypes#ALL}.
+     *
+     * <p>Without this, an unknown type survives every server-side check — {@code ViewEvaluator}
+     * funnels it into {@code EvaluatedBasicInput} via its permissive {@code default} branch — and the
+     * author only finds out when the renderer paints an "Unknown component type" box. The message
+     * carries the full vocabulary because its primary reader is an agent that has to fix the spec
+     * without a docs round-trip.
+     */
+    private static void checkComponentTypes(
+            com.fasterxml.jackson.databind.JsonNode components, String viewId, List<ValidationError> out) {
+        if (components == null || !components.isArray()) return;
+        for (com.fasterxml.jackson.databind.JsonNode c : components) {
+            String loc = "viewDefinition.views." + viewId
+                    + (textField(c, "id") != null ? "." + textField(c, "id") : "");
+            String type = textField(c, "type");
+            if (type == null) {
+                out.add(error(loc, "component is missing its 'type'. Allowed types: "
+                        + ViewComponentTypes.allAsList()));
+            } else if (!ViewComponentTypes.isKnown(type)) {
+                String suggestion = ViewComponentTypes.suggest(type);
+                out.add(error(loc, "Unknown component type '" + type + "'"
+                        + (suggestion != null ? " — did you mean '" + suggestion + "'?" : "")
+                        + " Allowed types: " + ViewComponentTypes.allAsList()));
+            }
+            checkComponentTypes(c.get("components"), viewId, out);
         }
     }
 

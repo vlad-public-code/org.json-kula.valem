@@ -68,6 +68,12 @@ export function useDeferredMutate(bind: string | undefined, state: ModelState) {
 
   const handleBlur = useCallback(() => flush(), [flush]);
 
+  // `commit` is the same flush under a name that reads correctly at a non-blur boundary — a slider
+  // thumb released, a picker closed. Dragging fires onChange continuously, so those inputs schedule
+  // while interacting and commit the moment the gesture ends, rather than making the user click
+  // elsewhere to see dependent fields recompute.
+  const commit = flush;
+
   useEffect(
     () => () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -75,5 +81,5 @@ export function useDeferredMutate(bind: string | undefined, state: ModelState) {
     [],
   );
 
-  return { draft, schedule, handleBlur };
+  return { draft, schedule, handleBlur, commit };
 }
