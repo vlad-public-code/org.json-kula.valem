@@ -16,42 +16,63 @@ docs, the site is the comfortable way (nav, search, rendered diagrams); the file
 source of truth either way. This README is not part of the site navigation — the site's front
 door is [index.md](index.md).
 
-> **Scope.** These docs describe the **as-built, open** Valem runtime: `reference/` and
-> `architecture/` document how the shipped system works; `guides/` are task-oriented how-tos.
-> Nothing here is a proposal or a plan.
+> **Scope.** These docs describe the **as-built, open** Valem runtime. `reference/` documents the
+> interfaces as shipped, `model-guide/` explains how they behave, `deployment/` and `extending/`
+> cover running and embedding it. Nothing here is a proposal or a plan.
+
+---
+
+## The six chapters
+
+| Chapter | For | Contents |
+|---|---|---|
+| [getting-started/](getting-started/index.md) | First contact | [what-is-valem.md](getting-started/what-is-valem.md), [sandbox.md](getting-started/sandbox.md), [quickstart.md](getting-started/quickstart.md), [connect-your-agent.md](getting-started/connect-your-agent.md) |
+| [usage-scenarios/](usage-scenarios/index.md) | "Does this fit my project?" | [agent-state.md](usage-scenarios/agent-state.md), [rules-and-calculations.md](usage-scenarios/rules-and-calculations.md), [workflows-and-effects.md](usage-scenarios/workflows-and-effects.md), [model-driven-ui.md](usage-scenarios/model-driven-ui.md), [examples-gallery.md](usage-scenarios/examples-gallery.md) |
+| [model-guide/](model-guide/index.md) | Authoring models | [anatomy.md](model-guide/anatomy.md), [reactive-pipeline.md](model-guide/reactive-pipeline.md), [effects.md](model-guide/effects.md), [views.md](model-guide/views.md), [composition-and-branching.md](model-guide/composition-and-branching.md), [generating-specs-with-llm.md](model-guide/generating-specs-with-llm.md) |
+| [reference/](reference/index.md) | Looking things up | [model-spec-format.md](reference/model-spec-format.md), [api-reference.md](reference/api-reference.md), [mcp-tools.md](reference/mcp-tools.md), [llm-prompts.md](reference/llm-prompts.md), [view-system.md](reference/view-system.md) |
+| [deployment/](deployment/index.md) | Running it | [web-api.md](deployment/web-api.md), [mcp-server.md](deployment/mcp-server.md), [configuration.md](deployment/configuration.md), [operations.md](deployment/operations.md), [security-model.md](deployment/security-model.md) |
+| [extending/](extending/index.md) | Building on it | [embedding.md](extending/embedding.md), [client-sdks.md](extending/client-sdks.md), [architecture.md](extending/architecture.md), [reactive-engine.md](extending/reactive-engine.md) |
+
+Standalone: [glossary.md](glossary.md) · [libraries.md](libraries.md)
 
 ---
 
 ## Start here by task
 
 **Evaluate Valem / run it for the first time:**
-- [guides/getting-started.md](guides/getting-started.md) — run the console, backend, and UI from source
-- [getting-started.md](getting-started.md) — use Valem as a Maven dependency in your own project
-- [guides/examples-gallery.md](guides/examples-gallery.md) — ready-to-run model specs (start with the insurance-quote model)
+- [getting-started/what-is-valem.md](getting-started/what-is-valem.md) — the idea in five minutes
+- [getting-started/sandbox.md](getting-started/sandbox.md) — the hosted demo, no install
+- [getting-started/quickstart.md](getting-started/quickstart.md) — run the console, backend, and UI from source
+- [usage-scenarios/examples-gallery.md](usage-scenarios/examples-gallery.md) — ready-to-run model specs
 
 **Integrate against a running server:**
 - [reference/api-reference.md](reference/api-reference.md) — REST, WebSocket, console protocol (single source of truth)
-- [guides/client-sdks.md](guides/client-sdks.md) — typed TypeScript + Java clients
-- [guides/composition-and-branching.md](guides/composition-and-branching.md) — links between models, branching, promotion
+- [extending/client-sdks.md](extending/client-sdks.md) — typed TypeScript + Java clients
+- [model-guide/composition-and-branching.md](model-guide/composition-and-branching.md) — links between models, branching, promotion
 
 **Author or generate specs** (human or LLM):
+- [model-guide/anatomy.md](model-guide/anatomy.md) — the sections of a spec and the two path dialects
 - [reference/model-spec-format.md](reference/model-spec-format.md) — the ModelSpec format (canonical)
-- [guides/effects.md](guides/effects.md) — built-in effect executors + writing a custom effect kind
-- [guides/generating-specs-with-llm.md](guides/generating-specs-with-llm.md) — LLM-driven generation
+- [model-guide/effects.md](model-guide/effects.md) — built-in effect executors + writing a custom effect kind
+- [model-guide/generating-specs-with-llm.md](model-guide/generating-specs-with-llm.md) — LLM-driven generation
 - [reference/llm-prompts.md](reference/llm-prompts.md) — exact prompts sent to the LLM
 
 **Drive Valem from an AI agent session:**
-- [guides/mcp-server.md](guides/mcp-server.md) — the MCP server: 16 tools + spec-format resources over stdio
+- [deployment/mcp-server.md](deployment/mcp-server.md) — install and run the MCP server (3 modes)
+- [reference/mcp-tools.md](reference/mcp-tools.md) — the tools, resources, and protocol details
+- [getting-started/connect-your-agent.md](getting-started/connect-your-agent.md) — pairing an agent with a browser tab
 - `CLAUDE.md` (repo root) — build commands, module map, and coding conventions for agents working on this codebase
 
 **Deploy and operate:**
-- [guides/deployment-and-operations.md](guides/deployment-and-operations.md) — run modes, persistence, blobs
-- [reference/configuration.md](reference/configuration.md) — every `valem.*` property (single source of truth)
-- [reference/security-model.md](reference/security-model.md) — auth, effect egress/SSRF guard, limits
+- [deployment/web-api.md](deployment/web-api.md) — run the Spring Boot deployable
+- [deployment/operations.md](deployment/operations.md) — run modes, persistence, blobs
+- [deployment/configuration.md](deployment/configuration.md) — every `valem.*` property (single source of truth)
+- [deployment/security-model.md](deployment/security-model.md) — auth, effect egress/SSRF, limits
 
 **Understand or change the runtime:**
-- [architecture/overview.md](architecture/overview.md) — component map, data flow, key design decisions
-- [architecture/reactive-engine.md](architecture/reactive-engine.md) — dependency graph + reactive algorithm internals
+- [extending/embedding.md](extending/embedding.md) — depend on the modules from your own project
+- [extending/architecture.md](extending/architecture.md) — component map, data flow, key design decisions
+- [extending/reactive-engine.md](extending/reactive-engine.md) — dependency graph + reactive algorithm internals
 - [glossary.md](glossary.md) — canonical definitions of core terms
 
 ---
@@ -80,35 +101,50 @@ plain language, watch an LLM generate a ModelSpec, then mutate fields and see it
 ```
 docs/                          ← doc tree + Jekyll source of the published site
   README.md                    ← this index (GitHub-facing; excluded from site nav)
+  index.md                     ← site home
   glossary.md                  ← canonical definitions of core terms
   libraries.md                 ← third-party libraries and what each is used for
 
-  guides/                      ← task-oriented
-    getting-started.md         ← run console / backend / UI from source
+  getting-started/             ← first contact
+    what-is-valem.md           ← the idea in five minutes
+    sandbox.md                 ← the hosted demo, end to end
+    quickstart.md              ← run console / backend / UI from source
+    connect-your-agent.md      ← MCP browser pairing: agent + human, one session
+
+  usage-scenarios/             ← where Valem fits in a project
+    agent-state.md             ← structured state for AI agents
+    rules-and-calculations.md  ← pricing / quoting / eligibility as data
+    workflows-and-effects.md   ← effect-driven workflows and integrations
+    model-driven-ui.md         ← UIs generated from the model
     examples-gallery.md        ← ready-to-run specs
-    effects.md                 ← built-in effect executors + custom effect kinds
-    client-sdks.md             ← TS + Java clients
-    mcp-server.md              ← drive Valem over MCP
+
+  model-guide/                 ← how models work (explanatory)
+    anatomy.md                 ← spec sections; addresses vs expressions
+    reactive-pipeline.md       ← the mutation pipeline and its guarantees
+    effects.md                 ← built-in executors + custom effect kinds
+    views.md                   ← viewDefinition and its evaluation
     composition-and-branching.md
     generating-specs-with-llm.md
-    deployment-and-operations.md
 
-  reference/                   ← authoritative, as-built
+  reference/                   ← authoritative, as-built interfaces
     model-spec-format.md       ← the ModelSpec format (single source of truth)
     api-reference.md           ← REST + WebSocket + console
-    configuration.md           ← all valem.* properties
-    view-system.md             ← view definitions + evaluator + renderer
+    mcp-tools.md               ← MCP tools, resources, protocol
     llm-prompts.md             ← prompt structure and repair loop
+    view-system.md             ← view definitions + evaluator + renderer
+
+  deployment/                  ← running it
+    web-api.md                 ← the valem-web Spring Boot deployable
+    mcp-server.md              ← the valem-mcp jar: embedded / remote / paired
+    configuration.md           ← all valem.* properties
+    operations.md              ← run modes, persistence, blobs, audit
     security-model.md          ← auth, effect egress/SSRF, blob/rate limits
 
-  architecture/                ← how it works inside
-    overview.md
-    reactive-engine.md
-
-  index.md, getting-started.md,        ← site-only pages: home + quick paths
-  running-the-api.md,                     (introductions that link into the
-  running-the-mcp-server.md,              canonical guides/reference docs)
-  model-spec.md
+  extending/                   ← building on it
+    embedding.md               ← depend on the modules from your own project
+    client-sdks.md             ← TS + Java clients
+    architecture.md            ← component map, data flow, decisions
+    reactive-engine.md         ← engine internals
 
   _config.yml, Gemfile,        ← site plumbing (Jekyll + just-the-docs);
   _includes/, 404.html            deployed by .github/workflows/pages.yml
@@ -122,16 +158,21 @@ Rules for anyone — human or agent — editing this tree:
 
 - **One topic, one home.** Each topic has a single canonical doc; everything else links to it.
   Spec format → `reference/model-spec-format.md`; API → `reference/api-reference.md`;
-  config → `reference/configuration.md`. Never duplicate their content elsewhere.
-- **As-built only.** `reference/` and `architecture/` describe the shipped system. Proposals,
-  plans, and reviews do not belong in this repository.
-- **Every page needs front matter** (`title`, `description`; pages inside `guides/`,
-  `reference/`, `architecture/` also need `parent` + `nav_order`) — the site nav is built
-  from it.
+  MCP tools → `reference/mcp-tools.md`; config → `deployment/configuration.md`. Never duplicate
+  their content elsewhere.
+- **Explain in the guide, specify in the reference.** `model-guide/` and `usage-scenarios/` say
+  *why* and *when*; `reference/` says *exactly what*. If a page starts listing every field, it
+  belongs in `reference/`.
+- **As-built only.** Proposals, plans, and reviews do not belong in this repository.
+- **Every page needs front matter** (`title`, `description`; every page inside a chapter directory
+  also needs `parent` + `nav_order`) — the site nav is built from it. The chapter landing pages are
+  the `index.md` files, which carry `has_children: true`.
+- **Moved a page?** Add its old URL to `redirect_from:` (the `jekyll-redirect-from` plugin is
+  enabled) so existing links keep working.
 - **Links:** use plain relative `.md` links between docs (they work on GitHub and are converted
   to page links on the site). A link to anything *outside* `docs/` (source files, module
-  directories) must be an absolute GitHub URL, or it will 404 on the site. The site-only pages
-  at the top level use `{% raw %}{% link %}{% endraw %}` tags instead.
+  directories) must be an absolute GitHub URL, or it will 404 on the site. Cross-chapter links may
+  use `{% raw %}{% link %}{% endraw %}` tags, which Jekyll resolves from the docs root.
 - **Publishing:** pushing changes under `docs/**` to `main` triggers
   `.github/workflows/pages.yml`, which builds and deploys the site. To preview locally:
   `cd docs && bundle install && bundle exec jekyll serve`.

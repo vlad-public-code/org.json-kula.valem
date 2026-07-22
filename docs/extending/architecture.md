@@ -1,8 +1,11 @@
 ---
-title: Overview
-parent: Architecture
-nav_order: 1
+title: Architecture overview
+parent: Extending
+nav_order: 3
 description: "Component map, data flow, and key design decisions."
+redirect_from:
+  - /architecture/overview.html
+  - /architecture/
 ---
 
 # Valem — Architectural Overview
@@ -240,7 +243,7 @@ The design principle is **the agent generates, Valem verifies**: rather than run
 - **Model operations** — `create_model`, `mutate`, `get_state`, `get_field`, `explain`, `get_history`, `evolve_spec`, `get_view`, … (one-to-one with the REST/console surface). Object results carry both a text block and `structuredContent`; ROLLBACK constraint violations are surfaced structurally; every tool declares a title + safety annotations (readOnly/destructive/idempotent); `create_model`/`evolve_spec` embed the runtime's own `SpecGenerationSchema` as their `inputSchema`.
 - **Authoring / verification** — `validate_spec` (`ModelSpecValidator`, findings without creating), `eval_expression` (evaluate one JSONata expr against sample input), `test_spec` (`TestCaseRunner` given→expect in a throwaway runtime), `dry_run` (compile + mutate a candidate spec in isolation).
 
-`ResourceRegistry` adds the MCP **resources** capability — the ModelSpec authoring guide, the JSON schemas, and the bundled example specs — so the agent can read the format and study working models before it writes one. In-memory only (mirrors the console); durable, shared, multi-tenant state is the REST/managed path. See [../guides/mcp-server.md](../guides/mcp-server.md).
+`ResourceRegistry` adds the MCP **resources** capability — the ModelSpec authoring guide, the JSON schemas, and the bundled example specs — so the agent can read the format and study working models before it writes one. In-memory only (mirrors the console); durable, shared, multi-tenant state is the REST/managed path. See [../deployment/mcp-server.md](../deployment/mcp-server.md).
 
 ---
 

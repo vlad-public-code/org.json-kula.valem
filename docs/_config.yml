@@ -14,6 +14,9 @@ plugins:
   # sitemap.xml for Search Console; relative .md links (used throughout docs/) become page links.
   - jekyll-sitemap
   - jekyll-relative-links
+  # Serves the pre-restructure URLs (/guides/*, /architecture/*, /model-spec.html, ...) from the
+  # `redirect_from:` front matter on the pages that replaced them.
+  - jekyll-redirect-from
 
 relative_links:
   enabled: true

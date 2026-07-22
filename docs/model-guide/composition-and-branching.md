@@ -1,8 +1,10 @@
 ---
 title: Composition & branching
-parent: Guides
-nav_order: 7
+parent: Model guide
+nav_order: 5
 description: "Links between models, branching from templates, and promotion."
+redirect_from:
+  - /guides/composition-and-branching.html
 ---
 
 # Composition & Branching
@@ -12,7 +14,7 @@ across an ownership boundary are approved, and how a model is promoted between r
 guide ties together pieces that each have a canonical home:
 [model-spec-format.md](../reference/model-spec-format.md) (the `template`/`lineage`/`target`
 fields), [api-reference.md](../reference/api-reference.md) (the endpoints), and
-[configuration.md](../reference/configuration.md#model-composition--references) (the
+[configuration.md](../deployment/configuration.md#model-composition--references) (the
 `valem.composition.*` / `valem.authz.*` properties).
 
 ---
@@ -53,7 +55,7 @@ Branching across an **ownership boundary** (the new model's owner differs from a
   effects) | `deny` (never run cross-owner inherited effects).
 
 Same-owner and branch-authored effects always run — only cross-owner inheritance is gated. See
-[security-model.md](../reference/security-model.md#inherited-effect-approval-multi-tenant-branching).
+[security-model.md](../deployment/security-model.md#inherited-effect-approval-multi-tenant-branching).
 
 ## Links between models
 

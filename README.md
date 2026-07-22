@@ -10,14 +10,17 @@ constraints, and effects react live.
 ## Documentation
 
 Full docs live under [`docs/`](docs/README.md) — a task-keyed index, also published as a
-[documentation site](https://vlad-public-code.github.io/org.json-kula.valem/). Canonical references
-(this README is a quickstart; the detail lives in these docs and is deliberately not duplicated here):
+[documentation site](https://vlad-public-code.github.io/org.json-kula.valem/) organised in six
+chapters: **Getting started**, **Usage scenarios**, **Model guide**, **Reference**, **Deployment**,
+**Extending**. Canonical references (this README is a quickstart; the detail lives in these docs and
+is deliberately not duplicated here):
 
+- [What is Valem?](docs/getting-started/what-is-valem.md) — the idea in five minutes
 - [ModelSpec format](docs/reference/model-spec-format.md) — the spec format, single source of truth
 - [API reference](docs/reference/api-reference.md) — REST, WebSocket, and console protocol
-- [Configuration](docs/reference/configuration.md) — every `valem.*` property
-- [Security model](docs/reference/security-model.md) — auth, effect egress/SSRF, limits
-- [Architecture](docs/architecture/overview.md) — component map, data flow, design decisions
+- [Configuration](docs/deployment/configuration.md) — every `valem.*` property
+- [Security model](docs/deployment/security-model.md) — auth, effect egress/SSRF, limits
+- [Architecture](docs/extending/architecture.md) — component map, data flow, design decisions
 - [Third-party libraries](docs/libraries.md) — what Valem builds on (Apache-2.0)
 
 ## Prerequisites
@@ -72,9 +75,9 @@ mvn spring-boot:run -pl valem-web
 The API is now available at `http://localhost:8080`, with the management UI served at `/`. Storage
 is in-memory by default; other backends are à-la-carte adapter jars
 (`mvn -Pweb-postgres -pl valem-web package`, then `--valem.storage.type=postgres`) — see
-[configuration.md](docs/reference/configuration.md#persistence-model-spec--state). For durable
+[configuration.md](docs/deployment/configuration.md#persistence-model-spec--state). For durable
 setups, persistence layout, and the hardening checklist see
-[deployment-and-operations.md](docs/guides/deployment-and-operations.md).
+[operations.md](docs/deployment/operations.md).
 
 To enable LLM-powered spec generation, configure a provider before starting (the key is read from
 `valem.llm.api-key`, settable as `VALEM_LLM_API_KEY`; there is no provider-specific env fallback):
@@ -94,7 +97,7 @@ VALEM_LLM_PROVIDER=ollama VALEM_LLM_MODEL=llama3 mvn spring-boot:run -pl valem-w
 
 Without any provider configured the server starts normally; the `/models/generate*` endpoints
 return 503. All LLM knobs (providers, tool budgets, retries, temperatures):
-[configuration.md](docs/reference/configuration.md#llm-integration).
+[configuration.md](docs/deployment/configuration.md#llm-integration).
 
 ## Running the developer UI
 
@@ -118,7 +121,7 @@ plain-text domain description → **Preview Prompt** (editable) → send to the 
 generated spec → **Register Model**. The same workflow is available over REST
 (`POST /models/generate/preview` → `/models/generate` → `/models`).
 
-See [generating-specs-with-llm.md](docs/guides/generating-specs-with-llm.md) for the workflow and
+See [generating-specs-with-llm.md](docs/model-guide/generating-specs-with-llm.md) for the workflow and
 provider setup, and [llm-prompts.md](docs/reference/llm-prompts.md) for the exact prompts and the
 validate-and-repair loop.
 

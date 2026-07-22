@@ -1,6 +1,6 @@
 ---
 title: Third-party libraries
-nav_order: 11
+nav_order: 9
 description: "The third-party libraries Valem stands on, and what each is used for."
 ---
 

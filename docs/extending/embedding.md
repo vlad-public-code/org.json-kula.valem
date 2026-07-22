@@ -1,7 +1,10 @@
 ---
-title: Use Valem in your project
-nav_order: 2
+title: Embed Valem in your project
+parent: Extending
+nav_order: 1
 description: "Embed the pure-Java engine, wrap it in your own Spring app, or talk to a running server from Java or TypeScript."
+redirect_from:
+  - /getting-started.html
 ---
 
 # Using Valem in your project
@@ -87,7 +90,7 @@ service.mutate("order", Map.of("$.subtotal", 200, "$.tax", 20));
 JsonNode state = service.getState("order");   // { subtotal: 200, tax: 20, total: 220 }
 ```
 
-See [Model spec]({% link model-spec.md %}) for the full spec format.
+See [Anatomy of a model]({% link model-guide/anatomy.md %}) for the full spec format.
 
 ## Talk to a running server
 
@@ -141,7 +144,7 @@ echo '{"cmd":"list-models"}' | java -jar valem-console/target/valem-console-1.0.
 
 ## Next steps
 
-- [Running the API]({% link running-the-api.md %}) — REST + WebSocket + LLM generation
-- [Running the MCP server]({% link running-the-mcp-server.md %}) — drive models from an AI agent
-- [Model spec]({% link model-spec.md %}) — the declarative format Valem compiles
-- [Examples gallery]({% link guides/examples-gallery.md %}) — ready-to-run specs to start from
+- [Running the web API]({% link deployment/web-api.md %}) — REST + WebSocket + LLM generation
+- [Running the MCP server]({% link deployment/mcp-server.md %}) — drive models from an AI agent
+- [Anatomy of a model]({% link model-guide/anatomy.md %}) — the declarative format Valem compiles
+- [Examples gallery]({% link usage-scenarios/examples-gallery.md %}) — ready-to-run specs to start from

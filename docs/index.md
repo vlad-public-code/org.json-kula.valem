@@ -53,19 +53,33 @@ ModelSpec, then mutate fields and see derivations, constraints, and effects reac
 
 [Open the Valem sandbox →]({{ site.sandbox_url }}){: target="_blank" rel="noopener" }
 
+## The documentation, in six chapters
+
+| Chapter | What's in it |
+|---|---|
+| [Getting started]({% link getting-started/index.md %}) | What Valem is, the hosted sandbox, running it locally, pairing it with an AI agent. |
+| [Usage scenarios]({% link usage-scenarios/index.md %}) | Where it fits in a real project: agent state, rules and calculations, effect-driven workflows, model-driven UIs. |
+| [Model guide]({% link model-guide/index.md %}) | The principles: what a spec contains, what the reactive pipeline does, effects, views, composition. |
+| [Reference]({% link reference/index.md %}) | Authoritative surfaces: spec format, REST/WebSocket API, MCP tools, LLM prompts, view components. |
+| [Deployment]({% link deployment/index.md %}) | Running the web API and the MCP server, configuration, persistence, security. |
+| [Extending]({% link extending/index.md %}) | Embedding the engine, client SDKs, custom effect kinds and renderers, internals. |
+
+Plus a [glossary]({% link glossary.md %}) and the
+[third-party libraries]({% link libraries.md %}) Valem stands on.
+
 ## Where to next
 
 | If you want to… | Go to |
 |---|---|
-| Add Valem to your own project | [Use Valem in your project]({% link getting-started.md %}) |
-| Run the REST / WebSocket backend | [Running the API]({% link running-the-api.md %}) |
-| Drive a model from an AI agent | [Running the MCP server]({% link running-the-mcp-server.md %}) |
-| Understand the spec format | [Model spec]({% link model-spec.md %}) |
-| Start from a working example | [Examples gallery]({% link guides/examples-gallery.md %}) |
-| Reach the outside world (HTTP, LLM, timers) | [Effects]({% link guides/effects.md %}) |
-| Look up an endpoint or property | [API reference]({% link reference/api-reference.md %}) · [Configuration]({% link reference/configuration.md %}) |
-| See how it works inside | [Architecture]({% link architecture/index.md %}) |
-| See what Valem is built on | [Third-party libraries]({% link libraries.md %}) |
+| See it work in two minutes | [Try the sandbox]({% link getting-started/sandbox.md %}) |
+| Run it on your machine | [Quickstart]({% link getting-started/quickstart.md %}) |
+| Drive a model from an AI agent | [Connect your agent]({% link getting-started/connect-your-agent.md %}) |
+| Understand the spec format | [Anatomy of a model]({% link model-guide/anatomy.md %}) |
+| Start from a working example | [Examples gallery]({% link usage-scenarios/examples-gallery.md %}) |
+| Reach the outside world (HTTP, LLM, timers) | [Effects]({% link model-guide/effects.md %}) |
+| Add Valem to your own project | [Embed Valem in your project]({% link extending/embedding.md %}) |
+| Look up an endpoint or property | [API reference]({% link reference/api-reference.md %}) · [Configuration]({% link deployment/configuration.md %}) |
+| See how it works inside | [Architecture overview]({% link extending/architecture.md %}) |
 
 ---
 

@@ -1,8 +1,10 @@
 ---
 title: Generating specs with an LLM
-parent: Guides
-nav_order: 4
+parent: Model guide
+nav_order: 6
 description: "Have an LLM compile a plain-text domain description into a runnable ModelSpec."
+redirect_from:
+  - /guides/generating-specs-with-llm.html
 ---
 
 # Generating Specs with an LLM
@@ -10,7 +12,7 @@ description: "Have an LLM compile a plain-text domain description into a runnabl
 Valem can have an LLM compile a plain-text domain description into a runnable `ModelSpec`,
 with an automatic validate-and-repair loop. This guide covers setup and the workflow; for the
 exact prompt text see [../reference/llm-prompts.md](../reference/llm-prompts.md), and for every
-LLM property see [../reference/configuration.md](../reference/configuration.md).
+LLM property see [../deployment/configuration.md](../deployment/configuration.md).
 
 ## Configure a provider
 
@@ -64,5 +66,5 @@ An LLM-generated spec is only as trustworthy as its review. Its pure logic is sa
 a spec may declare `server`/`llm` **effects** that perform outbound I/O — these run through the
 built-in SSRF egress guard and are further governed by `valem.effects.allowed-hosts` /
 `valem.effects.kinds.enabled`. Generation itself may also use the `web_fetch` tool. Review
-[../reference/security-model.md](../reference/security-model.md) before accepting untrusted specs or
+[../deployment/security-model.md](../deployment/security-model.md) before accepting untrusted specs or
 enabling web-fetch in production.

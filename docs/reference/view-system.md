@@ -1,7 +1,7 @@
 ---
 title: View system
 parent: Reference
-nav_order: 4
+nav_order: 5
 description: "The view evaluation engine, ViewDefinition format, and React renderer."
 ---
 
@@ -350,7 +350,7 @@ becomes hidden/disabled with zero extra ViewDefinition config.
 > exposes `getEvaluatedView(id, viewId)`; `valem-api` serves it via `ViewController`
 > (`GET /models/{id}/view[/{viewId}]`, 404 through `ModelNotFoundException`) and `valem-console` via
 > the `get-view` command. There is no role/access parameter anywhere in the view evaluation path,
-> consistent with there being no per-field authorization in Valem (see [security-model.md](security-model.md)).
+> consistent with there being no per-field authorization in Valem (see [security-model.md](../deployment/security-model.md)).
 
 ---
 
@@ -472,4 +472,4 @@ In the built-in UI, `valem-ui` consumes `valem-view-react` as a workspace packag
 model's spec, renders a "View" tab (shown only when `spec.viewDefinition` is set) via
 `<ViewRenderer>`, and re-fetches state on each WebSocket `ChangeEvent`. The bundled example specs
 (`customer-satisfaction-survey.json`, `order-items-price-total.json`, and others) ship a
-`viewDefinition` — see the [examples gallery](../guides/examples-gallery.md).
+`viewDefinition` — see the [examples gallery](../usage-scenarios/examples-gallery.md).

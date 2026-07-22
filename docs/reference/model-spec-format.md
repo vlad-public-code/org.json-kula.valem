@@ -54,16 +54,16 @@ by the runtime. The spec is stored verbatim; it is reloaded and recompiled whene
 (flattens) the referenced template's spec into the new model's own inlined spec, pins the ancestor
 chain into `lineage`, and validates the result acyclic. Branching across an ownership boundary (the
 new model's owner differs from `lineage`'s `fromOwner`) quarantines any inherited non-`caller` effect
-until approved — see [security-model.md](security-model.md) and
-`valem.authz.inherited-effects` in [configuration.md](configuration.md). Models can also be
+until approved — see [security-model.md](../deployment/security-model.md) and
+`valem.authz.inherited-effects` in [configuration.md](../deployment/configuration.md). Models can also be
 **promoted** between repositories (`POST /models/{id}/promote`) and queried for cross-model topology
 (`GET /composition/graph`). The end-to-end lifecycle (branch → approve inherited effects → promote,
 plus links between models) is walked through in the
-[composition & branching guide](../guides/composition-and-branching.md).
+[composition & branching guide](../model-guide/composition-and-branching.md).
 
 > **No per-field access control.** Valem has no `fieldAccess`/roles. Any caller with model
 > access reads/mutates/evolves every field; access is a single coarse gate (`valem.api.key`).
-> See [security-model.md](security-model.md).
+> See [security-model.md](../deployment/security-model.md).
 
 ---
 
@@ -426,7 +426,7 @@ locator must be present: `request.url`, a `requests` fan-out, or a composition `
 | `request.headers` | no | Header map; values interpolate `{ expr }` segments. |
 | `request.body` | no | A whole JSONata expression producing the JSON request body. |
 | `requests` | one locator | JSONata expression producing an **array** of request descriptors — a fan-out of multiple HTTP calls from one trigger. |
-| `target` | one locator | Composition link to another **model** (by coordinate, not URL): write-link `{ ref, path }` plus a sibling `body` (JSONata for the value written at `target.path`), or read-link `{ ref, read }` (no mutation of the target). See the [composition & branching guide](../guides/composition-and-branching.md). |
+| `target` | one locator | Composition link to another **model** (by coordinate, not URL): write-link `{ ref, path }` plus a sibling `body` (JSONata for the value written at `target.path`), or read-link `{ ref, read }` (no mutation of the target). See the [composition & branching guide](../model-guide/composition-and-branching.md). |
 | `body` | with write-link `target` | JSONata → the value written at `target.path`. |
 | `policy` | no | `{ timeoutMs (default 5000), retries (default 0), backoff, egressProfile }` — execution policy for the HTTP call. |
 
@@ -448,7 +448,7 @@ locator must be present: `request.url`, a `requests` fan-out, or a composition `
 A spec that names an executor kind that is unknown, or disabled via `valem.effects.kinds.enabled`,
 is rejected at validation. Inherited effects carry a read-only, materializer-written `origin`
 (`{fromRef, fromOwner}`) recording which ancestor contributed them — the basis for cross-owner
-approval (see [security-model.md](security-model.md)).
+approval (see [security-model.md](../deployment/security-model.md)).
 
 ### Worked `server` + `timer` example
 
@@ -483,7 +483,7 @@ changes, and expire a priced quote after 15 minutes.
 
 The egress/SSRF controls for `server` effects (`valem.effects.allowed-hosts`,
 `allow-private-ips`, `max-response-bytes`, …) are documented in
-[security-model.md](security-model.md) and [configuration.md](configuration.md#effects-egress--pluggable-kinds).
+[security-model.md](../deployment/security-model.md) and [configuration.md](../deployment/configuration.md#effects-egress--pluggable-kinds).
 
 ---
 

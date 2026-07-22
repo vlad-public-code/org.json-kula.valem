@@ -1,15 +1,17 @@
 ---
-title: Deployment & operations
-parent: Guides
-nav_order: 8
+title: Persistence & operations
+parent: Deployment
+nav_order: 4
 description: "Running Valem durably and safely: run modes, persistence, blobs."
+redirect_from:
+  - /guides/deployment-and-operations.html
 ---
 
-# Deployment & Operations
+# Persistence & operations
 
 Running Valem durably and safely. Full property list:
-[../reference/configuration.md](../reference/configuration.md). Security posture:
-[../reference/security-model.md](../reference/security-model.md).
+[configuration.md](configuration.md). Security posture:
+[security-model.md](security-model.md).
 
 ## Run modes
 - **In-memory (default).** No persistence; all models and state lost on restart. Fine for demos,
@@ -45,7 +47,7 @@ than being dropped.
 ## Hardening checklist
 - **Set `valem.api.key`** — otherwise the API is fully open (open/dev mode logs a warning). The key
   gate is coarse: any authenticated caller can read/mutate/evolve every field of every model (there
-  is no per-field access control). See [../reference/security-model.md](../reference/security-model.md).
+  is no per-field access control). See [security-model.md](security-model.md).
 - **WebSocket** is authenticated by a `?token=<apiKey>` query param and restricted to
   `valem.websocket.allowed-origins` (same-origin only when unset). Front it with a proxy that does
   not log query strings, since the token travels in the URL.
@@ -68,4 +70,4 @@ throughput ceiling: scale horizontally across independent models.
 ## Pluggable persistence backends
 Spec, state, and blob storage each select a backend independently (memory / filesystem / PostgreSQL /
 MongoDB / Redis / S3), wired à-la-carte as adapter jars — see
-[../reference/configuration.md](../reference/configuration.md) for the `valem.storage.*` properties.
+[configuration.md](configuration.md) for the `valem.storage.*` properties.
