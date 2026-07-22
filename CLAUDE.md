@@ -207,7 +207,7 @@ Node kinds: `BASE` (writable), `DERIVED` (computed), `META` (meta-derivations + 
 
 **BlobStore** — content-addressed (SHA-256) binary storage. Backends: in-memory, filesystem, Postgres (`BYTEA`), Mongo (GridFS), S3/MinIO. DB/GridFS backends spool uploads to a temp file while hashing (`BlobSpooler`) so large blobs don't buffer wholly in heap. Per-blob cap `valem.blob.max-bytes`.
 
-**Persistence** — pluggable, with **per-concern backend selection** (`StorageConfig`): spec, state, and blob each pick a backend independently (`valem.storage.spec-type`/`state-type`/`blob-type`, falling back to `storage.type` then the legacy `persistence-dir`/`blob-store`). When spec and state differ, a `CompositeModelStore` wires them. State persists as a baseline snapshot + an incremental RFC 6902 mutation log; on load the log is replayed **create-as-you-go** (`MutationLogReplay`) so nested/array-creating mutations reconstruct rather than being dropped, and compaction is **offset-pinned**. `ModelLoader` degrades a corrupt-state model to spec-only instead of dropping it. See [configuration.md](docs/reference/configuration.md).
+**Persistence** — pluggable, with **per-concern backend selection** (`StorageConfig`): spec, state, and blob each pick a backend independently (`valem.storage.spec-type`/`state-type`/`blob-type`, falling back to `storage.type` then the legacy `persistence-dir`/`blob-store`). When spec and state differ, a `CompositeModelStore` wires them. State persists as a baseline snapshot + an incremental RFC 6902 mutation log; on load the log is replayed **create-as-you-go** (`MutationLogReplay`) so nested/array-creating mutations reconstruct rather than being dropped, and compaction is **offset-pinned**. `ModelLoader` degrades a corrupt-state model to spec-only instead of dropping it. See [configuration.md](docs/deployment/configuration.md).
 
 **SpecEvolution** — incremental spec diff with `newVersion`, plus upsert/remove lists for each spec section. Applied via `POST /models/{id}/spec/evolve`. Uses `ModelState.withModel()` to carry forward existing state, seeding the new runtime's `ExpressionCache` so unchanged expressions aren't recompiled. The three formerly wholesale-only sections also take **targeted diffs** (mutually exclusive with their wholesale field per evolution): **schema** — `upsertSchemaDefs`/`removeSchemaDefs` (by `$defs` name), `upsertSchemaNodes`/`removeSchemaNodes` (by canonical data path, `required` tri-state; may not traverse a `$ref`), or `newSchema`; **view** — `upsertViews`/`removeViews`/`newDefaultView`, `upsertComponents`/`removeComponents` (by id, with `parentId`/`beforeId` placement; spliced structurally on raw JSON by `ViewDefinitionSplice`, no `valem-view` dep in core), or `newViewDefinition`; **constants** — `upsertConstants`/`removeConstants` (by name, removal blocked if `$const.<name>` is referenced), or `newConstants`. Guards: optional `expectedVersion` (409 on mismatch); a schema change validates carried-forward state against the new schema via `SchemaStateChecker` (422 if it would strand existing values). Local JSON Schema `$ref`/`$defs` (`#/$defs/<Name>`) are resolved by `SchemaPaths` (lazy, `$ref`-aware); non-local/dangling refs are rejected at validation. `ModelSpecValidator` also enforces view id-uniqueness + non-dangling `defaultView`/`itemView`, and the service parse-validates the view (invalid view = 422 at write, not 500 at render). See [model-spec-format.md](docs/reference/model-spec-format.md#spec-evolution-post-modelsidspecevolve).
 
@@ -224,7 +224,7 @@ duplicate endpoint tables here or elsewhere.
 ## Configuration
 
 Every `valem.*` property (with defaults) lives in
-[configuration.md](docs/reference/configuration.md) — the single source of truth; do not duplicate
+[configuration.md](docs/deployment/configuration.md) — the single source of truth; do not duplicate
 property tables here or elsewhere. Operational notes an agent commonly needs:
 
 - Storage is in-memory unless `valem.persistence-dir` or `valem.storage.*` selects a durable
@@ -250,20 +250,24 @@ property tables here or elsewhere. Operational notes an agent commonly needs:
 
 ## Reference documentation
 
-Documentation is organized under `docs/` — start at [docs/README.md](docs/README.md) (task-keyed index; also the Jekyll source of the published docs site).
-Conventions: `reference/` + `architecture/` = as-built. One topic, one home — link, don't duplicate.
+Documentation is organized under `docs/` in six chapters — `getting-started/`, `usage-scenarios/`,
+`model-guide/`, `reference/`, `deployment/`, `extending/` — plus `glossary.md` and `libraries.md`.
+Start at [docs/README.md](docs/README.md) (task-keyed index; also the Jekyll source of the published docs site).
+Conventions: `reference/` = the as-built interfaces (specify), `model-guide/` = how they behave (explain).
+One topic, one home — link, don't duplicate. Moved a page? add its old URL to `redirect_from:`.
 (Design proposals, ADRs, audits, and business docs live in the private `Valem-internal` repo.)
 
 | Document | Covers |
 |---|---|
 | [docs/reference/model-spec-format.md](docs/reference/model-spec-format.md) | Full ModelSpec field reference, derivation/constraint/effect schemas, ViewDefinition, SpecEvolution, component catalog |
 | [docs/reference/api-reference.md](docs/reference/api-reference.md) | REST + WebSocket + console API surface (request/response shapes, command reference) |
-| [docs/guides/client-sdks.md](docs/guides/client-sdks.md) | Typed TypeScript + Java client SDKs (REST + reconnecting subscribe + audit) |
-| [docs/guides/mcp-server.md](docs/guides/mcp-server.md) | MCP server (`valem-mcp`): drive a model from an agent session over the Model Context Protocol |
-| [docs/guides/examples-gallery.md](docs/guides/examples-gallery.md) | Ready-to-run example specs (incl. the insurance-quote model + golden test suite) |
-| [docs/reference/configuration.md](docs/reference/configuration.md) | Every `valem.*` property (single source) |
+| [docs/reference/mcp-tools.md](docs/reference/mcp-tools.md) | Every MCP tool + resource: arguments, result/error shapes, protocol notes |
+| [docs/extending/client-sdks.md](docs/extending/client-sdks.md) | Typed TypeScript + Java client SDKs (REST + reconnecting subscribe + audit) |
+| [docs/deployment/mcp-server.md](docs/deployment/mcp-server.md) | MCP server (`valem-mcp`): drive a model from an agent session over the Model Context Protocol |
+| [docs/usage-scenarios/examples-gallery.md](docs/usage-scenarios/examples-gallery.md) | Ready-to-run example specs (incl. the insurance-quote model + golden test suite) |
+| [docs/deployment/configuration.md](docs/deployment/configuration.md) | Every `valem.*` property (single source) |
 | [docs/reference/view-system.md](docs/reference/view-system.md) | View system architecture, component types, EvaluatedView contract |
 | [docs/reference/llm-prompts.md](docs/reference/llm-prompts.md) | LLM prompt structure and generation loop |
-| [docs/reference/security-model.md](docs/reference/security-model.md) | Auth (coarse key gate), WebSocket token auth, SSRF, blob/rate limits |
-| [docs/architecture/overview.md](docs/architecture/overview.md) | Component map, data flow, key design decisions |
-| [docs/architecture/reactive-engine.md](docs/architecture/reactive-engine.md) | Dependency graph, reactive algorithm, state layer, explainability internals |
+| [docs/deployment/security-model.md](docs/deployment/security-model.md) | Auth (coarse key gate), WebSocket token auth, SSRF, blob/rate limits |
+| [docs/extending/architecture.md](docs/extending/architecture.md) | Component map, data flow, key design decisions |
+| [docs/extending/reactive-engine.md](docs/extending/reactive-engine.md) | Dependency graph, reactive algorithm, state layer, explainability internals |

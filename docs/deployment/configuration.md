@@ -1,8 +1,10 @@
 ---
 title: Configuration
-parent: Reference
+parent: Deployment
 nav_order: 3
 description: "Single source of truth for every valem.* property."
+redirect_from:
+  - /reference/configuration.html
 ---
 
 # Configuration Reference
@@ -41,7 +43,7 @@ from `application.yml`. They apply process-wide.
 | `valem.api.key` | *(unset)* | When set, every request must carry `Authorization: Bearer <key>`; blank = **open/dev mode** (all requests permitted, warning logged). Compared constant-time. The same key authenticates the WebSocket handshake via `?token=<key>`. See [security-model.md](security-model.md). |
 | `valem.security.csp` | `default-src 'none'; frame-ancestors 'none'` | The `Content-Security-Policy` response header directives. The default is correct for `valem-api` used headless but blocks a bundled UI's own same-origin script/stylesheet/WebSocket loads — a deployable that serves a browser UI (e.g. `valem-web`) overrides it, e.g. `default-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'`. |
 | `valem.websocket.allowed-origins` | *(unset = same-origin)* | Comma-separated allowlist of origins permitted to open the `/models/{id}/subscribe` WebSocket handshake. Unset = same-origin only; set `*` only for development. |
-| `valem.mcp.allowed-origins` | *(unset = open)* | Comma-separated allowlist of browser `Origin`s permitted to call the Streamable-HTTP MCP endpoint (`/mcp`), for DNS-rebinding protection. Empty = open (requests with no `Origin` — typical non-browser MCP clients — always pass); set it in production to restrict browser origins. See [mcp-server.md](../guides/mcp-server.md). |
+| `valem.mcp.allowed-origins` | *(unset = open)* | Comma-separated allowlist of browser `Origin`s permitted to call the Streamable-HTTP MCP endpoint (`/mcp`), for DNS-rebinding protection. Empty = open (requests with no `Origin` — typical non-browser MCP clients — always pass); set it in production to restrict browser origins. See [mcp-server.md](mcp-server.md). |
 | `valem.rate-limit.enabled` | `false` | Enable the optional per-IP sliding-window rate-limit filter. Off = no behaviour change. |
 | `valem.rate-limit.requests` | `100` | Requests allowed per window per client IP (when enabled). |
 | `valem.rate-limit.window-seconds` | `60` | Sliding-window length in seconds (when enabled). Over-limit requests get HTTP 429 + `Retry-After`. |
@@ -213,4 +215,4 @@ or the provider is `ollama`. Otherwise `/models/generate*` returns 503.
 Spring relaxed binding maps `valem.llm.provider` → `VALEM_LLM_PROVIDER`, etc. There is no
 provider-specific environment-variable fallback (e.g. no implicit `ANTHROPIC_API_KEY` read) —
 `valem.llm.api-key` is the only key source, itself settable via `VALEM_LLM_API_KEY`. See
-[../guides/getting-started.md](../guides/getting-started.md) for examples.
+[../getting-started/quickstart.md](../getting-started/quickstart.md) for examples.

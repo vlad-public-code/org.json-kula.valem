@@ -1,15 +1,20 @@
 ---
-title: Getting started
-parent: Guides
-nav_order: 1
+title: Quickstart
+parent: Getting started
+nav_order: 3
 description: "Run Valem three ways: the console, the backend API, and the developer UI."
+redirect_from:
+  - /guides/getting-started.html
 ---
 
-# Getting Started
+# Quickstart
 
-Run Valem three ways: the console (fastest, no server), the backend API, and the developer
-UI. For full endpoint details see [../reference/api-reference.md](../reference/api-reference.md);
-for every config knob see [../reference/configuration.md](../reference/configuration.md).
+Run Valem on your own machine three ways: the console (fastest, no server), the backend API, and the
+developer UI. For full endpoint details see
+[../reference/api-reference.md](../reference/api-reference.md); for every config knob see
+[../deployment/configuration.md](../deployment/configuration.md).
+
+Want to try it without installing anything first? [Use the hosted sandbox](sandbox.md).
 
 ## Prerequisites
 - Java 21+, Maven 3.9+
@@ -62,7 +67,7 @@ java -jar valem-web/target/valem-web-1.0.0-SNAPSHOT.jar \
 ```
 
 Selecting a backend whose adapter jar is absent aborts startup naming the jar to add — no silent
-fallback. See [../reference/configuration.md](../reference/configuration.md#persistence-model-spec--state).
+fallback. See [../deployment/configuration.md](../deployment/configuration.md#persistence-model-spec--state).
 
 Create and mutate a model:
 ```bash
@@ -78,7 +83,7 @@ curl -s http://localhost:8080/models/order/state
 ```
 
 To enable LLM spec generation, configure a provider before starting — see
-[generating-specs-with-llm.md](generating-specs-with-llm.md). Without one, `/models/generate*`
+[generating-specs-with-llm.md](../model-guide/generating-specs-with-llm.md). Without one, `/models/generate*`
 returns 503.
 
 ## Developer UI
@@ -103,4 +108,9 @@ the UI's own optimistic update. Start the backend with
 `VALEM_WEBSOCKET_ALLOWED_ORIGINS=http://localhost:5173` (or `-Dvalem.websocket.allowed-origins=...`)
 before running the e2e suite.
 
-Next: [deployment-and-operations.md](deployment-and-operations.md) for persistence and production config.
+## Next
+
+- [Connect your agent](connect-your-agent.md) — drive a model from an AI agent over MCP.
+- [Usage scenarios](../usage-scenarios/index.md) — where Valem fits in a real project.
+- [Model guide](../model-guide/index.md) — write your own spec.
+- [Persistence & operations](../deployment/operations.md) — durable storage and production config.

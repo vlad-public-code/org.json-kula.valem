@@ -1,8 +1,10 @@
 ---
-title: Reactive engine
-parent: Architecture
-nav_order: 2
+title: Reactive engine internals
+parent: Extending
+nav_order: 4
 description: "Dependency graph, reactive algorithm, and state-layer internals."
+redirect_from:
+  - /architecture/reactive-engine.html
 ---
 
 # Reactive Engine — Internals
@@ -10,7 +12,7 @@ description: "Dependency graph, reactive algorithm, and state-layer internals."
 How the runtime turns a compiled model + a mutation into settled, derived, constraint-checked
 state. This is the as-built internal reference for contributors.
 
-Related: [overview.md](overview.md) (component map, data flow),
+Related: [architecture.md](architecture.md) (component map, data flow),
 [../reference/model-spec-format.md](../reference/model-spec-format.md) (spec format).
 
 ---
@@ -163,7 +165,7 @@ A single model serializes **all** mutations under one lock (`synchronized(runtim
 pipeline deterministic. Scale horizontally by running **many independent models**; a single hot or
 shared model is a throughput ceiling. The mutation queue (`valem.mutation-queue-size`) bounds
 in-flight mutations per model and returns 429 on overflow. See
-[../guides/deployment-and-operations.md](../guides/deployment-and-operations.md) for the operational
+[../deployment/operations.md](../deployment/operations.md) for the operational
 guidance.
 
 ---

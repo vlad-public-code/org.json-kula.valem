@@ -1,8 +1,10 @@
 ---
 title: Client SDKs
-parent: Guides
-nav_order: 5
+parent: Extending
+nav_order: 2
 description: "Typed TypeScript and Java clients: REST, reconnecting subscribe, audit."
+redirect_from:
+  - /guides/client-sdks.html
 ---
 
 # Client SDKs

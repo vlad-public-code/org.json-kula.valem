@@ -1,8 +1,10 @@
 ---
 title: Security model
-parent: Reference
+parent: Deployment
 nav_order: 5
 description: "Authentication, authorization, and network-egress surfaces — and their limits."
+redirect_from:
+  - /reference/security-model.html
 ---
 
 # Security Model
@@ -91,7 +93,7 @@ which discovered kinds may actually run.
 
 ### Inherited-effect approval (multi-tenant branching)
 When a model is branched from a template owned by a *different* owner (see composition/branching in
-[model-spec-format.md](model-spec-format.md)), any inherited effect whose executor is not `caller`
+[model-spec-format.md](../reference/model-spec-format.md)), any inherited effect whose executor is not `caller`
 (i.e. it does outbound I/O) is quarantined: inert until the new owner explicitly approves it. This is
 enforced by `EffectApprovalRegistry`, keyed to the effect's canonical `definitionHash` so any edit to
 the effect's executable bytes re-quarantines it. Same-owner and branch-authored effects always run —

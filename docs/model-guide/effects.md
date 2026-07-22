@@ -1,8 +1,10 @@
 ---
 title: Effects
-parent: Guides
+parent: Model guide
 nav_order: 3
 description: "How effects reach the outside world: the four built-in executors, the effect lifecycle, and how to add a custom effect kind as a drop-in jar."
+redirect_from:
+  - /guides/effects.html
 ---
 
 # Effects
@@ -16,7 +18,7 @@ I/O: a folded-back response is just a logged mutation.
 This guide covers the built-in executors, the runtime lifecycle, and how to add a **custom
 effect kind** as a drop-in jar. The spec-side field reference (every field of every executor)
 lives in [model-spec-format.md](../reference/model-spec-format.md#effects); egress/SSRF controls
-are in [security-model.md](../reference/security-model.md).
+are in [security-model.md](../deployment/security-model.md).
 
 ## Built-in executors
 
@@ -136,7 +138,7 @@ the classpath registers it, and `CompositeEffectExecutor` routes your kind to it
 - **Enable:** by default every discovered kind is active. To restrict, set
   `valem.effects.kinds.enabled` (comma-list of kind names) — a spec selecting an unknown or
   disabled kind is **rejected at validation**, not at run time. See
-  [configuration.md](../reference/configuration.md).
+  [configuration.md](../deployment/configuration.md).
 - **Use from a spec:**
 
 ```json

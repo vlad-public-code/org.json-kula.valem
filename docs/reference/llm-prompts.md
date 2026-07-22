@@ -1,7 +1,7 @@
 ---
 title: LLM prompts
 parent: Reference
-nav_order: 6
+nav_order: 4
 description: "Exactly what is sent to the LLM on every spec-generation call."
 ---
 
@@ -244,7 +244,7 @@ When a `WebTool` bean is configured (it exists whenever `valem.llm.web-fetch.ena
 `generate()`/`generateEvolution()` session is made via `completeWithTools`, offering:
 
 - **`web_fetch`** — fetch a URL for authoritative domain info (SSRF-guarded; see
-  [security-model.md](security-model.md)); budget `valem.llm.web-fetch.max-calls`
+  [security-model.md](../deployment/security-model.md)); budget `valem.llm.web-fetch.max-calls`
   (default 5), `max-chars` (default 8000) per fetch.
 - **`web_search`** — web search so the model finds URLs instead of guessing them; pluggable
   backend via `valem.llm.web-search.provider`: `duckduckgo` (default, keyless), `brave`, or
@@ -360,5 +360,5 @@ calling exhausted tools cannot loop unbounded.
 
 ## See also
 
-See [configuration.md](configuration.md) for the full `valem.llm.*` property list
+See [configuration.md](../deployment/configuration.md) for the full `valem.llm.*` property list
 (8 providers, per-provider model/base-URL defaults, tool budgets, retry/temperature knobs).

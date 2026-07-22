@@ -12,8 +12,8 @@ JSON protocol. This is the single source of truth for endpoints and request/resp
 `README.md` and `CLAUDE.md` link here rather than duplicating it.
 
 Related: [model-spec-format.md](model-spec-format.md) (request bodies),
-[configuration.md](configuration.md) (server config),
-[security-model.md](security-model.md) (auth).
+[configuration.md](../deployment/configuration.md) (server config),
+[security-model.md](../deployment/security-model.md) (auth).
 
 > **Live OpenAPI spec.** A running `valem-web` also serves a generated OpenAPI 3 document at
 > `/v3/api-docs` and an interactive Swagger UI at `/swagger-ui.html` (springdoc; behind the API
@@ -31,7 +31,7 @@ Related: [model-spec-format.md](model-spec-format.md) (request bodies),
 | `GET` | `/models/{id}/spec` | Full `ModelSpec` JSON as stored. |
 | `GET` | `/models/{id}/lineage` | The pinned ancestor chain a branch was materialized from (`[]` for a non-branch model). |
 | `POST` | `/models/{id}/promote` | Promote a local model into a web repository (one-way, closure-checked). Body `{toRepo}`. 400 if `toRepo` missing/blank; 409 on a closure/locality violation. |
-| `GET` | `/models/{id}/effects/pending` | Inherited effects quarantined pending the owner's approval (cross-owner branching only — see [security-model.md](security-model.md)). |
+| `GET` | `/models/{id}/effects/pending` | Inherited effects quarantined pending the owner's approval (cross-owner branching only — see [security-model.md](../deployment/security-model.md)). |
 | `POST` | `/models/{id}/effects/{effectId}/approve` | Approve a quarantined inherited effect, keyed to its current `definitionHash`. |
 | `GET` | `/composition/graph` | Cross-model link/lineage topology, computed on demand (never authoritative state). |
 | `DELETE` | `/models/{id}` | Remove model from the registry (also tears down composition watch subscriptions and deletes its durable audit trail). 404 if not found. |
@@ -154,12 +154,12 @@ made (this REST call, the MCP's `evolve_spec` tool, or an AI-assisted evolve):
 It deliberately carries only the new version, not the spec itself; a subscriber re-fetches
 `GET /models/{id}/spec` (and view/state) as the source of truth. This is what lets a browser tab
 notice a spec change made by another client on the same model — see
-[MCP server: pairing with a browser](../guides/mcp-server.md#pairing-with-a-browser-remote_with_browser-mode).
+[Connect your agent](../getting-started/connect-your-agent.md).
 
 Optional `?paths=` query parameter filters `"mutation"` events to those touching the listed path
 prefixes (comma-separated, OR'd): `ws://host/models/{id}/subscribe?paths=$.order,$.customer`.
 Constraint violations, dispatched (caller) effects, and `"spec-evolved"` frames are always forwarded
-regardless of the filter. See [security-model.md](security-model.md) for the WebSocket auth/origin
+regardless of the filter. See [security-model.md](../deployment/security-model.md) for the WebSocket auth/origin
 model.
 
 ---
@@ -225,5 +225,5 @@ Claude Desktop, and other MCP clients). The tool surface (`create_model`, `mutat
 shared with the console commands above; it does not yet cover the composition/branching endpoints
 (`lineage`, `promote`, `effects/pending`, `/composition/graph`) or the async LLM generation/evolution
 endpoints (`generate/stream`, `spec/evolve/ai[/stream]`, `generate/evolution*`). See
-[../guides/mcp-server.md](../guides/mcp-server.md) for the tool list, result shape, client
-registration, and protocol notes.
+[mcp-tools.md](mcp-tools.md) for the tool list, result shape, and protocol notes, and
+[../deployment/mcp-server.md](../deployment/mcp-server.md) for client registration.
