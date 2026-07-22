@@ -105,10 +105,41 @@ class ModelSpecValidatorViewTest {
     @Test
     void the_vocabulary_is_the_documented_catalog() {
         // Pins the count against silent drift — the React renderer's switch and
-        // docs/reference/view-system.md list exactly these.
-        assertThat(ViewComponentTypes.ALL).hasSize(31);
+        // docs/reference/view-system.md list exactly these. ViewComponentTypesCoverageTest in
+        // valem-view is what checks the three lists actually agree; this only catches a change
+        // arriving without anyone meaning to make one.
+        assertThat(ViewComponentTypes.ALL).hasSize(65);
         assertThat(ViewComponentTypes.isKnown("sliderField")).isTrue();
         assertThat(ViewComponentTypes.isKnown("slider")).isFalse();
+    }
+
+    @Test
+    void the_added_spellings_are_all_recognised() {
+        for (String type : java.util.List.of(
+                "currencyField", "percentField", "richTextField", "autocompleteField", "comboBox",
+                "tagsField", "ratingField", "numericStepper", "dateRangeField", "alert", "callout",
+                "spacer", "image", "link", "sparkline", "gauge", "keyValueList", "summaryList",
+                "statTile", "metric", "jsonViewer", "explainPanel", "auditTimeline",
+                "validationSummary", "effectStatus", "card", "toolbar", "buttonGroup", "tabs",
+                "tabItem", "accordion", "collapsible", "stepper", "breadcrumb")) {
+            assertThat(ViewComponentTypes.isKnown(type)).as(type).isTrue();
+        }
+    }
+
+    @Test
+    void a_wider_vocabulary_still_refuses_to_guess_wildly() {
+        // 34 new names give `suggest` many more near-neighbours to land on; the bounded
+        // Levenshtein limit is what stops it from answering anything at all.
+        assertThat(ViewComponentTypes.suggest("quantumFluxCapacitor")).isNull();
+        assertThat(ViewComponentTypes.suggest("kebab-case-nonsense")).isNull();
+    }
+
+    @Test
+    void the_added_spellings_are_reachable_from_their_common_misspellings() {
+        assertThat(ViewComponentTypes.suggest("currency-field")).isEqualTo("currencyField");
+        assertThat(ViewComponentTypes.suggest("StatTile")).isEqualTo("statTile");
+        assertThat(ViewComponentTypes.suggest("key_value_list")).isEqualTo("keyValueList");
+        assertThat(ViewComponentTypes.suggest("combobox")).isEqualTo("comboBox");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

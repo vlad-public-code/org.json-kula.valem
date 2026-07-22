@@ -1,0 +1,380 @@
+{
+  "_name": "Team Offsite Planner",
+  "_description": "Budget a team offsite. Demonstrates the extended component catalog: currency and rating inputs, a tags field, a date range across two paths, tabs and cards, stat tiles and a summary list, and the diagnostic components (explainPanel, auditTimeline, validationSummary, effectStatus, jsonViewer) that surface Valem's own derivation trace, audit trail, flagged constraints and effect status inside a view.",
+  "id": "team-offsite-planner",
+  "version": "1.0.0",
+  "constants": {
+    "approvedBudget": 12000,
+    "currency": "EUR"
+  },
+  "schema": {
+    "type": "object",
+    "properties": {
+      "teamSize": { "type": "integer", "minimum": 1, "maximum": 60 },
+      "nights": { "type": "integer", "minimum": 1, "maximum": 14 },
+      "startDate": { "type": "string" },
+      "endDate": { "type": "string" },
+      "venueTags": { "type": "array", "items": { "type": "string" } },
+      "venueRating": { "type": "integer", "minimum": 1, "maximum": 5 },
+      "perPersonNightly": { "type": "number", "minimum": 0 },
+      "cateringPerDay": { "type": "number", "minimum": 0 },
+      "travelPerPerson": { "type": "number", "minimum": 0 },
+      "contingencyPercent": { "type": "number", "minimum": 0, "maximum": 50 },
+      "notes": { "type": "string" },
+      "totals": {
+        "type": "object",
+        "properties": {
+          "accommodation": { "type": "number", "readOnly": true },
+          "catering": { "type": "number", "readOnly": true },
+          "travel": { "type": "number", "readOnly": true },
+          "contingency": { "type": "number", "readOnly": true },
+          "grand": { "type": "number", "readOnly": true },
+          "perPerson": { "type": "number", "readOnly": true }
+        }
+      },
+      "breakdown": {
+        "type": "array",
+        "readOnly": true,
+        "items": {
+          "type": "object",
+          "properties": {
+            "category": { "type": "string" },
+            "amount": { "type": "number" }
+          }
+        }
+      },
+      "budgetDelta": { "type": "number", "readOnly": true },
+      "budgetTrend": { "type": "string", "readOnly": true },
+      "budgetVariant": { "type": "string", "readOnly": true },
+      "overBudget": { "type": "boolean", "readOnly": true },
+      "approval": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "error": { "type": "string" }
+        }
+      }
+    }
+  },
+  "defaultValues": [
+    {
+      "path": "$",
+      "expr": "{\"teamSize\": 8, \"nights\": 2, \"startDate\": \"2026-09-14\", \"endDate\": \"2026-09-16\", \"venueTags\": [\"coastal\", \"quiet\"], \"venueRating\": 4, \"perPersonNightly\": 140, \"cateringPerDay\": 55, \"travelPerPerson\": 180, \"contingencyPercent\": 10, \"notes\": \"\"}"
+    }
+  ],
+  "derivations": [
+    { "path": "$.totals.accommodation", "expr": "teamSize * nights * perPersonNightly", "evaluation": "eager" },
+    { "path": "$.totals.catering", "expr": "teamSize * nights * cateringPerDay", "evaluation": "eager" },
+    { "path": "$.totals.travel", "expr": "teamSize * travelPerPerson", "evaluation": "eager" },
+    { "path": "$.totals.contingency", "expr": "(totals.accommodation + totals.catering + totals.travel) * contingencyPercent / 100", "evaluation": "eager" },
+    { "path": "$.totals.grand", "expr": "totals.accommodation + totals.catering + totals.travel + totals.contingency", "evaluation": "eager" },
+    { "path": "$.totals.perPerson", "expr": "teamSize > 0 ? totals.grand / teamSize : 0", "evaluation": "eager" },
+    { "path": "$.budgetDelta", "expr": "totals.grand - $const.approvedBudget", "evaluation": "eager" },
+    { "path": "$.overBudget", "expr": "totals.grand > $const.approvedBudget", "evaluation": "eager" },
+    { "path": "$.budgetTrend", "expr": "overBudget = true ? \"up\" : \"down\"", "evaluation": "eager" },
+    { "path": "$.budgetVariant", "expr": "overBudget = true ? \"danger\" : \"success\"", "evaluation": "eager" },
+    {
+      "path": "$.breakdown",
+      "expr": "[{\"category\": \"Accommodation\", \"amount\": totals.accommodation}, {\"category\": \"Catering\", \"amount\": totals.catering}, {\"category\": \"Travel\", \"amount\": totals.travel}, {\"category\": \"Contingency\", \"amount\": totals.contingency}]",
+      "evaluation": "eager"
+    }
+  ],
+  "metaDerivations": [
+    { "path": "$.notes", "property": "relevant", "expr": "venueRating <= 3" },
+    { "path": "$.venueTags", "property": "required", "expr": "true" }
+  ],
+  "constraints": [
+    {
+      "id": "team-size-positive",
+      "expr": "teamSize >= 1",
+      "message": "The team needs at least one person",
+      "policy": "rollback"
+    },
+    {
+      "id": "within-approved-budget",
+      "expr": "totals.grand <= $const.approvedBudget",
+      "message": "The estimate is over the approved budget and needs sign-off",
+      "policy": "flag"
+    },
+    {
+      "id": "dates-in-order",
+      "expr": "endDate > startDate",
+      "message": "The end date must be after the start date",
+      "policy": "flag"
+    }
+  ],
+  "effects": [
+    {
+      "id": "request-approval",
+      "executor": "caller",
+      "trigger": "overBudget = true",
+      "dedupeKey": "totals.grand",
+      "emit": "overBudget",
+      "payload": {
+        "message": "'Offsite estimate of ' & $string(totals.grand) & ' exceeds the approved budget'"
+      },
+      "statusPath": "$.approval.status",
+      "description": "Route an over-budget offsite to the caller for approval."
+    }
+  ],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "plan",
+    "views": [
+      {
+        "id": "plan",
+        "label": "Plan the offsite",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "planSteps",
+            "type": "stepper",
+            "menuItems": [
+              { "label": "Plan", "targetView": "plan" },
+              { "label": "Summary", "targetView": "summary" },
+              { "label": "Diagnostics", "targetView": "diagnostics" }
+            ]
+          },
+          { "id": "planIssues", "type": "validationSummary", "label": "Needs attention" },
+          {
+            "id": "planTabs",
+            "type": "tabs",
+            "components": [
+              {
+                "id": "teamTab",
+                "type": "tabItem",
+                "label": "Team",
+                "layout": "vertical",
+                "components": [
+                  { "id": "teamSizeField", "type": "numericStepper", "label": "Team size", "bind": "$.teamSize", "min": 1, "max": 60, "step": 1 },
+                  { "id": "nightsField", "type": "numericStepper", "label": "Nights", "bind": "$.nights", "min": 1, "max": 14, "step": 1 },
+                  {
+                    "id": "datesField",
+                    "type": "dateRangeField",
+                    "label": "Offsite dates",
+                    "bindFrom": "$.startDate",
+                    "bindTo": "$.endDate",
+                    "helperText": "The end date must be after the start date"
+                  }
+                ]
+              },
+              {
+                "id": "costsTab",
+                "type": "tabItem",
+                "label": "Costs",
+                "layout": "vertical",
+                "components": [
+                  { "id": "nightlyField", "type": "currencyField", "label": "Accommodation per person, per night", "bind": "$.perPersonNightly", "currency": "EUR" },
+                  { "id": "cateringField", "type": "currencyField", "label": "Catering per person, per day", "bind": "$.cateringPerDay", "currency": "EUR" },
+                  { "id": "travelField", "type": "currencyField", "label": "Travel per person", "bind": "$.travelPerPerson", "currency": "EUR" },
+                  { "id": "contingencyField", "type": "percentField", "label": "Contingency", "bind": "$.contingencyPercent", "helperText": "Added on top of the other three lines" }
+                ]
+              },
+              {
+                "id": "venueTab",
+                "type": "tabItem",
+                "label": "Venue",
+                "layout": "vertical",
+                "components": [
+                  { "id": "venueTagsField", "type": "tagsField", "label": "Must-haves", "bind": "$.venueTags", "helperText": "Press Enter to add" },
+                  { "id": "venueRatingField", "type": "ratingField", "label": "Shortlist rating", "bind": "$.venueRating", "min": 1, "max": 5, "step": 1 },
+                  {
+                    "id": "notesPanel",
+                    "type": "collapsible",
+                    "label": "Why the low rating?",
+                    "bind": "$.notes",
+                    "collapsed": false,
+                    "components": [
+                      { "id": "notesField", "type": "richTextField", "label": "Notes", "bind": "$.notes", "rows": 4, "toolbar": "basic" }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "summary",
+        "label": "Summary",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "summarySteps",
+            "type": "stepper",
+            "menuItems": [
+              { "label": "Plan", "targetView": "plan" },
+              { "label": "Summary", "targetView": "summary" },
+              { "label": "Diagnostics", "targetView": "diagnostics" }
+            ]
+          },
+          {
+            "id": "overBudgetAlert",
+            "type": "alert",
+            "variant": "warning",
+            "label": "Over budget",
+            "text": "$.budgetDelta > 0 ? 'This plan is ' & $string($round($.budgetDelta, 2)) & ' over the approved budget.' : ''",
+            "visible": "overBudget = true"
+          },
+          {
+            "id": "tiles",
+            "type": "group",
+            "layout": "horizontal",
+            "components": [
+              {
+                "id": "grandTile",
+                "type": "statTile",
+                "label": "Total cost",
+                "bind": "$.totals.grand",
+                "format": "currency",
+                "currency": "EUR",
+                "delta": "$string($round($.budgetDelta, 2)) & ' vs budget'",
+                "trend": "$.budgetTrend",
+                "caption": "$string($.teamSize) & ' people, ' & $string($.nights) & ' nights'"
+              },
+              {
+                "id": "perPersonTile",
+                "type": "metric",
+                "label": "Per person",
+                "bind": "$.totals.perPerson",
+                "format": "currency",
+                "currency": "EUR"
+              },
+              {
+                "id": "ratingTile",
+                "type": "statTile",
+                "label": "Venue rating",
+                "bind": "$.venueRating",
+                "format": "number",
+                "caption": "out of 5"
+              }
+            ]
+          },
+          {
+            "id": "summaryCard",
+            "type": "card",
+            "label": "Cost breakdown",
+            "layout": "vertical",
+            "components": [
+              {
+                "id": "costSummary",
+                "type": "summaryList",
+                "items": [
+                  { "label": "Accommodation", "bind": "$.totals.accommodation", "format": "currency", "currency": "EUR" },
+                  { "label": "Catering", "bind": "$.totals.catering", "format": "currency", "currency": "EUR" },
+                  { "label": "Travel", "bind": "$.totals.travel", "format": "currency", "currency": "EUR" },
+                  { "label": "Contingency", "bind": "$.totals.contingency", "format": "currency", "currency": "EUR" },
+                  { "label": "Total", "bind": "$.totals.grand", "format": "currency", "currency": "EUR" }
+                ]
+              },
+              { "id": "sep1", "type": "separatorLine" },
+              {
+                "id": "breakdownChart",
+                "type": "dataChart",
+                "label": "By category",
+                "bind": "$.breakdown",
+                "chartType": "bar",
+                "chartX": "category",
+                "chartSeries": [{ "field": "amount", "label": "Amount" }]
+              }
+            ]
+          },
+          {
+            "id": "approvalStatus",
+            "type": "effectStatus",
+            "label": "Budget approval",
+            "bind": "$.approval.status",
+            "errorPath": "$.approval.error",
+            "effectId": "request-approval",
+            "retryLabel": "Request again",
+            "onRetry": { "mutations": "{\"$.approval.status\": \"pending\"}" }
+          },
+          { "id": "spacer1", "type": "spacer", "size": 8 },
+          {
+            "id": "handbookLink",
+            "type": "link",
+            "label": "Offsite policy",
+            "href": "https://example.test/handbook/offsites",
+            "target": "_blank"
+          }
+        ]
+      },
+      {
+        "id": "diagnostics",
+        "label": "Diagnostics",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "diagSteps",
+            "type": "stepper",
+            "menuItems": [
+              { "label": "Plan", "targetView": "plan" },
+              { "label": "Summary", "targetView": "summary" },
+              { "label": "Diagnostics", "targetView": "diagnostics" }
+            ]
+          },
+          {
+            "id": "explainTotal",
+            "type": "explainPanel",
+            "label": "How the total is computed",
+            "bind": "$.totals.grand",
+            "limit": 20,
+            "showConstraints": true
+          },
+          {
+            "id": "history",
+            "type": "auditTimeline",
+            "label": "Change history",
+            "limit": 15,
+            "collapsed": true
+          },
+          {
+            "id": "stateViewer",
+            "type": "jsonViewer",
+            "label": "Merged document",
+            "bind": "$",
+            "maxDepth": 3,
+            "collapsed": true
+          }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "default plan is inside the approved budget",
+      "given": {
+        "$.teamSize": 8,
+        "$.nights": 2,
+        "$.perPersonNightly": 140,
+        "$.cateringPerDay": 55,
+        "$.travelPerPerson": 180,
+        "$.contingencyPercent": 10
+      },
+      "expect": {
+        "$.totals.accommodation": 2240,
+        "$.totals.catering": 880,
+        "$.totals.travel": 1440,
+        "$.totals.grand": 5016,
+        "$.overBudget": false,
+        "$.budgetTrend": "down"
+      }
+    },
+    {
+      "description": "a bigger team pushes the estimate over budget",
+      "given": {
+        "$.teamSize": 30,
+        "$.nights": 3,
+        "$.perPersonNightly": 140,
+        "$.cateringPerDay": 55,
+        "$.travelPerPerson": 180,
+        "$.contingencyPercent": 10
+      },
+      "expect": {
+        "$.overBudget": true,
+        "$.budgetTrend": "up",
+        "$.budgetVariant": "danger"
+      }
+    }
+  ]
+}

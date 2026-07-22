@@ -1,6 +1,11 @@
 import { type Page, type APIRequestContext } from '@playwright/test';
 
-export const BACKEND = 'http://localhost:8080';
+/**
+ * The backend under test. Overridable so the suite can be pointed at a specific build without
+ * stopping whatever is already on 8080; `playwright.config.ts` passes the same value through to
+ * the Vite dev server's proxy so the browser and these direct API calls always agree.
+ */
+export const BACKEND = process.env.VALEM_BACKEND ?? 'http://localhost:8080';
 
 export function uid(prefix: string) {
   return `${prefix}-${Date.now()}`;

@@ -298,6 +298,7 @@ export default function ViewPanel({ modelId }: Props) {
         onNavigate={setActiveViewId}
         activeViewId={activeViewId}
         violations={fieldErrors}
+        formErrors={formErrors}
       />
     </div>
   );

@@ -159,13 +159,22 @@ with all dynamic expressions already resolved. This is the renderer-agnostic con
 client (React, Angular, mobile, CLI) can consume it.
 
 `EvaluatedComponent` is a **sealed interface**, not a flat record — each component type
-serializes as one of 17 concrete records (`EvaluatedBasicInput`, `EvaluatedTextArea`,
-`EvaluatedSelectField`, `EvaluatedDependentSelector`, `EvaluatedSlider`, `EvaluatedFileUpload`,
-`EvaluatedLabel`, `EvaluatedStaticText`, `EvaluatedBadge`, `EvaluatedProgressBar`,
-`EvaluatedDataTable`, `EvaluatedDataChart`, `EvaluatedContainer`, `EvaluatedSectionList`,
-`EvaluatedButton`, `EvaluatedMenu`, `EvaluatedSeparatorLine`) carrying only the fields relevant
-to that type (`@JsonInclude(NON_NULL)`); the JSON below shows the union of possible fields, not
-a shape any single component actually emits in full.
+serializes as one of 26 concrete records (`EvaluatedBasicInput`, `EvaluatedTextArea`,
+`EvaluatedSelectField`, `EvaluatedDependentSelector`, `EvaluatedSlider`, `EvaluatedDateRange`,
+`EvaluatedFileUpload`, `EvaluatedLabel`, `EvaluatedStaticText`, `EvaluatedBadge`,
+`EvaluatedImage`, `EvaluatedLink`, `EvaluatedProgressBar`, `EvaluatedDataTable`,
+`EvaluatedDataChart`, `EvaluatedKeyValueList`, `EvaluatedStatTile`, `EvaluatedJsonViewer`,
+`EvaluatedTracePanel`, `EvaluatedValidationSummary`, `EvaluatedEffectStatus`,
+`EvaluatedContainer`, `EvaluatedSectionList`, `EvaluatedButton`, `EvaluatedMenu`,
+`EvaluatedSeparatorLine`) carrying only the fields relevant to that type
+(`@JsonInclude(NON_NULL)`); the JSON below shows the union of possible fields, not a shape any
+single component actually emits in full.
+
+Three of them carry a **declaration rather than data**: `explainPanel`, `auditTimeline` and
+`validationSummary` evaluate to which path to explain and how many rows to ask for, because the
+evaluator receives only the merged document, meta cache, expression cache and constants — it has
+no access to the trace ring buffer, the audit store or the flagged-constraint set. The renderer
+fetches those itself. See [view-system.md](../view-system.md#component-type-catalog).
 
 ```json
 {
@@ -216,26 +225,41 @@ a shape any single component actually emits in full.
 | `helperText` | string | Helper text |
 | `tooltip` | string | Tooltip |
 | `options` | `[{value, label}]` | Resolved options list |
-| `text` | string | Resolved text (for `label`, `staticText`, `badge`) |
+| `text` | string | Resolved text (for `label`, `staticText`, `badge`, `alert`, `link`) |
 | `components` | `EvaluatedComponent[]` | Resolved sub-components (for aggregates) |
+| `collapsed` | boolean | Initial fold state (for `collapsible`, `accordion`, `jsonViewer`, the trace panels) |
 | `tableColumns` | `ColumnSpec[]` | Column definitions (for `dataTable`) |
 | `pageSize` | integer | Rows per page (for `dataTable`) |
-| `chartType` | string | Chart type (for `dataChart`) |
+| `chartType` | string | Chart type (for `dataChart`, `sparkline`) |
 | `chartX` | string | X-axis field (for `dataChart`) |
-| `chartSeries` | `ChartSeriesSpec[]` | Series definitions (for `dataChart`) |
-| `menuItems` | `MenuItemSpec[]` | Navigation items (for `menu`) |
-| `orientation` | string | Layout orientation (for `menu`) |
-| `variant` | string | Visual variant (for `button`, `badge`); **unevaluated raw string for `badge`** — see the `badge` known-gap note above |
+| `chartSeries` | `ChartSeriesSpec[]` | Series definitions (for `dataChart`, `sparkline`) |
+| `items` | `EvaluatedKeyValueItem[]` | Resolved caption/value rows (for `keyValueList`) — each `{label, bind, value, text, format, currency}` |
+| `delta` / `caption` / `trend` | string | Resolved supporting text (for `statTile`) |
+| `bindFrom` / `bindTo` | string | The two bound paths (for `dateRangeField`) |
+| `valueFrom` / `valueTo` | JSON value | The two resolved ends (for `dateRangeField`) |
+| `src` / `alt` / `fit` | string | Image source, alternative text, `object-fit` (for `image`) |
+| `href` / `target` | string | Anchor destination (for `link`) |
+| `limit` / `showConstraints` | integer / boolean | How many rows to fetch (for `explainPanel`, `auditTimeline`) — a declaration; the rows are not resolved server-side |
+| `pathPrefix` / `maxItems` / `emptyText` | string / integer / string | Scope and empty state (for `validationSummary`) |
+| `effectId` / `errorPath` / `error` / `showRetry` / `retryLabel` | | Effect state (for `effectStatus`); `error` **is** resolved, being ordinary model state |
+| `maxDepth` | integer | Truncation depth (for `jsonViewer`) |
+| `menuItems` | `MenuItemSpec[]` | Navigation items (for `menu`, `stepper`, `breadcrumb`) |
+| `orientation` | string | Layout orientation (for `menu`, `stepper`) |
+| `variant` | string | Visual variant (for `button`, `badge`, `alert`, `statTile`, `validationSummary`); **unevaluated raw string for `badge`** — see the `badge` known-gap note above |
 | `icon` | string | Icon name |
-| `min` / `max` | number | Range bounds (for `sliderField`, `progressBar`) |
-| `step` | number | Step increment (for `sliderField`) |
+| `min` / `max` | number | Range bounds (for `sliderField`, `ratingField`, `numericStepper`, `progressBar`, `gauge`) |
+| `step` | number | Step increment (for `sliderField`, `ratingField`, `numericStepper`) |
+| `allowCustom` | boolean | Accept a value outside `options` (for the choice types) |
+| `toolbar` | string | Editing chrome (for `richTextField`) |
+| `size` | integer | Gap in pixels (for `spacer`) |
 | `accept` | string | MIME filter (for `fileUploadField`) |
 | `multiple` | boolean | Allow multiple files (for `fileUploadField`) |
 | `minFiles` / `maxFiles` | integer | File-count bounds (for `fileUploadField`) |
 | `minSize` / `maxSize` | number | Per-file byte-size bounds (for `fileUploadField`) |
 | `allowedMediaTypes` | string | Allowed media types (for `fileUploadField`) |
-| `showValue` | boolean | Display numeric label alongside the bar (for `progressBar`) |
-| `format` | string | `"percent"` or `"value"` (for `progressBar`) |
+| `showValue` | boolean | Display numeric label alongside the bar (for `progressBar`, `gauge`) |
+| `format` | string | `"percent"` or `"value"` (for `progressBar`); `"currency"` / `"percent"` / `"number"` / `"integer"` for the numeric inputs and `statTile`, filled in from the type when unset |
+| `currency` | string | ISO-4217 code (for `currencyField`, `statTile`, and per `keyValueList` row) |
 | `onClick` | `EventHandler` | Click handler (passed through unevaluated for client execution) |
 | `onChange` | `EventHandler` | Change handler |
 | `onOpen` | `EventHandler` | Open handler |

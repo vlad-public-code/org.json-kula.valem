@@ -56,6 +56,24 @@ export function useJSONataBoolean(
   return result;
 }
 
+/**
+ * Evaluates `expression`, falling back to the literal string when it resolves to nothing.
+ *
+ * `useJSONataText` returns undefined for an expression that parses but matches no path — which is
+ * exactly what a plain word does, since JSONata reads `up` or `success` as a path lookup. The
+ * server keeps such values literal (`ViewEvaluator` only evaluates text containing `$`), so
+ * without this fallback the same spec renders one way in the browser and another through
+ * `GET /models/{id}/view`. Use this for fields that are usually a literal and occasionally an
+ * expression: `variant`, `trend`, `icon`, `target`.
+ */
+export function useJSONataLiteral(
+  expression: string | undefined | null,
+  state: ModelState,
+): string | undefined {
+  const evaluated = useJSONataText(expression, state);
+  return evaluated ?? expression ?? undefined;
+}
+
 export function useJSONataText(
   expression: string | undefined | null,
   state: ModelState,

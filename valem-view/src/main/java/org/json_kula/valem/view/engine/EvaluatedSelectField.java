@@ -7,7 +7,7 @@ import org.json_kula.valem.view.model.OptionSpec;
 
 import java.util.List;
 
-/** Covers: selectField, radioField, multiSelectField. */
+/** Covers: selectField, radioField, multiSelectField, autocompleteField, comboBox, tagsField. */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record EvaluatedSelectField(
         String id,
@@ -27,6 +27,7 @@ public record EvaluatedSelectField(
         String helperText,
         String tooltip,
         List<OptionSpec> options,
+        Boolean allowCustom,
         EventHandler onChange,
         EventHandler onOpen,
         EventHandler onClose

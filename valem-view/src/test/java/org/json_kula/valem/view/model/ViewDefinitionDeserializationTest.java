@@ -102,6 +102,103 @@ class ViewDefinitionDeserializationTest {
     }
 
     @Test
+    void added_types_land_on_the_record_that_already_had_their_field_shape() throws Exception {
+        // Grouping by field shape rather than one record per type is what keeps these free: a
+        // rating is a slider's min/max/step, an alert is a badge's label/text/variant.
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"currencyField\" }")).isInstanceOf(BasicInputSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"percentField\" }")).isInstanceOf(BasicInputSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"richTextField\" }")).isInstanceOf(TextAreaSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"autocompleteField\" }")).isInstanceOf(ChoiceInputSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"comboBox\" }")).isInstanceOf(ChoiceInputSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"tagsField\" }")).isInstanceOf(ChoiceInputSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"ratingField\" }")).isInstanceOf(SliderSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"numericStepper\" }")).isInstanceOf(SliderSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"alert\" }")).isInstanceOf(BadgeSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"callout\" }")).isInstanceOf(BadgeSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"spacer\" }")).isInstanceOf(SeparatorLineSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"gauge\" }")).isInstanceOf(ProgressBarSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"sparkline\" }")).isInstanceOf(DataChartSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"card\" }")).isInstanceOf(ContainerSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"toolbar\" }")).isInstanceOf(ContainerSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"buttonGroup\" }")).isInstanceOf(ContainerSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"tabs\" }")).isInstanceOf(ContainerSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"tabItem\" }")).isInstanceOf(ContainerSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"accordion\" }")).isInstanceOf(ContainerSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"collapsible\" }")).isInstanceOf(ContainerSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"stepper\" }")).isInstanceOf(MenuSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"breadcrumb\" }")).isInstanceOf(MenuSpec.class);
+    }
+
+    @Test
+    void added_types_with_their_own_shape_get_their_own_record() throws Exception {
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"dateRangeField\" }")).isInstanceOf(DateRangeSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"image\" }")).isInstanceOf(ImageSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"link\" }")).isInstanceOf(LinkSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"keyValueList\" }")).isInstanceOf(KeyValueListSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"summaryList\" }")).isInstanceOf(KeyValueListSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"statTile\" }")).isInstanceOf(StatTileSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"metric\" }")).isInstanceOf(StatTileSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"jsonViewer\" }")).isInstanceOf(JsonViewerSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"explainPanel\" }")).isInstanceOf(TracePanelSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"auditTimeline\" }")).isInstanceOf(TracePanelSpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"validationSummary\" }")).isInstanceOf(ValidationSummarySpec.class);
+        assertThat(parse("{ \"id\": \"a\", \"type\": \"effectStatus\" }")).isInstanceOf(EffectStatusSpec.class);
+    }
+
+    @Test
+    void the_new_fields_bind_by_name() throws Exception {
+        BasicInputSpec money = (BasicInputSpec) parse("""
+                { "id": "p", "type": "currencyField", "bind": "$.premium",
+                  "format": "currency", "currency": "GBP" }
+                """);
+        assertThat(money.currency()).isEqualTo("GBP");
+
+        ChoiceInputSpec tags = (ChoiceInputSpec) parse("""
+                { "id": "t", "type": "tagsField", "bind": "$.tags", "allowCustom": false }
+                """);
+        assertThat(tags.allowCustom()).isFalse();
+
+        ContainerSpec panel = (ContainerSpec) parse("""
+                { "id": "s", "type": "collapsible", "label": "Details", "collapsed": true }
+                """);
+        assertThat(panel.collapsed().asBoolean()).isTrue();
+
+        DateRangeSpec range = (DateRangeSpec) parse("""
+                { "id": "d", "type": "dateRangeField",
+                  "bindFrom": "$.start", "bindTo": "$.end", "minDate": "2026-01-01" }
+                """);
+        assertThat(range.bindFrom()).isEqualTo("$.start");
+        assertThat(range.bindTo()).isEqualTo("$.end");
+        assertThat(range.minDate()).isEqualTo("2026-01-01");
+    }
+
+    @Test
+    void key_value_rows_deserialize_into_their_supporting_record() throws Exception {
+        KeyValueListSpec kv = (KeyValueListSpec) parse("""
+                {
+                  "id": "summary", "type": "summaryList", "label": "Quote",
+                  "items": [
+                    { "label": "Premium", "bind": "$.premium", "format": "currency" },
+                    { "label": "Reference", "text": "$.ref" }
+                  ]
+                }
+                """);
+        assertThat(kv.items()).hasSize(2);
+        assertThat(kv.items().getFirst().label()).isEqualTo("Premium");
+        assertThat(kv.items().getFirst().format()).isEqualTo("currency");
+        assertThat(kv.items().get(1).text().asText()).isEqualTo("$.ref");
+    }
+
+    @Test
+    void key_value_items_list_is_immutable() throws Exception {
+        KeyValueListSpec kv = (KeyValueListSpec) parse("""
+                { "id": "s", "type": "keyValueList", "items": [ { "label": "A", "bind": "$.a" } ] }
+                """);
+        assertThatThrownBy(() -> kv.items().add(null))
+                .isInstanceOf(UnsupportedOperationException.class);
+    }
+
+    @Test
     void type_is_retained_on_the_record_so_grouped_types_stay_distinguishable() throws Exception {
         assertThat(parse("{ \"id\": \"a\", \"type\": \"radioField\" }").type()).isEqualTo("radioField");
         assertThat(parse("{ \"id\": \"a\", \"type\": \"fieldSet\" }").type()).isEqualTo("fieldSet");

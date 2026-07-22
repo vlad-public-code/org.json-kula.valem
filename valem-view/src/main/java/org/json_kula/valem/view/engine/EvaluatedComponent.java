@@ -20,13 +20,22 @@ public sealed interface EvaluatedComponent permits
         EvaluatedSelectField,
         EvaluatedDependentSelector,
         EvaluatedSlider,
+        EvaluatedDateRange,
         EvaluatedFileUpload,
         EvaluatedLabel,
         EvaluatedStaticText,
         EvaluatedBadge,
+        EvaluatedImage,
+        EvaluatedLink,
         EvaluatedProgressBar,
         EvaluatedDataTable,
         EvaluatedDataChart,
+        EvaluatedKeyValueList,
+        EvaluatedStatTile,
+        EvaluatedJsonViewer,
+        EvaluatedTracePanel,
+        EvaluatedValidationSummary,
+        EvaluatedEffectStatus,
         EvaluatedContainer,
         EvaluatedSectionList,
         EvaluatedButton,
@@ -58,11 +67,18 @@ public sealed interface EvaluatedComponent permits
     default String allowedMediaTypes()  { return null; }
     default Boolean showValue()         { return null; }
     default String format()             { return null; }
+    default String currency()           { return null; }
+    default String variant()            { return null; }
+    default String icon()               { return null; }
+    default boolean collapsed()         { return false; }
+    default Integer limit()             { return null; }
     default List<ColumnSpec> tableColumns()        { return null; }
     default List<ChartSeriesSpec> chartSeries()    { return null; }
     default List<MenuItemSpec> menuItems()         { return null; }
+    default List<EvaluatedKeyValueItem> items()    { return null; }
     default EventHandler onClick()      { return null; }
     default EventHandler onChange()     { return null; }
     default EventHandler onOpen()       { return null; }
     default EventHandler onClose()      { return null; }
+    default EventHandler onRetry()      { return null; }
 }

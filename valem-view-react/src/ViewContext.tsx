@@ -8,7 +8,14 @@ export interface ViewContextValue {
   onMutate: (mutations: MutationMap) => Promise<void>;
   onNavigate: (viewId: string) => void;
   activeViewId: string;
+  /** Constraint violations that resolved to a bound path, keyed by that path. */
   fieldErrors: Record<string, string>;
+  /**
+   * Violations that resolved to no single path — a constraint spanning three fields, or one
+   * whose paths are all array-scoped. These have nowhere to appear beside a field, which is
+   * what `validationSummary` is for.
+   */
+  formErrors: string[];
 }
 
 export const ViewContext = createContext<ViewContextValue | null>(null);

@@ -404,7 +404,7 @@ class ViewEvaluatorTest {
     private static BasicInputSpec input(String id, String type, JsonNode visible, JsonNode enabled,
                                         JsonNode readOnly, JsonNode required, String bind) {
         return new BasicInputSpec(id, type, null, visible, enabled, readOnly, required,
-                bind, null, null, null, null);
+                bind, null, null, null, null, null, null);
     }
 
     private static StaticTextSpec staticText(String id, JsonNode text) {
@@ -413,7 +413,7 @@ class ViewEvaluatorTest {
 
     private static ContainerSpec container(String id, String type, String bind,
                                            List<ComponentSpec> children) {
-        return new ContainerSpec(id, type, null, null, bind, null, null, null, children);
+        return new ContainerSpec(id, type, null, null, bind, null, null, null, null, children);
     }
 
     private static SliderSpec slider(String id, String bind, Double min, Double max, Double step) {
@@ -436,6 +436,6 @@ class ViewEvaluatorTest {
 
     private static ChoiceInputSpec choice(String id, String type, List<OptionSpec> options) {
         return new ChoiceInputSpec(id, type, null, null, null, null, null, null, null, null, null,
-                options, null, null, null, null, null, null);
+                options, null, null, null, null, null, null, null);
     }
 }

@@ -33,27 +33,48 @@ import com.fasterxml.jackson.databind.JsonNode;
         defaultImpl = UnknownComponentSpec.class)
 @JsonSubTypes({
         @JsonSubTypes.Type(value = BasicInputSpec.class, names = {
-                "textField", "numericField", "passwordField", "emailField", "phoneNumberField",
-                "checkboxField", "toggleField", "dateField", "dateTimeField", "timeField",
-                "countrySelector"}),
-        @JsonSubTypes.Type(value = TextAreaSpec.class,          names = "textAreaField"),
+                "textField", "numericField", "currencyField", "percentField", "passwordField",
+                "emailField", "phoneNumberField", "checkboxField", "toggleField", "dateField",
+                "dateTimeField", "timeField", "countrySelector"}),
+        @JsonSubTypes.Type(value = TextAreaSpec.class,          names = {
+                "textAreaField", "richTextField"}),
         @JsonSubTypes.Type(value = ChoiceInputSpec.class,       names = {
-                "selectField", "radioField", "multiSelectField"}),
+                "selectField", "radioField", "multiSelectField", "autocompleteField", "comboBox",
+                "tagsField"}),
         @JsonSubTypes.Type(value = DependentSelectorSpec.class, names = "countryRegionSelector"),
-        @JsonSubTypes.Type(value = SliderSpec.class,            names = "sliderField"),
+        @JsonSubTypes.Type(value = SliderSpec.class,            names = {
+                "sliderField", "ratingField", "numericStepper"}),
+        @JsonSubTypes.Type(value = DateRangeSpec.class,         names = "dateRangeField"),
         @JsonSubTypes.Type(value = FileUploadSpec.class,        names = "fileUploadField"),
         @JsonSubTypes.Type(value = LabelSpec.class,             names = "label"),
         @JsonSubTypes.Type(value = StaticTextSpec.class,        names = "staticText"),
-        @JsonSubTypes.Type(value = BadgeSpec.class,             names = "badge"),
-        @JsonSubTypes.Type(value = SeparatorLineSpec.class,     names = "separatorLine"),
-        @JsonSubTypes.Type(value = ProgressBarSpec.class,       names = "progressBar"),
+        @JsonSubTypes.Type(value = BadgeSpec.class,             names = {
+                "badge", "alert", "callout"}),
+        @JsonSubTypes.Type(value = SeparatorLineSpec.class,     names = {
+                "separatorLine", "spacer"}),
+        @JsonSubTypes.Type(value = ImageSpec.class,             names = "image"),
+        @JsonSubTypes.Type(value = LinkSpec.class,              names = "link"),
+        @JsonSubTypes.Type(value = ProgressBarSpec.class,       names = {
+                "progressBar", "gauge"}),
         @JsonSubTypes.Type(value = DataTableSpec.class,         names = "dataTable"),
-        @JsonSubTypes.Type(value = DataChartSpec.class,         names = "dataChart"),
+        @JsonSubTypes.Type(value = DataChartSpec.class,         names = {
+                "dataChart", "sparkline"}),
+        @JsonSubTypes.Type(value = KeyValueListSpec.class,      names = {
+                "keyValueList", "summaryList"}),
+        @JsonSubTypes.Type(value = StatTileSpec.class,          names = {
+                "statTile", "metric"}),
+        @JsonSubTypes.Type(value = JsonViewerSpec.class,        names = "jsonViewer"),
+        @JsonSubTypes.Type(value = TracePanelSpec.class,        names = {
+                "explainPanel", "auditTimeline"}),
+        @JsonSubTypes.Type(value = ValidationSummarySpec.class, names = "validationSummary"),
+        @JsonSubTypes.Type(value = EffectStatusSpec.class,      names = "effectStatus"),
         @JsonSubTypes.Type(value = ContainerSpec.class,         names = {
-                "group", "fieldSet", "sectionItem"}),
+                "group", "fieldSet", "card", "toolbar", "buttonGroup", "tabs", "tabItem",
+                "accordion", "collapsible", "sectionItem"}),
         @JsonSubTypes.Type(value = SectionListSpec.class,       names = "sectionList"),
         @JsonSubTypes.Type(value = ButtonSpec.class,            names = "button"),
-        @JsonSubTypes.Type(value = MenuSpec.class,              names = "menu")
+        @JsonSubTypes.Type(value = MenuSpec.class,              names = {
+                "menu", "stepper", "breadcrumb"})
 })
 public sealed interface ComponentSpec permits
         BasicInputSpec,
@@ -61,14 +82,23 @@ public sealed interface ComponentSpec permits
         ChoiceInputSpec,
         DependentSelectorSpec,
         SliderSpec,
+        DateRangeSpec,
         FileUploadSpec,
         LabelSpec,
         StaticTextSpec,
         BadgeSpec,
         SeparatorLineSpec,
+        ImageSpec,
+        LinkSpec,
         ProgressBarSpec,
         DataTableSpec,
         DataChartSpec,
+        KeyValueListSpec,
+        StatTileSpec,
+        JsonViewerSpec,
+        TracePanelSpec,
+        ValidationSummarySpec,
+        EffectStatusSpec,
         ContainerSpec,
         SectionListSpec,
         ButtonSpec,

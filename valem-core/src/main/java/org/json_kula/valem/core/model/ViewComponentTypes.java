@@ -22,21 +22,27 @@ public final class ViewComponentTypes {
 
     /** Input components — bind to a writable path and accept user edits. */
     public static final Set<String> FIELDS = Set.of(
-            "textField", "textAreaField", "numericField", "passwordField", "emailField",
-            "phoneNumberField", "checkboxField", "toggleField", "selectField", "radioField",
-            "multiSelectField", "dateField", "dateTimeField", "timeField", "sliderField",
-            "fileUploadField", "countrySelector", "countryRegionSelector");
+            "textField", "textAreaField", "richTextField", "numericField", "currencyField",
+            "percentField", "passwordField", "emailField", "phoneNumberField", "checkboxField",
+            "toggleField", "selectField", "radioField", "multiSelectField", "autocompleteField",
+            "comboBox", "tagsField", "dateField", "dateTimeField", "timeField", "dateRangeField",
+            "sliderField", "ratingField", "numericStepper", "fileUploadField", "countrySelector",
+            "countryRegionSelector");
 
     /** Read-only display components. */
     public static final Set<String> OUTPUT = Set.of(
-            "label", "staticText", "badge", "separatorLine", "dataTable", "dataChart", "progressBar");
+            "label", "staticText", "badge", "alert", "callout", "separatorLine", "spacer",
+            "image", "link", "dataTable", "dataChart", "sparkline", "progressBar", "gauge",
+            "keyValueList", "summaryList", "statTile", "metric", "jsonViewer",
+            "explainPanel", "auditTimeline", "validationSummary", "effectStatus");
 
     /** Containers — hold nested {@code components}. */
     public static final Set<String> AGGREGATES = Set.of(
-            "group", "fieldSet", "sectionList", "sectionItem");
+            "group", "fieldSet", "card", "toolbar", "buttonGroup", "tabs", "tabItem",
+            "accordion", "collapsible", "sectionList", "sectionItem");
 
     /** Action components. */
-    public static final Set<String> ACTIONS = Set.of("button", "menu");
+    public static final Set<String> ACTIONS = Set.of("button", "menu", "stepper", "breadcrumb");
 
     /** Every legal component {@code type}, in a stable sorted order for error messages. */
     public static final Set<String> ALL = unmodifiableSorted();

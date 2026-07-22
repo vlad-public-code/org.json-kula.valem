@@ -5,8 +5,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import org.json_kula.valem.view.model.EventHandler;
 
 /**
- * Covers: textField, numericField, passwordField, emailField, phoneNumberField,
- *         dateField, timeField, dateTimeField, checkboxField, toggleField, countrySelector.
+ * Covers: textField, numericField, currencyField, percentField, passwordField, emailField,
+ *         phoneNumberField, dateField, timeField, dateTimeField, checkboxField, toggleField,
+ *         countrySelector.
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record EvaluatedBasicInput(
@@ -26,5 +27,7 @@ public record EvaluatedBasicInput(
         String placeholder,
         String helperText,
         String tooltip,
+        String format,
+        String currency,
         EventHandler onChange
 ) implements EvaluatedComponent {}

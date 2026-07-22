@@ -6,12 +6,20 @@ export type { ViewContextValue } from './ViewContext';
 export { ComponentRenderer } from './ComponentRenderer';
 export type { ComponentRendererProps, BaseComponentProps } from './ComponentRenderer';
 
+// Layout — shared by ViewRenderer and every container component; implements tabs and wizard
+export { LayoutContainer, flowStyle, componentLabel } from './aggregates/LayoutContainer';
+export type { LayoutContainerProps } from './aggregates/LayoutContainer';
+
 // Hooks
-export { useJSONata, useJSONataBoolean, useJSONataText } from './hooks/useJSONata';
+export { useJSONata, useJSONataBoolean, useJSONataText, useJSONataLiteral } from './hooks/useJSONata';
 export { useCountries } from './hooks/useCountries';
 export type { Country } from './hooks/useCountries';
 export { useRegions } from './hooks/useRegions';
 export type { Region } from './hooks/useRegions';
+export { useResolvedOptions } from './hooks/useResolvedOptions';
+
+// Formatting — the `format` / `currency` fields on inputs, tiles and summary rows
+export { formatValue, currencySymbol } from './format';
 
 // Types
 export type {
@@ -24,6 +32,7 @@ export type {
   ViewSpec,
   ViewDefinition,
   EvaluatedComponent,
+  EvaluatedKeyValueItem,
   EvaluatedView,
   ModelState,
   MetaCache,
@@ -42,14 +51,24 @@ export type {
   ChoiceInputSpec,
   DependentSelectorSpec,
   SliderSpec,
+  DateRangeSpec,
   FileUploadSpec,
   LabelSpec,
   StaticTextSpec,
   BadgeSpec,
   SeparatorLineSpec,
+  ImageSpec,
+  LinkSpec,
   ProgressBarSpec,
   DataTableSpec,
   DataChartSpec,
+  KeyValueItemSpec,
+  KeyValueListSpec,
+  StatTileSpec,
+  JsonViewerSpec,
+  TracePanelSpec,
+  ValidationSummarySpec,
+  EffectStatusSpec,
   ContainerSpec,
   SectionListSpec,
   ButtonSpec,
