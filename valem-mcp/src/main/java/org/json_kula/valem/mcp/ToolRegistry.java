@@ -85,6 +85,11 @@ class ToolRegistry {
     // ── Tool definitions ────────────────────────────────────────────────────────
 
     private void register() {
+        // remote_with_browser mode: a created model is only useful to the paired developer once it
+        // renders in the sandbox, so nudge the agent to author a viewDefinition up front instead of
+        // waiting to be asked for one after the fact.
+        boolean pairedCapable = service instanceof BrowserPairable;
+
         add("list_models", "List models",
             "List the ids of all currently registered Valem models (alphabetical).",
             objectSchema(),
@@ -94,7 +99,13 @@ class ToolRegistry {
         add("create_model", "Create model",
             "Create a new model from a declarative ModelSpec. The spec carries the JSON schema plus "
             + "derivations (computed fields), constraints (invariants), and optional effects. Returns "
-            + "the created id. Fails (isError) on an invalid spec or a duplicate id.",
+            + "the created id. Fails (isError) on an invalid spec or a duplicate id."
+            + (pairedCapable
+                ? " When paired with a browser (remote_with_browser mode), ALWAYS include a "
+                  + "viewDefinition in the spec so the model is immediately visible/usable in the "
+                  + "sandbox — do not omit it and wait to be asked for one afterward. See the "
+                  + "valem://guide/view-system resource for the component catalog."
+                : ""),
             objectSchema(schema -> {
                 ObjectNode props = schema.putObject("properties");
                 props.set("spec", describedSchema(SpecGenerationSchema.modelSpec(mapper),
