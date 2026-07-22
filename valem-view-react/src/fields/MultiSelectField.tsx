@@ -1,8 +1,9 @@
 import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
+import type { ChoiceInputSpec } from '../types';
 
-export function MultiSelectField({ component: c, enabled, readOnly, required }: BaseComponentProps) {
+export function MultiSelectField({ component: c, enabled, readOnly, required }: BaseComponentProps<ChoiceInputSpec>) {
   const { state, onMutate } = useViewContext();
   const raw = c.bind ? getByPath(state, c.bind.replace(/^\$\./, '')) : undefined;
   const selected: string[] = Array.isArray(raw) ? (raw as string[]) : [];

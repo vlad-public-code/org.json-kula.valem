@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useViewContext } from '../ViewContext';
 import type { BaseComponentProps } from '../ComponentRenderer';
+import type { ButtonSpec } from '../types';
 import jsonata from 'jsonata';
 
 const VARIANT_STYLES: Record<string, CSSProperties> = {
@@ -10,7 +11,7 @@ const VARIANT_STYLES: Record<string, CSSProperties> = {
   ghost:     { background: 'transparent', color: '#2563eb', border: '1px solid #93c5fd' },
 };
 
-export function ButtonComponent({ component: c, enabled, text }: BaseComponentProps) {
+export function ButtonComponent({ component: c, enabled, text }: BaseComponentProps<ButtonSpec>) {
   const { state, onMutate, onNavigate } = useViewContext();
 
   const variant = (c.variant as string) ?? 'primary';

@@ -29,3 +29,30 @@ export type {
   MetaCache,
   MutationMap,
 } from './types';
+
+// ComponentSpec union — the per-type variants, for narrowing and custom renderers
+export type {
+  ComponentSpecBase,
+  KnownComponentSpec,
+  UnknownComponentSpec,
+  NestingComponentSpec,
+  BasicInputType,
+  BasicInputSpec,
+  TextAreaSpec,
+  ChoiceInputSpec,
+  DependentSelectorSpec,
+  SliderSpec,
+  FileUploadSpec,
+  LabelSpec,
+  StaticTextSpec,
+  BadgeSpec,
+  SeparatorLineSpec,
+  ProgressBarSpec,
+  DataTableSpec,
+  DataChartSpec,
+  ContainerSpec,
+  SectionListSpec,
+  ButtonSpec,
+  MenuSpec,
+} from './types';
+export { KNOWN_COMPONENT_TYPES, isKnownComponent, hasChildComponents } from './types';

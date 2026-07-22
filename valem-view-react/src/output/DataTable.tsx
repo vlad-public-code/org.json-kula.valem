@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
+import type { DataTableSpec } from '../types';
 
-export function DataTable({ component: c }: BaseComponentProps) {
+export function DataTable({ component: c }: BaseComponentProps<DataTableSpec>) {
   const { state } = useViewContext();
   const [page, setPage] = useState(0);
 

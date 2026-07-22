@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
-import type { OptionSpec } from '../types';
+import type { ChoiceInputSpec, OptionSpec } from '../types';
 
-export function SelectField({ component: c, enabled, readOnly, required }: BaseComponentProps) {
+export function SelectField({ component: c, enabled, readOnly, required }: BaseComponentProps<ChoiceInputSpec>) {
   const { state, onMutate } = useViewContext();
   const value = c.bind ? String(getByPath(state, c.bind.replace(/^\$\./, '')) ?? '') : '';
   const [urlOptions, setUrlOptions] = useState<OptionSpec[]>([]);

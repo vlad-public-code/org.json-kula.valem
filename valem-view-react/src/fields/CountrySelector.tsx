@@ -2,8 +2,9 @@ import { useViewContext } from '../ViewContext';
 import { useCountries } from '../hooks/useCountries';
 import { getByPath } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
+import type { BasicInputSpec } from '../types';
 
-export function CountrySelector({ component: c, enabled, readOnly, required }: BaseComponentProps) {
+export function CountrySelector({ component: c, enabled, readOnly, required }: BaseComponentProps<BasicInputSpec>) {
   const { state, onMutate } = useViewContext();
   const value = c.bind ? String(getByPath(state, c.bind.replace(/^\$\./, '')) ?? '') : '';
   const countries = useCountries();

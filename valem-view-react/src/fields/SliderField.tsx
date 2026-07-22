@@ -1,8 +1,9 @@
 import { useViewContext } from '../ViewContext';
 import { useDeferredMutate } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
+import type { SliderSpec } from '../types';
 
-export function SliderField({ component: c, enabled, readOnly, required }: BaseComponentProps) {
+export function SliderField({ component: c, enabled, readOnly, required }: BaseComponentProps<SliderSpec>) {
   const { state } = useViewContext();
   const { draft, schedule, handleBlur, commit } = useDeferredMutate(c.bind, state);
 

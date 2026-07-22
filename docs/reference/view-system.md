@@ -83,7 +83,9 @@ The React library is one implementation; future renderers just need to parse eit
 
 ### `view/model` package
 
-All records use `@JsonCreator` factory methods with `FAIL_ON_UNKNOWN_PROPERTIES = false`.
+`ViewDefinition`, `ViewSpec` and the supporting records use `@JsonCreator` factory methods; the
+`ComponentSpec` records bind through their canonical constructors. All of it is read with
+`FAIL_ON_UNKNOWN_PROPERTIES = false`.
 
 **Write-time validation.** A `viewDefinition` is validated when a model is created or evolved,
 not deferred to first render: `ModelSpecValidator` enforces (structurally, over the raw JSON)
@@ -115,58 +117,69 @@ record ViewSpec(
 )
 ```
 
-**`ComponentSpec`** — flat discriminated record, all fields nullable except `id` and `type`
+**`ComponentSpec`** — a **sealed interface**, not a flat record. `type` is the discriminator
+(`@JsonTypeInfo(use = NAME, include = EXISTING_PROPERTY, property = "type", visible = true)`), so
+the JSON stays flat and unchanged while each component type binds to a record carrying only the
+fields it actually uses. A `badge` with a `pageSize` is not representable.
+
+The interface itself declares only what the generic evaluation pipeline reads; every other field is
+reachable exclusively by pattern-matching the concrete record, which is what makes `ViewEvaluator`'s
+switch exhaustive:
+
 ```java
-record ComponentSpec(
-    String id,
-    String type,             // discriminator (see catalog below)
-    String label,
-    JsonNode visible,        // Boolean | String (JSONata) | null → inherit meta
-    JsonNode enabled,        // Boolean | String (JSONata) | null → !readOnly
-    JsonNode readOnly,       // Boolean | String (JSONata) | null → inherit meta
-    JsonNode required,       // Boolean | String (JSONata) | null → inherit meta (`#required`)
-    String bind,             // $.path for input/output components
-    String placeholder,
-    String helperText,
-    String tooltip,
-    JsonNode className,      // declared but currently DEAD — no evaluator or renderer reads it
-    List<OptionSpec> options,
-    String optionsExpr,      // JSONata → List<{value, label}>
-    String optionsUrl,       // URL returning [{value,label}]
-    String optionsPath,      // JSON path in optionsUrl response
-    String dependsOn,        // countryRegionSelector: bind path of countrySelector
-    Integer rows,            // textAreaField
-    List<ComponentSpec> components,
-    String layout,           // group: vertical | horizontal | grid
-    Integer columns,
-    String legend,           // fieldSet
-    String itemView,         // sectionList: view id for editing array items
-    JsonNode canAdd,
-    JsonNode canRemove,
-    String addLabel,
-    String removeLabel,
-    List<ColumnSpec> tableColumns,
-    Integer pageSize,
-    String chartType,        // bar | line | pie | area
-    String chartX,
-    List<ChartSeriesSpec> chartSeries,
-    JsonNode text,           // label, staticText: String | JSONata
-    List<MenuItemSpec> menuItems,
-    String orientation,      // menu: horizontal | vertical
-    String variant,          // button: primary | secondary | danger | ghost
-    String icon,
-    Double min,              // sliderField: range minimum; progressBar: range minimum
-    Double max,              // sliderField: range maximum; progressBar: range maximum
-    Double step,             // sliderField: step increment
-    String accept,           // fileUploadField: MIME type filter (e.g. "image/*")
-    Boolean showValue,       // progressBar: display numeric label alongside bar
-    String format,           // progressBar: "percent" (default) | "value"
-    EventHandler onClick,
-    EventHandler onChange,
-    EventHandler onOpen,
-    EventHandler onClose
-)
+sealed interface ComponentSpec permits BasicInputSpec, TextAreaSpec, /* … */ UnknownComponentSpec {
+    String id();
+    String type();
+    default String   bind()     { return null; }  // $.path — also the meta-inheritance anchor
+    default JsonNode visible()  { return null; }  // Boolean | String (JSONata) | null → inherit meta
+    default JsonNode enabled()  { return null; }  // Boolean | String (JSONata) | null → !readOnly
+    default JsonNode readOnly() { return null; }  // Boolean | String (JSONata) | null → inherit meta
+    default JsonNode required() { return null; }  // Boolean | String (JSONata) | null → `#required`
+}
 ```
+
+`id` and `type` are required on every component — a spec missing either is rejected at parse time
+(a `422` at write, not a nameless component at render).
+
+Records are grouped by **field shape**, not one per type — the same grouping `EvaluatedComponent`
+uses on the output side:
+
+| Record | `type` values | Fields beyond `id`/`type`/`bind`/`visible` |
+|---|---|---|
+| `BasicInputSpec` | `textField`, `numericField`, `passwordField`, `emailField`, `phoneNumberField`, `checkboxField`, `toggleField`, `dateField`, `dateTimeField`, `timeField`, `countrySelector` | `label`, `enabled`, `readOnly`, `required`, `placeholder`, `helperText`, `tooltip`, `onChange` |
+| `TextAreaSpec` | `textAreaField` | basic-input fields + `rows` |
+| `ChoiceInputSpec` | `selectField`, `radioField`, `multiSelectField` | basic-input fields + `options`, `optionsExpr`, `optionsUrl`, `optionsPath`, `onOpen`, `onClose` |
+| `DependentSelectorSpec` | `countryRegionSelector` | basic-input fields + `options`, `dependsOn` |
+| `SliderSpec` | `sliderField` | `label`, `enabled`, `readOnly`, `required`, `helperText`, `tooltip`, `min`, `max`, `step`, `onChange` |
+| `FileUploadSpec` | `fileUploadField` | `label`, `enabled`, `readOnly`, `required`, `helperText`, `tooltip`, `accept`, `multiple`, `minFiles`, `maxFiles`, `minSize`, `maxSize`, `allowedMediaTypes`, `onChange` |
+| `LabelSpec` | `label` | `label`, `text` |
+| `StaticTextSpec` | `staticText` | `text` |
+| `BadgeSpec` | `badge` | `label`, `text`, `variant` |
+| `SeparatorLineSpec` | `separatorLine` | — |
+| `ProgressBarSpec` | `progressBar` | `label`, `min`, `max`, `showValue`, `format`, `helperText`, `tooltip` |
+| `DataTableSpec` | `dataTable` | `label`, `tableColumns`, `pageSize`, `tooltip` |
+| `DataChartSpec` | `dataChart` | `label`, `chartType`, `chartX`, `chartSeries` |
+| `ContainerSpec` | `group`, `fieldSet`, `sectionItem` | `label`, `layout`, `columns`, `legend`, `components` |
+| `SectionListSpec` | `sectionList` | `label`, `itemView`, `canAdd`, `canRemove`, `addLabel`, `removeLabel`, `layout`, `columns`, `components`, `onChange` |
+| `ButtonSpec` | `button` | `label`, `enabled`, `variant`, `icon`, `onClick` |
+| `MenuSpec` | `menu` | `orientation`, `menuItems` |
+| `UnknownComponentSpec` | anything else | *(no fixed shape — see below)* |
+
+`bind` is on every record, not only the value-carrying ones, because it is the anchor for the
+meta-driven `visible`/`readOnly`/`required` inheritance described below — not just a value locator.
+
+**Unknown types.** A `type` none of the built-in records claim binds to `UnknownComponentSpec`,
+which keeps the component's **raw JSON verbatim** — a custom type may carry any property at all,
+including ones no built-in type declares, and nothing is dropped at parse time. The common fields
+the pipeline reads are projected out of that node; everything else is reachable via
+`property(String)`, and the record serializes back to exactly the JSON it was parsed from.
+`ViewEvaluator` renders these as a basic input, which is what an unrecognised `type` has always
+resolved to.
+
+> `className` was declared on the old flat record but read by nothing — no evaluator, no renderer.
+> It is not part of any record, nor of the TypeScript mirror. Since specs are stored and served as
+> raw JSON, a `className` in an existing spec still reaches the client untouched; it simply is not
+> modelled anywhere.
 
 **Supporting records:**
 ```java
@@ -224,7 +237,7 @@ record EventHandler(String mutations, String navigate)
 | `group` | `layout`, `columns`, `components` | layout container |
 | `fieldSet` | `legend`, `components` | HTML `<fieldset>` |
 | `sectionList` | `bind`, `itemView`, `canAdd`, `canRemove`, labels | array add/remove |
-| `sectionItem` | `bind`, `components` | single element editor (sub-view) |
+| `sectionItem` | `bind`, `components` | single element editor (sub-view); evaluates to an `EvaluatedContainer` carrying `bind` |
 
 **Actions**:
 
@@ -243,7 +256,12 @@ booleans): `EvaluatedBasicInput`, `EvaluatedTextArea`, `EvaluatedSelectField`,
 `EvaluatedStaticText`, `EvaluatedBadge`, `EvaluatedProgressBar`, `EvaluatedDataTable`,
 `EvaluatedDataChart`, `EvaluatedContainer`, `EvaluatedSectionList`, `EvaluatedButton`,
 `EvaluatedMenu`, `EvaluatedSeparatorLine`. For example `EvaluatedBadge` carries only
-`id, type, visible, variant, text, label` — no `bind`/`value`/`enabled`.
+`id, type, visible, variant, text, label` — no `bind`/`value`/`enabled`. This mirrors the
+`ComponentSpec` hierarchy on the input side one-for-one, minus `UnknownComponentSpec` (an
+unrecognised `type` evaluates to an `EvaluatedBasicInput`).
+
+`EvaluatedContainer` covers `group`, `fieldSet` **and** `sectionItem`; its `bind` is populated
+only by `sectionItem`, and is omitted from the JSON otherwise.
 
 The interface exposes ~25 `default` methods (returning `null`/`false` for fields a given
 subtype doesn't carry) so callers can treat any `EvaluatedComponent` uniformly:
@@ -290,6 +308,11 @@ public final class ViewEvaluator {
     )
 }
 ```
+
+After resolving the common dynamics, the evaluator dispatches with a `switch` **pattern-matching
+the sealed `ComponentSpec`**, not on the `type` string. The switch is exhaustive over the permits
+list, so a new component record does not compile until it is handled — adding a type can no longer
+fall through to the generic input branch unnoticed.
 
 Per-component evaluation steps:
 1. Resolve `visible` → null: check `metaCache["$.bind#relevant"]` (absent → true); bool/JSONata
@@ -347,7 +370,25 @@ becomes hidden/disabled with zero extra ViewDefinition config.
 - All component types (re-exported for custom composition)
 - TypeScript types: `ViewDefinition`, `ViewSpec`, `ComponentSpec`, `EvaluatedView`,
   `EvaluatedComponent`, `OptionSpec`, `EventHandler`, etc.
+- The `ComponentSpec` variants (`BasicInputSpec`, `SliderSpec`, `ContainerSpec`, …),
+  `KnownComponentSpec`, `UnknownComponentSpec`, plus the `isKnownComponent` /
+  `hasChildComponents` narrowing guards and the `KNOWN_COMPONENT_TYPES` list
 - Hooks: `useJSONata`, `useCountries`, `useRegions`
+
+**`ComponentSpec` is a discriminated union here too**, mirroring the Java sealed hierarchy
+variant-for-variant: same grouping, same field sets, same `UnknownComponentSpec` fallback (typed
+with an index signature, so a custom type may carry any property). Consequences in the renderer:
+
+- `BaseComponentProps<C>` is generic, so each implementation receives only its own variant —
+  `SliderField` takes a `SliderSpec`. Reading `c.pageSize` inside `Badge` is a compile error.
+- `ComponentRenderer` narrows with `isKnownComponent(c)` before dispatching, so the unknown-type
+  branch is explicit rather than a `default:` fallthrough, and the `switch` over
+  `KnownComponentSpec` is exhaustiveness-checked by its `ReactElement` return type — a missing
+  case fails `tsc` with "function lacks ending return statement".
+
+The one place the mirror is deliberately looser: the TS base carries `enabled`/`readOnly`/
+`required` for every variant (matching the Java *interface*'s default methods), whereas the Java
+*records* only bind them where the type is interactive.
 
 **`ViewRenderer` props:**
 ```typescript

@@ -3,8 +3,9 @@ import { useViewContext } from '../ViewContext';
 import { useCountries, dialCode } from '../hooks/useCountries';
 import { getByPath } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
+import type { BasicInputSpec } from '../types';
 
-export function PhoneNumberField({ component: c, enabled, readOnly, required }: BaseComponentProps) {
+export function PhoneNumberField({ component: c, enabled, readOnly, required }: BaseComponentProps<BasicInputSpec>) {
   const { state, onMutate } = useViewContext();
   const raw = c.bind ? String(getByPath(state, c.bind.replace(/^\$\./, '')) ?? '') : '';
   const countries = useCountries();

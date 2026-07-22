@@ -1,7 +1,8 @@
 import { ComponentRenderer } from '../ComponentRenderer';
 import type { BaseComponentProps } from '../ComponentRenderer';
+import type { ContainerSpec } from '../types';
 
-export function SectionItem({ component: c, state }: BaseComponentProps) {
+export function SectionItem({ component: c, state }: BaseComponentProps<ContainerSpec>) {
   const children = c.components ?? [];
 
   return (

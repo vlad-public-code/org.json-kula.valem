@@ -1,8 +1,9 @@
 import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
+import type { ChoiceInputSpec } from '../types';
 
-export function RadioField({ component: c, enabled, readOnly, required }: BaseComponentProps) {
+export function RadioField({ component: c, enabled, readOnly, required }: BaseComponentProps<ChoiceInputSpec>) {
   const { state, onMutate } = useViewContext();
   const value = c.bind ? String(getByPath(state, c.bind.replace(/^\$\./, '')) ?? '') : '';
   const options = c.options ?? [];
