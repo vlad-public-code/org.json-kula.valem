@@ -5,15 +5,11 @@ nav_order: 2
 description: "Every Valem access surface: REST, WebSocket, and the console JSON protocol."
 ---
 
-# API Reference
+# API reference
 
 Canonical reference for every Valem access surface: REST, WebSocket, and the console
 JSON protocol. This is the single source of truth for endpoints and request/response shapes —
 `README.md` and `CLAUDE.md` link here rather than duplicating it.
-
-Related: [model-spec-format.md](model-spec-format.md) (request bodies),
-[configuration.md](../deployment/configuration.md) (server config),
-[security-model.md](../deployment/security-model.md) (auth).
 
 > **Live OpenAPI spec.** A running `valem-web` also serves a generated OpenAPI 3 document at
 > `/v3/api-docs` and an interactive Swagger UI at `/swagger-ui.html` (springdoc; behind the API
@@ -227,3 +223,11 @@ shared with the console commands above; it does not yet cover the composition/br
 endpoints (`generate/stream`, `spec/evolve/ai[/stream]`, `generate/evolution*`). See
 [mcp-tools.md](mcp-tools.md) for the tool list, result shape, and protocol notes, and
 [../deployment/mcp-server.md](../deployment/mcp-server.md) for client registration.
+
+## Related
+
+- [Model spec format](model-spec-format.md) — the request bodies these endpoints accept.
+- [MCP tools & resources](mcp-tools.md) — the same operations, exposed to agents.
+- [Configuration](../deployment/configuration.md) — server settings.
+- [Security model](../deployment/security-model.md) — auth, origins, limits.
+- [Client SDKs](../extending/client-sdks.md) — typed Java and TypeScript clients.

@@ -1,0 +1,12 @@
+# Keep the build context small: everything below is either rebuilt inside the image or
+# irrelevant to it.
+.git
+.github
+.claude
+**/target
+**/node_modules
+**/dist
+valem-ui/node
+docs
+*.md
+!README.md

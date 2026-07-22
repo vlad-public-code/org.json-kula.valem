@@ -20,7 +20,34 @@ endpoint and LLM-powered spec generation.
 
 ---
 
-## Build and run
+## Run with Docker
+
+The quickest way to a running server on a machine without Java or Maven. The image builds Valem's
+two JSON dependencies (not on Maven Central yet) and the server itself, so the first build takes a
+few minutes; after that it starts in seconds.
+
+```bash
+git clone https://github.com/vlad-public-code/org.json-kula.valem.git
+cd org.json-kula.valem
+docker build -t valem .
+docker run --rm -p 8080:8080 valem            # → http://localhost:8080
+```
+
+Anything after the image name is passed straight to Spring Boot, so configuration works exactly as
+it does outside a container:
+
+```bash
+docker run --rm -p 8080:8080 -v valem-data:/data valem \
+  --valem.persistence-dir=/data --valem.api.key="$KEY"
+
+docker build --build-arg SKIP_FRONTEND=true -t valem-api-only .   # REST-only, no Node build
+```
+
+{: .note }
+The image serves the management UI at `/` unless you build with `SKIP_FRONTEND=true`. It runs as a
+non-root user and stores nothing outside the container unless you mount a volume.
+
+## Build and run from source
 
 From the repository root:
 

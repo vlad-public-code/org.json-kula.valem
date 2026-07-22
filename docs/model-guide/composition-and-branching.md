@@ -7,7 +7,8 @@ redirect_from:
   - /guides/composition-and-branching.html
 ---
 
-# Composition & Branching
+# Composition & branching
+{: .no_toc }
 
 How models reference each other, how a model is branched from a template, how effects inherited
 across an ownership boundary are approved, and how a model is promoted between repositories. This
@@ -18,6 +19,9 @@ fields), [api-reference.md](../reference/api-reference.md) (the endpoints), and
 `valem.composition.*` / `valem.authz.*` properties).
 
 ---
+
+1. TOC
+{:toc}
 
 ## Coordinates
 
@@ -60,7 +64,7 @@ Same-owner and branch-authored effects always run — only cross-owner inheritan
 ## Links between models
 
 A `server` effect can name another **model** as its destination instead of a URL, via the `target`
-block (see the [effect field reference](../reference/model-spec-format.md#effect-field-reference)):
+block (see the [effect field reference](../reference/model-spec/effects.md#effect-field-reference)):
 
 - **Write-link** — `"target": { "ref": "<coordinate>", "path": "$.some.field" }` plus a sibling
   `body` (JSONata): mutate the target model at `path` and fold its reply back.

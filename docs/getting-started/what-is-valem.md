@@ -56,7 +56,7 @@ Think of a spreadsheet — cells, formulas, validation — but addressed by JSON
 server, or a console.
 
 The name says it: ***valem*** is the Estonian word for **"formula"**. It's pronounced **VAH-lem**
-(IPA [ˈvɑlem]) — stress on the first syllable, *a* as in "father", never "va-LEM".
+(IPA [ˈvɑlem]).
 
 ## What you get for describing a domain this way
 

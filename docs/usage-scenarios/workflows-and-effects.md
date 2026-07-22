@@ -74,5 +74,5 @@ refreshes itself: a `server` (HTTP) effect fetches the time, a `timer` re-arms i
 
 - [Effects guide]({% link model-guide/effects.md %}) — the four built-in executors, the lifecycle, and
   how to add a custom kind.
-- [Model spec format]({% link reference/model-spec-format.md %}#effects) — every effect field.
+- [Effects reference]({% link reference/model-spec/effects.md %}) — every effect field.
 - [Configuration]({% link deployment/configuration.md %}) — egress, retries, timeouts, enable-lists.

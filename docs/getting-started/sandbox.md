@@ -38,6 +38,8 @@ plain language — the fields, the arithmetic, the rules:
 > payment, total interest, and total cost. The monthly payment must not exceed 40% of the borrower's
 > monthly income.
 
+![The sandbox landing screen: a single textarea asking what the model should compute, a Generate with AI button, and links to load a ready-made example or connect an agent over MCP](../assets/img/sandbox-describe.png)
+
 Press **Generate with AI**. An LLM compiles that description into a `ModelSpec`, and Valem
 validates it and feeds any errors back for repair before the model is created — you see the steps
 stream past while it works, and you can cancel a run that's taking too long. What comes back is a
@@ -57,6 +59,8 @@ unavailable, the examples still work — they exercise the runtime exactly the s
 The generated model opens in its own screen with the **rendered view** — the form and read-outs
 Valem built from the spec's `viewDefinition`. Type into an input and every dependent value updates
 immediately; break a rule and the constraint tells you so.
+
+![A generated car-loan model in the sandbox: loan amount, rate and term inputs, then monthly payment, total payment and total interest, plus a full amortization schedule — all derived](../assets/img/sandbox-view.png)
 
 A **live feed** drawer shows what the runtime did on each change: which fields you mutated, which
 derived values were recomputed, which constraints were flagged.
@@ -79,6 +83,8 @@ surfaces the developer UI exposes:
 | **Spec** | The raw `ModelSpec` JSON that was generated. |
 | **Evolve** | Apply a spec evolution (a versioned diff) without losing state. |
 | **Live** | The raw change events pushed over the WebSocket. |
+
+![The advanced State panel: version, derivation, constraint, effect and meta-derivation counts above the merged state document, with base fields and derived values side by side](../assets/img/sandbox-state.png)
 
 Advanced mode also lets you **import** a spec JSON file to run a model you wrote yourself.
 

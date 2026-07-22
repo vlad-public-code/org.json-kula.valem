@@ -5,11 +5,15 @@ nav_order: 5
 description: "The view evaluation engine, ViewDefinition format, and React renderer."
 ---
 
-# Pluggable Model Web Renderer — View System Reference
+# View system
+{: .no_toc }
 
 > This describes the **shipped, as-built** view system: the `valem-view` evaluation engine, the
 > `ViewDefinition`/`ComponentSpec` format, the `EvaluatedView` contract, and the built-in
 > `valem-view-react` renderer.
+
+1. TOC
+{:toc}
 
 ## Context
 
@@ -93,7 +97,7 @@ that view ids are unique, component ids are unique within a view, and `defaultVi
 `sectionList.itemView` name existing views; the service additionally parses the definition into
 these records. Any failure is a `422` at write time rather than a `500` at render. Views and
 components are therefore addressable by `id`, which is what makes the `upsertViews` /
-`upsertComponents` evolution tiers (see [model-spec-format.md](model-spec-format.md#targeted-schema-view-and-constants-diffs)) well-defined.
+`upsertComponents` evolution tiers (see [model-spec/tests-and-evolution.md](model-spec/tests-and-evolution.md#targeted-schema-view-and-constants-diffs)) well-defined.
 
 **`ViewDefinition`**
 ```java

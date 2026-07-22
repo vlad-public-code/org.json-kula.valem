@@ -26,10 +26,10 @@ door is [index.md](index.md).
 
 | Chapter | For | Contents |
 |---|---|---|
-| [getting-started/](getting-started/index.md) | First contact | [what-is-valem.md](getting-started/what-is-valem.md), [sandbox.md](getting-started/sandbox.md), [quickstart.md](getting-started/quickstart.md), [connect-your-agent.md](getting-started/connect-your-agent.md) |
+| [getting-started/](getting-started/index.md) | First contact | [what-is-valem.md](getting-started/what-is-valem.md), [sandbox.md](getting-started/sandbox.md), [quickstart.md](getting-started/quickstart.md), [connect-your-agent.md](getting-started/connect-your-agent.md), [faq.md](getting-started/faq.md) |
 | [usage-scenarios/](usage-scenarios/index.md) | "Does this fit my project?" | [agent-state.md](usage-scenarios/agent-state.md), [rules-and-calculations.md](usage-scenarios/rules-and-calculations.md), [workflows-and-effects.md](usage-scenarios/workflows-and-effects.md), [model-driven-ui.md](usage-scenarios/model-driven-ui.md), [examples-gallery.md](usage-scenarios/examples-gallery.md) |
 | [model-guide/](model-guide/index.md) | Authoring models | [anatomy.md](model-guide/anatomy.md), [reactive-pipeline.md](model-guide/reactive-pipeline.md), [effects.md](model-guide/effects.md), [views.md](model-guide/views.md), [composition-and-branching.md](model-guide/composition-and-branching.md), [generating-specs-with-llm.md](model-guide/generating-specs-with-llm.md) |
-| [reference/](reference/index.md) | Looking things up | [model-spec-format.md](reference/model-spec-format.md), [api-reference.md](reference/api-reference.md), [mcp-tools.md](reference/mcp-tools.md), [llm-prompts.md](reference/llm-prompts.md), [view-system.md](reference/view-system.md) |
+| [reference/](reference/index.md) | Looking things up | [model-spec-format.md](reference/model-spec-format.md) + [model-spec/](reference/model-spec/) (6 section pages), [api-reference.md](reference/api-reference.md), [mcp-tools.md](reference/mcp-tools.md), [llm-prompts.md](reference/llm-prompts.md), [view-system.md](reference/view-system.md) |
 | [deployment/](deployment/index.md) | Running it | [web-api.md](deployment/web-api.md), [mcp-server.md](deployment/mcp-server.md), [configuration.md](deployment/configuration.md), [operations.md](deployment/operations.md), [security-model.md](deployment/security-model.md) |
 | [extending/](extending/index.md) | Building on it | [embedding.md](extending/embedding.md), [client-sdks.md](extending/client-sdks.md), [architecture.md](extending/architecture.md), [reactive-engine.md](extending/reactive-engine.md) |
 
@@ -52,7 +52,7 @@ Standalone: [glossary.md](glossary.md) · [libraries.md](libraries.md)
 
 **Author or generate specs** (human or LLM):
 - [model-guide/anatomy.md](model-guide/anatomy.md) — the sections of a spec and the two path dialects
-- [reference/model-spec-format.md](reference/model-spec-format.md) — the ModelSpec format (canonical)
+- [reference/model-spec-format.md](reference/model-spec-format.md) — the ModelSpec format (canonical; section pages under [model-spec/](reference/model-spec/))
 - [model-guide/effects.md](model-guide/effects.md) — built-in effect executors + writing a custom effect kind
 - [model-guide/generating-specs-with-llm.md](model-guide/generating-specs-with-llm.md) — LLM-driven generation
 - [reference/llm-prompts.md](reference/llm-prompts.md) — exact prompts sent to the LLM
@@ -110,6 +110,7 @@ docs/                          ← doc tree + Jekyll source of the published sit
     sandbox.md                 ← the hosted demo, end to end
     quickstart.md              ← run console / backend / UI from source
     connect-your-agent.md      ← MCP browser pairing: agent + human, one session
+    faq.md                     ← comparisons, limits, when NOT to use Valem
 
   usage-scenarios/             ← where Valem fits in a project
     agent-state.md             ← structured state for AI agents
@@ -127,7 +128,14 @@ docs/                          ← doc tree + Jekyll source of the published sit
     generating-specs-with-llm.md
 
   reference/                   ← authoritative, as-built interfaces
-    model-spec-format.md       ← the ModelSpec format (single source of truth)
+    model-spec-format.md       ← ModelSpec map: top-level structure + path notation
+    model-spec/                ← the format, section by section
+      schema-and-values.md     ← schema, constants, defaultValues
+      derivations-and-constraints.md
+      effects.md               ← every effect field
+      tests-and-evolution.md   ← tests + SpecEvolution
+      views.md                 ← viewDefinition, ComponentSpec, EvaluatedView
+      component-catalog.md     ← every built-in component type
     api-reference.md           ← REST + WebSocket + console
     mcp-tools.md               ← MCP tools, resources, protocol
     llm-prompts.md             ← prompt structure and repair loop
@@ -146,6 +154,8 @@ docs/                          ← doc tree + Jekyll source of the published sit
     architecture.md            ← component map, data flow, decisions
     reactive-engine.md         ← engine internals
 
+  assets/                      ← og.svg + og.png (social card), img/ (screenshots),
+                                  render-og.mjs + capture-screenshots.mjs regenerate them
   _config.yml, Gemfile,        ← site plumbing (Jekyll + just-the-docs);
   _includes/, 404.html            deployed by .github/workflows/pages.yml
 ```

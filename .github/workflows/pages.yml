@@ -25,6 +25,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # jekyll-last-modified-at reads each page's date from git history; a shallow
+          # clone would leave every page stamped with the checkout commit.
+          fetch-depth: 0
 
       - name: Configure Pages
         id: pages

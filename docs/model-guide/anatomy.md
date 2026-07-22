@@ -64,20 +64,21 @@ component catalog — is in the
 
 Three kinds of node, and the distinction matters everywhere else:
 
-- **BASE** — writable. The only thing a mutation may target.
+- **[BASE](../glossary.md#node-kinds)** — writable. The only thing a mutation may target.
 - **DERIVED** — computed by a derivation. Read-only; writing one is an error, not an override.
 - **META** — meta-derivations, plus synthetic nodes for each constraint and effect, which is how
   those participate in the same dependency graph.
 
-Reads return the **merged document**: the base document with all derived values spliced in. Callers
-generally shouldn't care which is which — that's the point.
+Reads return the **[merged document](../glossary.md#merged-document-mergeddocument)**: the base
+document with all derived values spliced in. Callers generally shouldn't care which is which —
+that's the point.
 
 ## Addresses vs expressions
 
 Two distinct dialects, and Valem keeps them strictly separate. Mixing them up is the single most
 common authoring mistake.
 
-**Addresses** — paths used *as data*: `path` fields, `defaultValues` paths, mutation keys, view
+**[Addresses](../glossary.md#address-vs-expression-path)** — paths used *as data*: `path` fields, `defaultValues` paths, mutation keys, view
 `bind`. These must be canonical **JSON Path**: `$.`-rooted, bracket array indices.
 
 ```

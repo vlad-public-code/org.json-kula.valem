@@ -8,7 +8,7 @@ redirect_from:
   - /architecture/
 ---
 
-# Valem — Architectural Overview
+# Architecture overview
 
 ## System Overview
 

@@ -7,7 +7,7 @@ redirect_from:
   - /getting-started.html
 ---
 
-# Using Valem in your project
+# Embed Valem in your project
 {: .no_toc }
 
 Valem is a multi-module Maven project. You can embed the pure-Java engine directly, wrap it in your

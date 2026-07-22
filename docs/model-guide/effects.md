@@ -17,7 +17,7 @@ I/O: a folded-back response is just a logged mutation.
 
 This guide covers the built-in executors, the runtime lifecycle, and how to add a **custom
 effect kind** as a drop-in jar. The spec-side field reference (every field of every executor)
-lives in [model-spec-format.md](../reference/model-spec-format.md#effects); egress/SSRF controls
+lives in [the effects reference](../reference/model-spec/effects.md); egress/SSRF controls
 are in [security-model.md](../deployment/security-model.md).
 
 ## Built-in executors
@@ -30,7 +30,7 @@ are in [security-model.md](../deployment/security-model.md).
 | `timer` | Schedules the `response.set` fold-back at an absolute time (`at`) or after a delay (`afterMs`); expressions are evaluated at fire time against current state. | clock |
 
 A worked `server` + `timer` example (live rate lookup + quote expiry) is in the
-[spec format reference](../reference/model-spec-format.md#worked-server--timer-example).
+[spec format reference](../reference/model-spec/effects.md#worked-server--timer-example).
 
 ## The lifecycle
 

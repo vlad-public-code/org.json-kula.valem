@@ -17,6 +17,8 @@ plugins:
   # Serves the pre-restructure URLs (/guides/*, /architecture/*, /model-spec.html, ...) from the
   # `redirect_from:` front matter on the pages that replaced them.
   - jekyll-redirect-from
+  # Supplies page.last_modified_date (from git) for the footer stamp.
+  - jekyll-last-modified-at
 
 relative_links:
   enabled: true
@@ -32,7 +34,24 @@ search_enabled: true
 heading_anchors: true
 back_to_top: true
 back_to_top_text: "Back to top"
+
+# Default scheme. `_includes/head_custom.html` switches to `dark` when the visitor's OS
+# prefers it (or when they've used the theme toggle), so this is the light-mode baseline.
 color_scheme: light
+
+# The docs are mostly curl / mvn / JSON blocks — give every fence a copy button.
+enable_copy_code_button: true
+
+search:
+  # Index deeply enough that a reader searching for a `valem.*` property or a component
+  # `type` lands on the exact heading rather than the top of a long reference page.
+  heading_level: 3
+  previews: 3
+  preview_words_before: 5
+  preview_words_after: 10
+  tokenizer_separator: /[\s/\-_,:;$.]+/
+  rel_url: true
+  button: false
 
 # "Edit this page on GitHub" link on every page.
 gh_edit_link: true
@@ -46,14 +65,23 @@ gh_edit_view_mode: edit
 mermaid:
   version: "10.9.1"
 
-# Callout boxes used with {: .note } / {: .warning } in the pages.
+# Callout boxes used with {: .note } / {: .tip } / {: .warning } in the pages.
 callouts:
   note:
     title: Note
     color: blue
+  tip:
+    title: Tip
+    color: green
   warning:
     title: Warning
     color: red
+
+# "Page last modified" in the footer, from git history via jekyll-last-modified-at.
+# Needs the Pages workflow to check out full history (fetch-depth: 0); without it the
+# plugin falls back to the file mtime rather than failing the build.
+last_edit_timestamp: true
+last_edit_time_format: "%Y-%m-%d"
 
 aux_links:
   "GitHub":
