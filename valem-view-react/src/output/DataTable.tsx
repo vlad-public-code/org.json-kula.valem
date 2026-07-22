@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
+import { formatValue } from '../format';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { DataTableSpec } from '../types';
 
@@ -47,7 +48,7 @@ export function DataTable({ component: c }: BaseComponentProps<DataTableSpec>) {
                 {columns.map(col => {
                   const cellVal = row[col.field];
                   const display = col.format
-                    ? applyFormat(cellVal, col.format)
+                    ? formatValue(cellVal, col.format, col.currency)
                     : cellVal != null
                       ? String(cellVal)
                       : '';
@@ -86,13 +87,7 @@ export function DataTable({ component: c }: BaseComponentProps<DataTableSpec>) {
   );
 }
 
-function applyFormat(val: unknown, format: string): string {
-  if (val == null) return '';
-  const n = Number(val);
-  if (!isNaN(n)) {
-    if (format === 'currency') return new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n);
-    if (format === 'number') return new Intl.NumberFormat().format(n);
-    if (format === 'percent') return new Intl.NumberFormat(undefined, { style: 'percent' }).format(n);
-  }
-  return String(val);
-}
+// Formatting lives in ../format so a column, a summaryList row and a statTile over the same
+// field always read the same. The local helper this replaced hardcoded USD and used
+// Intl's `style: 'percent'`, which multiplies by 100 — so a percent column and a percent
+// summary row disagreed about what the same stored number meant.

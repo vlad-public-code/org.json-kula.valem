@@ -5,10 +5,16 @@ export interface OptionSpec {
   label: string;
 }
 
+/**
+ * One column of a dataTable. `currency` is per column for the same reason it is per row on
+ * KeyValueItemSpec: a table legitimately holds more than one, and a `currency` format with no
+ * code renders in the renderer's default.
+ */
 export interface ColumnSpec {
   field: string;
   header?: string;
   format?: string;
+  currency?: string;
   width?: string;
 }
 
@@ -188,9 +194,14 @@ export interface LabelSpec extends ComponentSpecBase {
   text?: string;
 }
 
+/**
+ * staticText. `format` selects rendering: `html` (default, unescaped — the wrong choice for
+ * user-typed content), `markdown` (the read half of richTextField; escapes first), or `text`.
+ */
 export interface StaticTextSpec extends ComponentSpecBase {
   type: 'staticText';
   text?: string;
+  format?: string;
 }
 
 /**

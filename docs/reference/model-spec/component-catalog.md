@@ -358,11 +358,26 @@ Displays a bound value or a dynamic text expression next to an optional label ca
 
 #### `staticText`
 
-Non-reactive text block. `text` is a static markdown or HTML literal; no binding.
+Non-reactive text block. `text` is a literal or a JSONata expression; no binding.
+
+| Extra field | Description |
+|---|---|
+| `text` | Literal or JSONata expression |
+| `format` | `"html"` (default), `"markdown"`, or `"text"` |
+
+`html` is the default so existing specs are unaffected, but it is the one mode that injects its
+content **unescaped** — the wrong choice for anything a user typed. `markdown` is the read half of
+`richTextField`: it escapes the source first and then applies the subset that field's toolbar
+produces, so a stored `<script>` renders as visible text rather than executing. `text` shows the
+content verbatim.
 
 ```json
 { "id": "intro", "type": "staticText",
   "text": "Please fill in the form below. All fields marked * are required." }
+```
+
+```json
+{ "id": "notesOut", "type": "staticText", "format": "markdown", "text": "$.notes" }
 ```
 
 #### `badge`
@@ -442,8 +457,13 @@ Tabular view of an array field.
 |---|---|
 | `field` | Property name within each array element |
 | `header` | Column header label |
-| `format` | Optional display format: `"currency"`, `"number"`, `"percent"` |
+| `format` | `"currency"`, `"percent"`, `"number"`, `"integer"` |
+| `currency` | ISO-4217 code. Per **column**, since a table legitimately holds more than one; without it a `currency` format falls back to the renderer's default |
 | `width` | CSS width string (e.g. `"40%"`, `"120px"`) |
+
+Formatting is shared with `keyValueList` and `statTile`, so a column, a summary row and a tile over
+the same field always read the same. In particular `percent` **appends a sign and does not
+rescale** — a stored `7.5` shows as `7.5%`, not `750%`.
 
 #### `dataChart`
 

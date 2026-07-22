@@ -21,6 +21,8 @@ const DEFAULTS = {
   '$.endDate': '2026-09-16',
   '$.venueTags': ['coastal', 'quiet'],
   '$.venueRating': 4,
+  '$.city': null,
+  '$.roomStyle': null,
   '$.perPersonNightly': 140,
   '$.cateringPerDay': 55,
   '$.travelPerPerson': 180,
@@ -293,6 +295,102 @@ test.describe('Team Offsite Planner — extended component catalog', () => {
     // The caller-executor effect resolves immediately; whichever terminal state it reaches, the
     // component must render the machine rather than an empty box.
     await expect(page.getByTestId('approvalStatus-state')).not.toHaveText('');
+  });
+
+  // ── the rest of the output catalog ────────────────────────────────────────
+
+  test('gauge and sparkline render the derived figures', async ({ page }) => {
+    await openView(page);
+    await page.getByTestId('planSteps-step-summary').click();
+
+    // A gauge shows the bound value's position in its min..max range, which is why it is bound to
+    // the total against the budget rather than to a pre-computed percentage — binding a percent
+    // to a gauge and then showing "percent of range" counts the percentage twice.
+    const gauge = page.getByTestId('budgetGauge');
+    await expect(gauge).toBeVisible();
+    await expect(gauge).toHaveAttribute('role', 'meter');
+    await expect(gauge).toHaveAttribute('aria-valuenow', '5016');
+    await expect(gauge).toContainText('42%'); // 5016 / 12000
+
+    await expect(page.getByTestId('breakdownSpark')).toBeVisible();
+  });
+
+  test('a percent row appends a sign without rescaling the stored number', async ({ page }) => {
+    // Intl's percent style multiplies by 100; the catalog deliberately does not, so a stored
+    // 41.8 reads as 41.8% rather than 4180%.
+    await openView(page);
+    await page.getByTestId('planSteps-step-summary').click();
+    await page.getByTestId('perPersonPanel-toggle').click();
+    await expect(page.getByTestId('perPersonList-row-2')).toContainText('41.8%');
+  });
+
+  test('callout, keyValueList and image render', async ({ page }) => {
+    await openView(page);
+    await page.getByTestId('planSteps-step-summary').click();
+
+    await expect(page.getByTestId('planningNote')).toContainText('Confirm the venue');
+    await expect(page.getByAltText('Venue placeholder')).toBeVisible();
+
+    // keyValueList lives inside a collapsed collapsible inside the accordion.
+    await expect(page.getByTestId('perPersonList')).toHaveCount(0);
+    await page.getByTestId('perPersonPanel-toggle').click();
+    await expect(page.getByTestId('perPersonList-row-1')).toContainText('€');
+  });
+
+  test('toolbar and buttonGroup wire their buttons up', async ({ page }) => {
+    await openView(page);
+    await setTeamSizeInUi(page, 14);
+    await page.getByTestId('planSteps-step-summary').click();
+
+    await expect(page.getByTestId('summaryActions')).toHaveAttribute('role', 'toolbar');
+    await expect(page.getByTestId('planButtons')).toHaveAttribute('role', 'group');
+
+    // The onClick mutation runs through the same handler path as any other button.
+    await page.getByRole('button', { name: 'Reset team size' }).click();
+    await page.getByTestId('summarySteps-step-plan').click();
+    await expect(page.locator('#teamSizeField')).toHaveValue('8', { timeout: 15_000 });
+  });
+
+  test('breadcrumb marks the current view and navigates', async ({ page }) => {
+    await openView(page);
+    await page.getByTestId('planSteps-step-summary').click();
+
+    await expect(page.getByTestId('summaryCrumbs-crumb-summary')).toHaveAttribute('aria-current', 'page');
+    await page.getByTestId('summaryCrumbs-crumb-plan').click();
+    await expect(page.getByTestId('planTabs')).toBeVisible();
+  });
+
+  test('autocompleteField filters and writes the chosen option', async ({ page, request }) => {
+    await openView(page);
+    await page.getByTestId('tab-venueTab').click();
+
+    const input = page.locator('#cityField');
+    await input.click();
+    await input.fill('val');
+    // Filtered down to the one match.
+    await expect(page.getByTestId('cityField-option-valencia')).toBeVisible();
+    await expect(page.getByTestId('cityField-option-lisbon')).toHaveCount(0);
+
+    await page.getByTestId('cityField-option-valencia').click();
+    await expect(async () => {
+      const state = await (await request.get(`${BACKEND}/models/${modelId}/state`)).json();
+      expect(state.city).toBe('valencia');
+    }).toPass({ timeout: 10_000 });
+  });
+
+  test('comboBox accepts a value outside its options', async ({ page, request }) => {
+    await openView(page);
+    await page.getByTestId('tab-venueTab').click();
+
+    const input = page.locator('#roomStyleField');
+    await input.click();
+    await input.fill('bunk');
+    await input.blur();
+
+    await expect(async () => {
+      const state = await (await request.get(`${BACKEND}/models/${modelId}/state`)).json();
+      expect(state.roomStyle).toBe('bunk');
+    }).toPass({ timeout: 10_000 });
   });
 
   // ── diagnostics ───────────────────────────────────────────────────────────

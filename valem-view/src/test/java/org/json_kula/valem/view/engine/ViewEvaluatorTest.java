@@ -408,7 +408,7 @@ class ViewEvaluatorTest {
     }
 
     private static StaticTextSpec staticText(String id, JsonNode text) {
-        return new StaticTextSpec(id, "staticText", null, null, text);
+        return new StaticTextSpec(id, "staticText", null, null, text, null);
     }
 
     private static ContainerSpec container(String id, String type, String bind,

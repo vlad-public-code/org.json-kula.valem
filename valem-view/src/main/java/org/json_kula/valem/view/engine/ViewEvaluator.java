@@ -101,7 +101,7 @@ public final class ViewEvaluator {
 
             case StaticTextSpec s ->
                     new EvaluatedStaticText(s.id(), s.type(), visible,
-                            resolveText(s.text(), mergedDocument, exprCache, bindings));
+                            resolveText(s.text(), mergedDocument, exprCache, bindings), s.format());
 
             case BadgeSpec b ->
                     new EvaluatedBadge(b.id(), b.type(), visible, b.variant(),

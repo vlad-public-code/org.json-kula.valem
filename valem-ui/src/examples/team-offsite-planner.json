@@ -14,6 +14,8 @@
       "nights": { "type": "integer", "minimum": 1, "maximum": 14 },
       "startDate": { "type": "string" },
       "endDate": { "type": "string" },
+      "city": { "type": ["string", "null"] },
+      "roomStyle": { "type": ["string", "null"] },
       "venueTags": { "type": "array", "items": { "type": "string" } },
       "venueRating": { "type": "integer", "minimum": 1, "maximum": 5 },
       "perPersonNightly": { "type": "number", "minimum": 0 },
@@ -44,6 +46,7 @@
         }
       },
       "budgetDelta": { "type": "number", "readOnly": true },
+      "budgetUsedPercent": { "type": "number", "readOnly": true },
       "budgetTrend": { "type": "string", "readOnly": true },
       "budgetVariant": { "type": "string", "readOnly": true },
       "overBudget": { "type": "boolean", "readOnly": true },
@@ -70,6 +73,7 @@
     { "path": "$.totals.grand", "expr": "totals.accommodation + totals.catering + totals.travel + totals.contingency", "evaluation": "eager" },
     { "path": "$.totals.perPerson", "expr": "teamSize > 0 ? totals.grand / teamSize : 0", "evaluation": "eager" },
     { "path": "$.budgetDelta", "expr": "totals.grand - $const.approvedBudget", "evaluation": "eager" },
+    { "path": "$.budgetUsedPercent", "expr": "totals.grand * 100 / $const.approvedBudget", "evaluation": "eager" },
     { "path": "$.overBudget", "expr": "totals.grand > $const.approvedBudget", "evaluation": "eager" },
     { "path": "$.budgetTrend", "expr": "overBudget = true ? \"up\" : \"down\"", "evaluation": "eager" },
     { "path": "$.budgetVariant", "expr": "overBudget = true ? \"danger\" : \"success\"", "evaluation": "eager" },
@@ -176,6 +180,30 @@
                 "label": "Venue",
                 "layout": "vertical",
                 "components": [
+                  {
+                    "id": "cityField",
+                    "type": "autocompleteField",
+                    "label": "City",
+                    "bind": "$.city",
+                    "placeholder": "Type to search…",
+                    "options": [
+                      { "value": "lisbon", "label": "Lisbon" },
+                      { "value": "porto", "label": "Porto" },
+                      { "value": "valencia", "label": "Valencia" },
+                      { "value": "tallinn", "label": "Tallinn" }
+                    ]
+                  },
+                  {
+                    "id": "roomStyleField",
+                    "type": "comboBox",
+                    "label": "Room style",
+                    "bind": "$.roomStyle",
+                    "helperText": "Pick one or type your own",
+                    "options": [
+                      { "value": "twin", "label": "Twin" },
+                      { "value": "single", "label": "Single" }
+                    ]
+                  },
                   { "id": "venueTagsField", "type": "tagsField", "label": "Must-haves", "bind": "$.venueTags", "helperText": "Press Enter to add" },
                   { "id": "venueRatingField", "type": "ratingField", "label": "Shortlist rating", "bind": "$.venueRating", "min": 1, "max": 5, "step": 1 },
                   {
@@ -290,6 +318,99 @@
             "onRetry": { "mutations": "{\"$.approval.status\": \"pending\"}" }
           },
           { "id": "spacer1", "type": "spacer", "size": 8 },
+          {
+            "id": "utilisationCard",
+            "type": "card",
+            "label": "Budget utilisation",
+            "layout": "horizontal",
+            "components": [
+              {
+                "id": "budgetGauge",
+                "type": "gauge",
+                "label": "Of approved budget",
+                "bind": "$.totals.grand",
+                "min": 0,
+                "max": 12000,
+                "showValue": true
+              },
+              {
+                "id": "breakdownSpark",
+                "type": "sparkline",
+                "label": "Shape of the spend",
+                "bind": "$.breakdown",
+                "chartType": "line",
+                "chartSeries": [{ "field": "amount" }]
+              }
+            ]
+          },
+          {
+            "id": "planningNote",
+            "type": "callout",
+            "variant": "info",
+            "label": "Before you book",
+            "text": "Confirm the venue holds the dates before requesting sign-off."
+          },
+          {
+            "id": "detailAccordion",
+            "type": "accordion",
+            "label": "Detail",
+            "components": [
+              {
+                "id": "perPersonPanel",
+                "type": "collapsible",
+                "label": "Per-person breakdown",
+                "collapsed": true,
+                "components": [
+                  {
+                    "id": "perPersonList",
+                    "type": "keyValueList",
+                    "items": [
+                      { "label": "Nights", "bind": "$.nights" },
+                      { "label": "Per person", "bind": "$.totals.perPerson", "format": "currency", "currency": "EUR" },
+                      { "label": "Budget used", "bind": "$.budgetUsedPercent", "format": "percent" }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "venuePhoto",
+            "type": "image",
+            "label": "Venue placeholder",
+            "alt": "Venue placeholder",
+            "width": "120px",
+            "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='60'><rect width='120' height='60' fill='%23e5e7eb'/></svg>"
+          },
+          {
+            "id": "summaryActions",
+            "type": "toolbar",
+            "label": "Actions",
+            "components": [
+              {
+                "id": "planButtons",
+                "type": "buttonGroup",
+                "components": [
+                  {
+                    "id": "resetPlanBtn",
+                    "type": "button",
+                    "label": "Reset team size",
+                    "variant": "secondary",
+                    "onClick": { "mutations": "{\"$.teamSize\": 8}" }
+                  },
+                  { "id": "backToPlanBtn", "type": "button", "label": "Back to plan", "onClick": { "navigate": "plan" } }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "summaryCrumbs",
+            "type": "breadcrumb",
+            "menuItems": [
+              { "label": "Plan", "targetView": "plan" },
+              { "label": "Summary", "targetView": "summary" }
+            ]
+          },
           {
             "id": "handbookLink",
             "type": "link",
