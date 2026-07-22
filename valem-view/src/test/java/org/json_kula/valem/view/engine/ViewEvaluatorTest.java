@@ -1,12 +1,22 @@
 package org.json_kula.valem.view.engine;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.BooleanNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import org.json_kula.valem.core.engine.ExpressionCache;
+import org.json_kula.valem.view.model.BasicInputSpec;
+import org.json_kula.valem.view.model.ChoiceInputSpec;
 import org.json_kula.valem.view.model.ComponentSpec;
+import org.json_kula.valem.view.model.ContainerSpec;
+import org.json_kula.valem.view.model.FileUploadSpec;
+import org.json_kula.valem.view.model.LabelSpec;
+import org.json_kula.valem.view.model.OptionSpec;
+import org.json_kula.valem.view.model.ProgressBarSpec;
+import org.json_kula.valem.view.model.SliderSpec;
+import org.json_kula.valem.view.model.StaticTextSpec;
 import org.json_kula.valem.view.model.ViewSpec;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,26 +46,26 @@ class ViewEvaluatorTest {
 
     @Test
     void visible_null_defaults_to_true() {
-        EvaluatedView view = evaluate(component("c1", "label", null, null, null, null, null, null));
+        EvaluatedView view = evaluate(label("c1", null, null));
         assertThat(first(view).visible()).isTrue();
     }
 
     @Test
     void visible_false_boolean_hides_component() {
-        EvaluatedView view = evaluate(component("c1", "label", BooleanNode.FALSE, null, null, null, null, null));
+        EvaluatedView view = evaluate(label("c1", BooleanNode.FALSE, null));
         assertThat(first(view).visible()).isFalse();
     }
 
     @Test
     void visible_jsonata_expression_is_evaluated() {
         // "active = true" → true
-        EvaluatedView view = evaluate(component("c1", "label", TextNode.valueOf("active = true"), null, null, null, null, null));
+        EvaluatedView view = evaluate(label("c1", TextNode.valueOf("active = true"), null));
         assertThat(first(view).visible()).isTrue();
     }
 
     @Test
     void visible_jsonata_expression_false_hides_component() {
-        EvaluatedView view = evaluate(component("c1", "label", TextNode.valueOf("active = false"), null, null, null, null, null));
+        EvaluatedView view = evaluate(label("c1", TextNode.valueOf("active = false"), null));
         assertThat(first(view).visible()).isFalse();
     }
 
@@ -63,29 +73,27 @@ class ViewEvaluatorTest {
 
     @Test
     void readOnly_null_defaults_to_false() {
-        EvaluatedView view = evaluate(component("c1", "label", null, null, null, null, null, null));
+        EvaluatedView view = evaluate(label("c1", null, null));
         assertThat(first(view).readOnly()).isFalse();
     }
 
     @Test
     void readOnly_true_from_meta_cache() {
         Map<String, JsonNode> meta = Map.of("$.name#read_only", BooleanNode.TRUE);
-        ComponentSpec c = component("c1", "textField", null, null, null, null, "$.name", null);
-        EvaluatedView view = evaluate(c, meta);
+        EvaluatedView view = evaluate(input("c1", "textField", null, null, null, null, "$.name"), meta);
         assertThat(first(view).readOnly()).isTrue();
     }
 
     @Test
     void readOnly_false_from_meta_cache() {
         Map<String, JsonNode> meta = Map.of("$.name#read_only", BooleanNode.FALSE);
-        ComponentSpec c = component("c1", "textField", null, null, null, null, "$.name", null);
-        EvaluatedView view = evaluate(c, meta);
+        EvaluatedView view = evaluate(input("c1", "textField", null, null, null, null, "$.name"), meta);
         assertThat(first(view).readOnly()).isFalse();
     }
 
     @Test
     void readOnly_boolean_override() {
-        EvaluatedView view = evaluate(component("c1", "textField", null, null, BooleanNode.TRUE, null, null, null));
+        EvaluatedView view = evaluate(input("c1", "textField", null, null, BooleanNode.TRUE, null, null));
         assertThat(first(view).readOnly()).isTrue();
     }
 
@@ -93,14 +101,14 @@ class ViewEvaluatorTest {
 
     @Test
     void enabled_is_false_when_readOnly_is_true() {
-        EvaluatedView view = evaluate(component("c1", "textField", null, null, BooleanNode.TRUE, null, null, null));
+        EvaluatedView view = evaluate(input("c1", "textField", null, null, BooleanNode.TRUE, null, null));
         assertThat(first(view).readOnly()).isTrue();
         assertThat(first(view).enabled()).isFalse();
     }
 
     @Test
     void enabled_is_true_when_readOnly_is_false() {
-        EvaluatedView view = evaluate(component("c1", "textField", null, null, BooleanNode.FALSE, null, null, null));
+        EvaluatedView view = evaluate(input("c1", "textField", null, null, BooleanNode.FALSE, null, null));
         assertThat(first(view).enabled()).isTrue();
     }
 
@@ -109,16 +117,14 @@ class ViewEvaluatorTest {
     @Test
     void visible_false_from_relevant_meta() {
         Map<String, JsonNode> meta = Map.of("$.name#relevant", BooleanNode.FALSE);
-        ComponentSpec c = component("c1", "label", null, null, null, null, "$.name", null);
-        EvaluatedView view = evaluate(c, meta);
+        EvaluatedView view = evaluate(label("c1", null, "$.name"), meta);
         assertThat(first(view).visible()).isFalse();
     }
 
     @Test
     void visible_true_from_relevant_meta() {
         Map<String, JsonNode> meta = Map.of("$.name#relevant", BooleanNode.TRUE);
-        ComponentSpec c = component("c1", "label", null, null, null, null, "$.name", null);
-        EvaluatedView view = evaluate(c, meta);
+        EvaluatedView view = evaluate(label("c1", null, "$.name"), meta);
         assertThat(first(view).visible()).isTrue();
     }
 
@@ -126,8 +132,7 @@ class ViewEvaluatorTest {
 
     @Test
     void bind_resolves_value_from_merged_document() {
-        ComponentSpec c = component("c1", "label", null, null, null, null, "$.score", null);
-        EvaluatedView view = evaluate(c);
+        EvaluatedView view = evaluate(label("c1", null, "$.score"));
         assertThat(first(view).value()).isNotNull();
         assertThat(first(view).value().asInt()).isEqualTo(42);
     }
@@ -136,15 +141,13 @@ class ViewEvaluatorTest {
 
     @Test
     void text_literal_is_passed_through() {
-        ComponentSpec c = component("c1", "staticText", null, null, null, TextNode.valueOf("Hello"), null, null);
-        EvaluatedView view = evaluate(c);
+        EvaluatedView view = evaluate(staticText("c1", TextNode.valueOf("Hello")));
         assertThat(first(view).text()).isEqualTo("Hello");
     }
 
     @Test
     void text_jsonata_expression_is_evaluated() {
-        ComponentSpec c = component("c1", "staticText", null, null, null, TextNode.valueOf("$string(score)"), null, null);
-        EvaluatedView view = evaluate(c);
+        EvaluatedView view = evaluate(staticText("c1", TextNode.valueOf("$string(score)")));
         assertThat(first(view).text()).isEqualTo("42");
     }
 
@@ -152,35 +155,44 @@ class ViewEvaluatorTest {
 
     @Test
     void aggregate_components_are_recursively_evaluated() {
-        ComponentSpec inner = component("inner", "label", BooleanNode.FALSE, null, null, null, null, null);
-        ComponentSpec outer = component("outer", "group", null, null, null, null, null, List.of(inner));
-        EvaluatedView view = evaluate(outer);
+        ComponentSpec inner = label("inner", BooleanNode.FALSE, null);
+        EvaluatedView view = evaluate(container("outer", "group", null, List.of(inner)));
         EvaluatedComponent outerEval = first(view);
         assertThat(outerEval.components()).hasSize(1);
         assertThat(outerEval.components().getFirst().id()).isEqualTo("inner");
         assertThat(outerEval.components().getFirst().visible()).isFalse();
     }
 
+    @Test
+    void sectionItem_is_a_container_and_keeps_its_children() {
+        ComponentSpec inner = input("qty", "numericField", null, null, null, null, "$.items[0].qty");
+        EvaluatedView view = evaluate(container("item0", "sectionItem", "$.items[0]", List.of(inner)));
+
+        EvaluatedComponent evaluated = first(view);
+        assertThat(evaluated).isInstanceOf(EvaluatedContainer.class);
+        assertThat(evaluated.bind()).isEqualTo("$.items[0]");
+        assertThat(evaluated.components()).hasSize(1);
+        assertThat(evaluated.components().getFirst().id()).isEqualTo("qty");
+    }
+
     // ── required ──────────────────────────────────────────────────────────────
 
     @Test
     void required_false_by_default_when_meta_absent() {
-        EvaluatedView view = evaluate(component("c1", "textField", null, null, null, null, "$.name", null));
+        EvaluatedView view = evaluate(input("c1", "textField", null, null, null, null, "$.name"));
         assertThat(first(view).required()).isFalse();
     }
 
     @Test
     void required_true_from_meta_cache() {
         Map<String, JsonNode> meta = Map.of("$.name#required", BooleanNode.TRUE);
-        ComponentSpec c = component("c1", "textField", null, null, null, null, "$.name", null);
-        EvaluatedView view = evaluate(c, meta);
+        EvaluatedView view = evaluate(input("c1", "textField", null, null, null, null, "$.name"), meta);
         assertThat(first(view).required()).isTrue();
     }
 
     @Test
     void required_boolean_override_via_spec() {
-        ComponentSpec c = componentWithRequired("c1", "textField", BooleanNode.TRUE);
-        EvaluatedView view = evaluate(c);
+        EvaluatedView view = evaluate(input("c1", "textField", null, null, null, BooleanNode.TRUE, null));
         assertThat(first(view).required()).isTrue();
     }
 
@@ -188,12 +200,8 @@ class ViewEvaluatorTest {
 
     @Test
     void options_list_passes_through_to_evaluated_component() {
-        var opts = List.of(
-                org.json_kula.valem.view.model.OptionSpec.of("a", "Alpha"),
-                org.json_kula.valem.view.model.OptionSpec.of("b", "Beta")
-        );
-        ComponentSpec c = componentWithOptions("c1", "selectField", opts);
-        EvaluatedView view = evaluate(c);
+        var opts = List.of(OptionSpec.of("a", "Alpha"), OptionSpec.of("b", "Beta"));
+        EvaluatedView view = evaluate(choice("c1", "selectField", opts));
         assertThat(first(view).options()).hasSize(2);
         assertThat(first(view).options().get(0).value()).isEqualTo("a");
     }
@@ -202,9 +210,7 @@ class ViewEvaluatorTest {
 
     @Test
     void sliderField_min_max_step_pass_through_to_evaluated_component() {
-        ComponentSpec c = componentWithNewFields("s1", "sliderField", "$.volume",
-                0.0, 100.0, 5.0, null, null, null);
-        EvaluatedView view = evaluate(c);
+        EvaluatedView view = evaluate(slider("s1", "$.volume", 0.0, 100.0, 5.0));
         EvaluatedComponent eval = first(view);
         assertThat(eval.type()).isEqualTo("sliderField");
         assertThat(eval.min()).isEqualTo(0.0);
@@ -215,9 +221,7 @@ class ViewEvaluatorTest {
 
     @Test
     void sliderField_null_min_max_step_are_preserved() {
-        ComponentSpec c = componentWithNewFields("s2", "sliderField", "$.x",
-                null, null, null, null, null, null);
-        EvaluatedView view = evaluate(c);
+        EvaluatedView view = evaluate(slider("s2", "$.x", null, null, null));
         EvaluatedComponent eval = first(view);
         assertThat(eval.min()).isNull();
         assertThat(eval.max()).isNull();
@@ -229,9 +233,7 @@ class ViewEvaluatorTest {
     @Test
     void timeField_binds_value_from_merged_document() {
         mergedDoc.put("startTime", "09:30");
-        ComponentSpec c = componentWithNewFields("t1", "timeField", "$.startTime",
-                null, null, null, null, null, null);
-        EvaluatedView view = evaluate(c);
+        EvaluatedView view = evaluate(input("t1", "timeField", null, null, null, null, "$.startTime"));
         EvaluatedComponent eval = first(view);
         assertThat(eval.type()).isEqualTo("timeField");
         assertThat(eval.value()).isNotNull();
@@ -242,9 +244,8 @@ class ViewEvaluatorTest {
 
     @Test
     void fileUploadField_accept_passes_through_to_evaluated_component() {
-        ComponentSpec c = componentWithNewFields("f1", "fileUploadField", "$.avatar",
-                null, null, null, "image/*", null, null);
-        EvaluatedView view = evaluate(c);
+        EvaluatedView view = evaluate(fileUpload("f1", "$.avatar", "image/*",
+                null, null, null, null, null, null));
         EvaluatedComponent eval = first(view);
         assertThat(eval.type()).isEqualTo("fileUploadField");
         assertThat(eval.accept()).isEqualTo("image/*");
@@ -252,9 +253,8 @@ class ViewEvaluatorTest {
 
     @Test
     void fileUploadField_null_accept_is_preserved() {
-        ComponentSpec c = componentWithNewFields("f2", "fileUploadField", "$.file",
-                null, null, null, null, null, null);
-        EvaluatedView view = evaluate(c);
+        EvaluatedView view = evaluate(fileUpload("f2", "$.file", null,
+                null, null, null, null, null, null));
         assertThat(first(view).accept()).isNull();
     }
 
@@ -262,9 +262,8 @@ class ViewEvaluatorTest {
 
     @Test
     void fileUploadField_multi_constraints_pass_through_from_spec() {
-        ComponentSpec c = componentWithMultiFile("mf1", "$.docs",
-                true, 1, 5, 1024L, 5242880L, "image/jpeg,application/pdf");
-        EvaluatedView view = evaluate(c);
+        EvaluatedView view = evaluate(fileUpload("mf1", "$.docs", null,
+                true, 1, 5, 1024L, 5242880L, "image/jpeg,application/pdf"));
         EvaluatedComponent eval = first(view);
         assertThat(eval.multiple()).isTrue();
         assertThat(eval.minFiles()).isEqualTo(1);
@@ -276,7 +275,7 @@ class ViewEvaluatorTest {
 
     @Test
     void fileUploadField_minItems_from_meta_overrides_spec() {
-        ComponentSpec c = componentWithMultiFile("mf2", "$.docs", true, 1, 5, null, null, null);
+        ComponentSpec c = fileUpload("mf2", "$.docs", null, true, 1, 5, null, null, null);
         Map<String, JsonNode> meta = Map.of(
                 "$.docs#minItems", NF.numberNode(2),
                 "$.docs#maxItems", NF.numberNode(10)
@@ -289,7 +288,7 @@ class ViewEvaluatorTest {
 
     @Test
     void fileUploadField_size_limits_from_meta_override_spec() {
-        ComponentSpec c = componentWithMultiFile("mf3", "$.docs", true, null, null, 512L, 1048576L, null);
+        ComponentSpec c = fileUpload("mf3", "$.docs", null, true, null, null, 512L, 1048576L, null);
         Map<String, JsonNode> meta = Map.of(
                 "$.docs#minSize", NF.numberNode(4096),
                 "$.docs#maxSize", NF.numberNode(10485760)
@@ -302,7 +301,7 @@ class ViewEvaluatorTest {
 
     @Test
     void fileUploadField_allowedMediaTypes_from_meta_overrides_spec() {
-        ComponentSpec c = componentWithMultiFile("mf4", "$.docs", true, null, null, null, null, "image/*");
+        ComponentSpec c = fileUpload("mf4", "$.docs", null, true, null, null, null, null, "image/*");
         Map<String, JsonNode> meta = Map.of(
                 "$.docs#allowedMediaTypes", NF.textNode("image/jpeg,image/png")
         );
@@ -315,9 +314,7 @@ class ViewEvaluatorTest {
     @Test
     void progressBar_all_display_fields_pass_through_to_evaluated_component() {
         mergedDoc.put("progress", 65);
-        ComponentSpec c = componentWithNewFields("pb1", "progressBar", "$.progress",
-                0.0, 100.0, null, null, true, "percent");
-        EvaluatedView view = evaluate(c);
+        EvaluatedView view = evaluate(progressBar("pb1", "$.progress", 0.0, 100.0, true, "percent"));
         EvaluatedComponent eval = first(view);
         assertThat(eval.type()).isEqualTo("progressBar");
         assertThat(eval.min()).isEqualTo(0.0);
@@ -329,19 +326,39 @@ class ViewEvaluatorTest {
 
     @Test
     void progressBar_value_format_passes_through() {
-        ComponentSpec c = componentWithNewFields("pb2", "progressBar", null,
-                null, null, null, null, false, "value");
-        EvaluatedView view = evaluate(c);
+        EvaluatedView view = evaluate(progressBar("pb2", null, null, null, false, "value"));
         assertThat(first(view).format()).isEqualTo("value");
         assertThat(first(view).showValue()).isFalse();
+    }
+
+    // ── unknown component types ───────────────────────────────────────────────
+
+    @Test
+    void unknown_type_renders_as_basic_input_and_keeps_every_property() throws Exception {
+        ComponentSpec c = new ObjectMapper().readValue("""
+                {
+                  "id": "x1", "type": "signaturePad",
+                  "label": "Sign here",
+                  "bind": "$.name",
+                  "penColour": "#004",
+                  "strokes": [1, 2, 3]
+                }
+                """, ComponentSpec.class);
+
+        EvaluatedView view = evaluate(c);
+        EvaluatedComponent eval = first(view);
+        assertThat(eval).isInstanceOf(EvaluatedBasicInput.class);
+        assertThat(eval.type()).isEqualTo("signaturePad");
+        assertThat(eval.label()).isEqualTo("Sign here");
+        assertThat(eval.value().asText()).isEqualTo("Alice");
     }
 
     // ── EvaluatedView metadata ────────────────────────────────────────────────
 
     @Test
     void evaluated_view_carries_correct_metadata() {
-        ComponentSpec c = component("c1", "label", null, null, null, null, null, null);
-        ViewSpec view = ViewSpec.of("dashboard", "Dashboard", "grid", 3, List.of(c), null, null);
+        ViewSpec view = ViewSpec.of("dashboard", "Dashboard", "grid", 3,
+                List.of(label("c1", null, null)), null, null);
         EvaluatedView result = ViewEvaluator.evaluate("my-model", view, mergedDoc, Map.of(), exprCache);
         assertThat(result.modelId()).isEqualTo("my-model");
         assertThat(result.viewId()).isEqualTo("dashboard");
@@ -355,9 +372,8 @@ class ViewEvaluatorTest {
     void view_text_expression_can_reference_const() {
         ObjectNode constants = NF.objectNode();
         constants.put("greeting", "Hello from const");
-        ComponentSpec c = component("t1", "staticText", null, null, null,
-                new TextNode("$const.greeting"), null, null);
-        ViewSpec view = ViewSpec.of("v1", "V", "vertical", null, List.of(c), null, null);
+        ViewSpec view = ViewSpec.of("v1", "V", "vertical", null,
+                List.of(staticText("t1", new TextNode("$const.greeting"))), null, null);
 
         EvaluatedView result = ViewEvaluator.evaluate(
                 "m", view, mergedDoc, Map.of(), exprCache, constants);
@@ -381,99 +397,45 @@ class ViewEvaluatorTest {
         return view.components().getFirst();
     }
 
-    private static ComponentSpec component(
-            String id, String type,
-            JsonNode visible, JsonNode enabled, JsonNode readOnly,
-            JsonNode text, String bind,
-            List<ComponentSpec> components
-    ) {
-        return ComponentSpec.of(
-                id, type, null,
-                visible, enabled, readOnly, null,
-                bind, null, null, null, null,
-                null, null, null, null, null,
-                null, components, null, null, null, null,
-                null, null, null, null,
-                null, null,
-                null, null, null,
-                text, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null
-        );
+    private static LabelSpec label(String id, JsonNode visible, String bind) {
+        return new LabelSpec(id, "label", null, visible, bind, null);
     }
 
-    private static ComponentSpec componentWithRequired(String id, String type, JsonNode required) {
-        return ComponentSpec.of(
-                id, type, null,
-                null, null, null, required,
-                null, null, null, null, null,
-                null, null, null, null, null,
-                null, null, null, null, null, null,
-                null, null, null, null,
-                null, null,
-                null, null, null,
-                null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null
-        );
+    private static BasicInputSpec input(String id, String type, JsonNode visible, JsonNode enabled,
+                                        JsonNode readOnly, JsonNode required, String bind) {
+        return new BasicInputSpec(id, type, null, visible, enabled, readOnly, required,
+                bind, null, null, null, null);
     }
 
-    private static ComponentSpec componentWithNewFields(
-            String id, String type, String bind,
-            Double min, Double max, Double step,
-            String accept, Boolean showValue, String format
-    ) {
-        return ComponentSpec.of(
-                id, type, null,
-                null, null, null, null,
-                bind, null, null, null, null,
-                null, null, null, null, null,
-                null, null, null, null, null, null,
-                null, null, null, null,
-                null, null,
-                null, null, null,
-                null, null, null, null, null,
-                min, max, step, accept, null, null, null, null, null, null, showValue, format,
-                null, null, null, null
-        );
+    private static StaticTextSpec staticText(String id, JsonNode text) {
+        return new StaticTextSpec(id, "staticText", null, null, text);
     }
 
-    private static ComponentSpec componentWithMultiFile(
-            String id, String bind,
-            Boolean multiple, Integer minFiles, Integer maxFiles,
-            Long minSize, Long maxSize, String allowedMediaTypes
-    ) {
-        return ComponentSpec.of(
-                id, "fileUploadField", null,
-                null, null, null, null,
-                bind, null, null, null, null,
-                null, null, null, null, null,
-                null, null, null, null, null, null,
-                null, null, null, null,
-                null, null,
-                null, null, null,
-                null, null, null, null, null,
-                null, null, null, null, multiple, minFiles, maxFiles, minSize, maxSize, allowedMediaTypes, null, null,
-                null, null, null, null
-        );
+    private static ContainerSpec container(String id, String type, String bind,
+                                           List<ComponentSpec> children) {
+        return new ContainerSpec(id, type, null, null, bind, null, null, null, children);
     }
 
-    private static ComponentSpec componentWithOptions(
-            String id, String type,
-            List<org.json_kula.valem.view.model.OptionSpec> options
-    ) {
-        return ComponentSpec.of(
-                id, type, null,
-                null, null, null, null,
-                null, null, null, null, null,
-                options, null, null, null, null,
-                null, null, null, null, null, null,
-                null, null, null, null,
-                null, null,
-                null, null, null,
-                null, null, null, null, null,
-                null, null, null, null, null, null, null, null, null, null, null, null,
-                null, null, null, null
-        );
+    private static SliderSpec slider(String id, String bind, Double min, Double max, Double step) {
+        return new SliderSpec(id, "sliderField", null, null, null, null, null,
+                bind, null, null, min, max, step, null);
+    }
+
+    private static ProgressBarSpec progressBar(String id, String bind, Double min, Double max,
+                                               Boolean showValue, String format) {
+        return new ProgressBarSpec(id, "progressBar", null, null, bind, min, max, showValue, format, null);
+    }
+
+    private static FileUploadSpec fileUpload(String id, String bind, String accept, Boolean multiple,
+                                             Integer minFiles, Integer maxFiles,
+                                             Long minSize, Long maxSize, String allowedMediaTypes) {
+        return new FileUploadSpec(id, "fileUploadField", null, null, null, null, null,
+                bind, null, null, accept, multiple, minFiles, maxFiles,
+                minSize, maxSize, allowedMediaTypes, null);
+    }
+
+    private static ChoiceInputSpec choice(String id, String type, List<OptionSpec> options) {
+        return new ChoiceInputSpec(id, type, null, null, null, null, null, null, null, null, null,
+                options, null, null, null, null, null, null);
     }
 }

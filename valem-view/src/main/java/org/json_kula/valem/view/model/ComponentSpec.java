@@ -1,180 +1,111 @@
 package org.json_kula.valem.view.model;
 
-import com.fasterxml.jackson.annotation.JsonCreator;
-import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.JsonNode;
 
-import java.util.List;
-
 /**
- * Flat discriminated-union record for all component types.
- * The {@code type} field is the discriminator; all other fields are nullable
- * and interpreted only for the component types that use them.
+ * One component in a {@link ViewSpec}'s component tree.
  *
- * Dynamic fields (visible, enabled, readOnly, required, text, className) accept
- * either a JSON boolean or a JSONata expression string.
+ * <p>{@code type} is the discriminator; each permitted record carries only the fields the
+ * component types it covers actually use, so illegal combinations (a {@code badge} with a
+ * {@code pageSize}) are not representable. Records are grouped by field shape rather than one
+ * per type, mirroring {@code EvaluatedComponent} on the output side.
+ *
+ * <p>A {@code type} Valem does not know binds to {@link UnknownComponentSpec}, which keeps
+ * every property it was given — including ones no built-in component type declares.
+ *
+ * <p>This interface declares only what the generic evaluation pipeline reads. Everything else
+ * is reachable only by pattern-matching the concrete record, which is what makes
+ * {@code ViewEvaluator}'s switch exhaustive. {@code bind} is common to every type because it
+ * anchors the meta-driven {@code visible}/{@code readOnly}/{@code required} inheritance
+ * (see {@code $.bind#relevant} and friends), not only because it locates a value.
+ *
+ * <p>Dynamic fields ({@code visible}, {@code enabled}, {@code readOnly}, {@code required},
+ * {@code canAdd}, {@code canRemove}, {@code text}) accept either a JSON boolean or a JSONata
+ * expression string, which is why they are typed as {@link JsonNode}.
  */
-public record ComponentSpec(
-        String id,
-        String type,
+@JsonTypeInfo(
+        use = JsonTypeInfo.Id.NAME,
+        include = JsonTypeInfo.As.EXISTING_PROPERTY,
+        property = "type",
+        visible = true,
+        defaultImpl = UnknownComponentSpec.class)
+@JsonSubTypes({
+        @JsonSubTypes.Type(value = BasicInputSpec.class, names = {
+                "textField", "numericField", "passwordField", "emailField", "phoneNumberField",
+                "checkboxField", "toggleField", "dateField", "dateTimeField", "timeField",
+                "countrySelector"}),
+        @JsonSubTypes.Type(value = TextAreaSpec.class,          names = "textAreaField"),
+        @JsonSubTypes.Type(value = ChoiceInputSpec.class,       names = {
+                "selectField", "radioField", "multiSelectField"}),
+        @JsonSubTypes.Type(value = DependentSelectorSpec.class, names = "countryRegionSelector"),
+        @JsonSubTypes.Type(value = SliderSpec.class,            names = "sliderField"),
+        @JsonSubTypes.Type(value = FileUploadSpec.class,        names = "fileUploadField"),
+        @JsonSubTypes.Type(value = LabelSpec.class,             names = "label"),
+        @JsonSubTypes.Type(value = StaticTextSpec.class,        names = "staticText"),
+        @JsonSubTypes.Type(value = BadgeSpec.class,             names = "badge"),
+        @JsonSubTypes.Type(value = SeparatorLineSpec.class,     names = "separatorLine"),
+        @JsonSubTypes.Type(value = ProgressBarSpec.class,       names = "progressBar"),
+        @JsonSubTypes.Type(value = DataTableSpec.class,         names = "dataTable"),
+        @JsonSubTypes.Type(value = DataChartSpec.class,         names = "dataChart"),
+        @JsonSubTypes.Type(value = ContainerSpec.class,         names = {
+                "group", "fieldSet", "sectionItem"}),
+        @JsonSubTypes.Type(value = SectionListSpec.class,       names = "sectionList"),
+        @JsonSubTypes.Type(value = ButtonSpec.class,            names = "button"),
+        @JsonSubTypes.Type(value = MenuSpec.class,              names = "menu")
+})
+public sealed interface ComponentSpec permits
+        BasicInputSpec,
+        TextAreaSpec,
+        ChoiceInputSpec,
+        DependentSelectorSpec,
+        SliderSpec,
+        FileUploadSpec,
+        LabelSpec,
+        StaticTextSpec,
+        BadgeSpec,
+        SeparatorLineSpec,
+        ProgressBarSpec,
+        DataTableSpec,
+        DataChartSpec,
+        ContainerSpec,
+        SectionListSpec,
+        ButtonSpec,
+        MenuSpec,
+        UnknownComponentSpec {
 
-        // common display
-        String label,
-        JsonNode visible,
-        JsonNode enabled,
-        JsonNode readOnly,
-        JsonNode required,
-        String bind,
-        String placeholder,
-        String helperText,
-        String tooltip,
-        JsonNode className,
+    String id();
 
-        // options for select/radio/multiSelect
-        List<OptionSpec> options,
-        String optionsExpr,
-        String optionsUrl,
-        String optionsPath,
+    String type();
 
-        // countryRegionSelector
-        String dependsOn,
+    /** JsonPath to the bound model field; also the meta-inheritance anchor. */
+    default String bind() { return null; }
 
-        // textAreaField
-        Integer rows,
+    /** Boolean | JSONata String | null -> inherit {@code $.bind#relevant}. */
+    default JsonNode visible() { return null; }
 
-        // aggregate containers
-        List<ComponentSpec> components,
-        String layout,
-        Integer columns,
+    /** Boolean | JSONata String | null -> {@code !readOnly}. */
+    default JsonNode enabled() { return null; }
 
-        // fieldSet
-        String legend,
+    /** Boolean | JSONata String | null -> inherit {@code $.bind#read_only}. */
+    default JsonNode readOnly() { return null; }
 
-        // sectionList
-        String itemView,
-        JsonNode canAdd,
-        JsonNode canRemove,
-        String addLabel,
-        String removeLabel,
+    /** Boolean | JSONata String | null -> inherit {@code $.bind#required}. */
+    default JsonNode required() { return null; }
 
-        // dataTable
-        List<ColumnSpec> tableColumns,
-        Integer pageSize,
-
-        // dataChart
-        String chartType,
-        String chartX,
-        List<ChartSeriesSpec> chartSeries,
-
-        // label / staticText
-        JsonNode text,
-
-        // menu
-        List<MenuItemSpec> menuItems,
-        String orientation,
-
-        // button
-        String variant,
-        String icon,
-
-        // sliderField
-        Double min,
-        Double max,
-        Double step,
-
-        // fileUploadField
-        String accept,
-        Boolean multiple,
-        Integer minFiles,
-        Integer maxFiles,
-        Long minSize,
-        Long maxSize,
-        String allowedMediaTypes,
-
-        // progressBar
-        Boolean showValue,
-        String format,
-
-        // event handlers
-        EventHandler onClick,
-        EventHandler onChange,
-        EventHandler onOpen,
-        EventHandler onClose
-) {
-    @JsonCreator
-    public static ComponentSpec of(
-            @JsonProperty(value = "id",   required = true) String id,
-            @JsonProperty(value = "type", required = true) String type,
-            @JsonProperty("label")        String label,
-            @JsonProperty("visible")      JsonNode visible,
-            @JsonProperty("enabled")      JsonNode enabled,
-            @JsonProperty("readOnly")     JsonNode readOnly,
-            @JsonProperty("required")     JsonNode required,
-            @JsonProperty("bind")         String bind,
-            @JsonProperty("placeholder")  String placeholder,
-            @JsonProperty("helperText")   String helperText,
-            @JsonProperty("tooltip")      String tooltip,
-            @JsonProperty("className")    JsonNode className,
-            @JsonProperty("options")      List<OptionSpec> options,
-            @JsonProperty("optionsExpr")  String optionsExpr,
-            @JsonProperty("optionsUrl")   String optionsUrl,
-            @JsonProperty("optionsPath")  String optionsPath,
-            @JsonProperty("dependsOn")    String dependsOn,
-            @JsonProperty("rows")         Integer rows,
-            @JsonProperty("components")   List<ComponentSpec> components,
-            @JsonProperty("layout")       String layout,
-            @JsonProperty("columns")      Integer columns,
-            @JsonProperty("legend")       String legend,
-            @JsonProperty("itemView")     String itemView,
-            @JsonProperty("canAdd")       JsonNode canAdd,
-            @JsonProperty("canRemove")    JsonNode canRemove,
-            @JsonProperty("addLabel")     String addLabel,
-            @JsonProperty("removeLabel")  String removeLabel,
-            @JsonProperty("tableColumns") List<ColumnSpec> tableColumns,
-            @JsonProperty("pageSize")     Integer pageSize,
-            @JsonProperty("chartType")    String chartType,
-            @JsonProperty("chartX")       String chartX,
-            @JsonProperty("chartSeries")  List<ChartSeriesSpec> chartSeries,
-            @JsonProperty("text")         JsonNode text,
-            @JsonProperty("menuItems")    List<MenuItemSpec> menuItems,
-            @JsonProperty("orientation")  String orientation,
-            @JsonProperty("variant")      String variant,
-            @JsonProperty("icon")         String icon,
-            @JsonProperty("min")          Double min,
-            @JsonProperty("max")          Double max,
-            @JsonProperty("step")         Double step,
-            @JsonProperty("accept")              String accept,
-            @JsonProperty("multiple")            Boolean multiple,
-            @JsonProperty("minFiles")            Integer minFiles,
-            @JsonProperty("maxFiles")            Integer maxFiles,
-            @JsonProperty("minSize")             Long minSize,
-            @JsonProperty("maxSize")             Long maxSize,
-            @JsonProperty("allowedMediaTypes")   String allowedMediaTypes,
-            @JsonProperty("showValue")           Boolean showValue,
-            @JsonProperty("format")              String format,
-            @JsonProperty("onClick")      EventHandler onClick,
-            @JsonProperty("onChange")     EventHandler onChange,
-            @JsonProperty("onOpen")       EventHandler onOpen,
-            @JsonProperty("onClose")      EventHandler onClose
-    ) {
-        return new ComponentSpec(
-                id, type, label, visible, enabled, readOnly, required,
-                bind, placeholder, helperText, tooltip, className,
-                options      != null ? List.copyOf(options)      : null,
-                optionsExpr, optionsUrl, optionsPath,
-                dependsOn, rows,
-                components   != null ? List.copyOf(components)   : null,
-                layout, columns, legend, itemView,
-                canAdd, canRemove, addLabel, removeLabel,
-                tableColumns != null ? List.copyOf(tableColumns) : null,
-                pageSize,
-                chartType, chartX,
-                chartSeries  != null ? List.copyOf(chartSeries)  : null,
-                text,
-                menuItems    != null ? List.copyOf(menuItems)    : null,
-                orientation, variant, icon,
-                min, max, step, accept, multiple, minFiles, maxFiles, minSize, maxSize, allowedMediaTypes, showValue, format,
-                onClick, onChange, onOpen, onClose
-        );
+    /**
+     * Enforces the two fields every component must carry. Called from each record's compact
+     * constructor so a spec missing them fails at parse time (a 422 at write) rather than
+     * rendering as a nameless component.
+     */
+    static void requireIdentity(String id, String type) {
+        if (id == null || id.isBlank()) {
+            throw new IllegalArgumentException("ComponentSpec: 'id' is required");
+        }
+        if (type == null || type.isBlank()) {
+            throw new IllegalArgumentException(
+                    "ComponentSpec: 'type' is required (component '" + id + "')");
+        }
     }
 }

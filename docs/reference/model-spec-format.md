@@ -606,7 +606,6 @@ other fields are nullable and interpreted only for the component types that use 
 | `placeholder` | string | Input placeholder text |
 | `helperText` | string | Helper text shown below the component |
 | `tooltip` | string | Tooltip on hover |
-| `className` | string \| JSONata string | CSS class name(s), may be a dynamic expression |
 | `onChange` | `EventHandler` | Fired when the bound value changes |
 | `onOpen` | `EventHandler` | Fired when a sub-panel opens |
 | `onClose` | `EventHandler` | Fired when a sub-panel closes |
@@ -618,8 +617,14 @@ other fields are nullable and interpreted only for the component types that use 
 - A JSONata string — evaluated against the merged model document
 - `null` / absent — falls back to meta cache inheritance (see below)
 
-`className` is declared on `ComponentSpec` (and the TS type) but is currently **dead** — no
-evaluator or renderer reads it. Don't rely on it.
+`className` is **dead** — no evaluator or renderer reads it. It is no longer modelled on any
+`ComponentSpec` record (it survives only on the TS type). A `className` in an existing spec is
+still stored and served verbatim, but nothing acts on it. Don't rely on it.
+
+Not every common field applies to every type — each component type binds to the `ComponentSpec`
+record carrying the fields it uses, so e.g. a `separatorLine` has no `placeholder` and a `badge`
+has no `enabled`. See the record table in
+[view-system.md](view-system.md#viewmodel-package) for the exact per-type field sets.
 
 ### Meta cache inheritance (null defaults)
 
