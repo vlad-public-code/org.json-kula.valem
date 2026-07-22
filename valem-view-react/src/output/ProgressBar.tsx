@@ -1,8 +1,9 @@
 import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
+import type { ProgressBarSpec } from '../types';
 
-export function ProgressBar({ component: c }: BaseComponentProps) {
+export function ProgressBar({ component: c }: BaseComponentProps<ProgressBarSpec>) {
   const { state } = useViewContext();
   const bindKey = c.bind?.replace(/^\$\./, '');
   const rawValue = bindKey ? getByPath(state, bindKey) : 0;

@@ -6,10 +6,11 @@ import {
 import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
+import type { DataChartSpec } from '../types';
 
 const COLORS = ['#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed', '#0891b2'];
 
-export function DataChart({ component: c }: BaseComponentProps) {
+export function DataChart({ component: c }: BaseComponentProps<DataChartSpec>) {
   const { state } = useViewContext();
   const bindKey = c.bind?.replace(/^\$\./, '');
   const raw = bindKey ? getByPath(state, bindKey) : undefined;

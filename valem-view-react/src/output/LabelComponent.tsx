@@ -2,8 +2,9 @@ import { useViewContext } from '../ViewContext';
 import { useJSONataText } from '../hooks/useJSONata';
 import { getByPath } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
+import type { LabelSpec } from '../types';
 
-export function LabelComponent({ component: c, text }: BaseComponentProps) {
+export function LabelComponent({ component: c, text }: BaseComponentProps<LabelSpec>) {
   const { state } = useViewContext();
   const rawText = typeof c.text === 'string' ? c.text : (typeof c.text === 'object' && c.text ? String(c.text) : undefined);
   const resolved = useJSONataText(rawText, state) ?? text;

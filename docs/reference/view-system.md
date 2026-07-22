@@ -156,7 +156,7 @@ uses on the output side:
 | `StaticTextSpec` | `staticText` | `text` |
 | `BadgeSpec` | `badge` | `label`, `text`, `variant` |
 | `SeparatorLineSpec` | `separatorLine` | — |
-| `ProgressBarSpec` | `progressBar` | `label`, `min`, `max`, `showValue`, `format`, `tooltip` |
+| `ProgressBarSpec` | `progressBar` | `label`, `min`, `max`, `showValue`, `format`, `helperText`, `tooltip` |
 | `DataTableSpec` | `dataTable` | `label`, `tableColumns`, `pageSize`, `tooltip` |
 | `DataChartSpec` | `dataChart` | `label`, `chartType`, `chartX`, `chartSeries` |
 | `ContainerSpec` | `group`, `fieldSet`, `sectionItem` | `label`, `layout`, `columns`, `legend`, `components` |
@@ -177,8 +177,9 @@ the pipeline reads are projected out of that node; everything else is reachable 
 resolved to.
 
 > `className` was declared on the old flat record but read by nothing — no evaluator, no renderer.
-> It is not part of any record. Since specs are stored and served as raw JSON, a `className` in an
-> existing spec still reaches the client untouched; it simply is not modelled server-side.
+> It is not part of any record, nor of the TypeScript mirror. Since specs are stored and served as
+> raw JSON, a `className` in an existing spec still reaches the client untouched; it simply is not
+> modelled anywhere.
 
 **Supporting records:**
 ```java
@@ -369,7 +370,25 @@ becomes hidden/disabled with zero extra ViewDefinition config.
 - All component types (re-exported for custom composition)
 - TypeScript types: `ViewDefinition`, `ViewSpec`, `ComponentSpec`, `EvaluatedView`,
   `EvaluatedComponent`, `OptionSpec`, `EventHandler`, etc.
+- The `ComponentSpec` variants (`BasicInputSpec`, `SliderSpec`, `ContainerSpec`, …),
+  `KnownComponentSpec`, `UnknownComponentSpec`, plus the `isKnownComponent` /
+  `hasChildComponents` narrowing guards and the `KNOWN_COMPONENT_TYPES` list
 - Hooks: `useJSONata`, `useCountries`, `useRegions`
+
+**`ComponentSpec` is a discriminated union here too**, mirroring the Java sealed hierarchy
+variant-for-variant: same grouping, same field sets, same `UnknownComponentSpec` fallback (typed
+with an index signature, so a custom type may carry any property). Consequences in the renderer:
+
+- `BaseComponentProps<C>` is generic, so each implementation receives only its own variant —
+  `SliderField` takes a `SliderSpec`. Reading `c.pageSize` inside `Badge` is a compile error.
+- `ComponentRenderer` narrows with `isKnownComponent(c)` before dispatching, so the unknown-type
+  branch is explicit rather than a `default:` fallthrough, and the `switch` over
+  `KnownComponentSpec` is exhaustiveness-checked by its `ReactElement` return type — a missing
+  case fails `tsc` with "function lacks ending return statement".
+
+The one place the mirror is deliberately looser: the TS base carries `enabled`/`readOnly`/
+`required` for every variant (matching the Java *interface*'s default methods), whereas the Java
+*records* only bind them where the type is interactive.
 
 **`ViewRenderer` props:**
 ```typescript

@@ -617,9 +617,9 @@ other fields are nullable and interpreted only for the component types that use 
 - A JSONata string — evaluated against the merged model document
 - `null` / absent — falls back to meta cache inheritance (see below)
 
-`className` is **dead** — no evaluator or renderer reads it. It is no longer modelled on any
-`ComponentSpec` record (it survives only on the TS type). A `className` in an existing spec is
-still stored and served verbatim, but nothing acts on it. Don't rely on it.
+`className` is **dead** — no evaluator or renderer reads it. It is no longer modelled on the
+`ComponentSpec` hierarchy in Java or in the TypeScript mirror. A `className` in an existing spec
+is still stored and served verbatim, but nothing acts on it. Don't rely on it.
 
 Not every common field applies to every type — each component type binds to the `ComponentSpec`
 record carrying the fields it uses, so e.g. a `separatorLine` has no `placeholder` and a `badge`

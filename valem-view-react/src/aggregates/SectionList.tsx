@@ -3,16 +3,21 @@ import { useViewContext } from '../ViewContext';
 import { useJSONataBoolean } from '../hooks/useJSONata';
 import { getByPath } from '../hooks/useDeferredMutate';
 import { ComponentRenderer } from '../ComponentRenderer';
-import type { ComponentSpec } from '../types';
+import type { ComponentSpec, SectionListSpec } from '../types';
+import { hasChildComponents } from '../types';
 import type { BaseComponentProps } from '../ComponentRenderer';
 
 /** Replaces [*] in bind paths with the concrete array index. */
 function substituteIndex(components: ComponentSpec[], idx: number): ComponentSpec[] {
-  return components.map(child => ({
-    ...child,
-    bind: child.bind?.replace('[*]', `.${idx}`),
-    components: child.components ? substituteIndex(child.components, idx) : child.components,
-  }));
+  return components.map(child => {
+    const bind = child.bind?.replace('[*]', `.${idx}`);
+    if (!hasChildComponents(child)) return { ...child, bind };
+    return {
+      ...child,
+      bind,
+      components: child.components ? substituteIndex(child.components, idx) : child.components,
+    };
+  });
 }
 
 function itemLabel(item: unknown, idx: number): string {
@@ -29,7 +34,7 @@ function itemLabel(item: unknown, idx: number): string {
   return pairs || `Item ${idx + 1}`;
 }
 
-export function SectionList({ component: c, state }: BaseComponentProps) {
+export function SectionList({ component: c, state }: BaseComponentProps<SectionListSpec>) {
   const { onMutate, onNavigate } = useViewContext();
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 

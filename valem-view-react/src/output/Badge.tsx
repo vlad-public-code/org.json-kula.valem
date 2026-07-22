@@ -3,6 +3,7 @@ import { useViewContext } from '../ViewContext';
 import { useJSONataText } from '../hooks/useJSONata';
 import { getByPath } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
+import type { BadgeSpec } from '../types';
 
 const VARIANT_STYLES: Record<string, CSSProperties> = {
   primary:   { background: '#dbeafe', color: '#1d4ed8' },
@@ -12,7 +13,7 @@ const VARIANT_STYLES: Record<string, CSSProperties> = {
   danger:    { background: '#fee2e2', color: '#b91c1c' },
 };
 
-export function Badge({ component: c, text }: BaseComponentProps) {
+export function Badge({ component: c, text }: BaseComponentProps<BadgeSpec>) {
   const { state } = useViewContext();
   const rawText = typeof c.text === 'string' ? c.text : undefined;
   const resolved = useJSONataText(rawText, state) ?? text;

@@ -423,7 +423,7 @@ class ViewEvaluatorTest {
 
     private static ProgressBarSpec progressBar(String id, String bind, Double min, Double max,
                                                Boolean showValue, String format) {
-        return new ProgressBarSpec(id, "progressBar", null, null, bind, min, max, showValue, format, null);
+        return new ProgressBarSpec(id, "progressBar", null, null, bind, min, max, showValue, format, null, null);
     }
 
     private static FileUploadSpec fileUpload(String id, String bind, String accept, Boolean multiple,
