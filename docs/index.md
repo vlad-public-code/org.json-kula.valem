@@ -13,25 +13,55 @@ spreadsheet-like computation model for JSON-based agent systems.
 {: .fs-6 .fw-300 }
 
 [Try the live sandbox]({{ site.sandbox_url }}){: .btn .btn-primary .fs-5 .mb-4 .mb-md-0 .mr-2 target="_blank" rel="noopener" }
+[Quickstart]({% link getting-started/quickstart.md %}){: .btn .fs-5 .mb-4 .mb-md-0 .mr-2 }
 [View on GitHub]({{ site.gh_repo }}){: .btn .fs-5 .mb-4 .mb-md-0 target="_blank" rel="noopener" }
 
 ---
 
-## What is Valem?
+## In four lines
 
-An LLM is good at *describing* a domain but bad at *maintaining consistent state* over it. Valem
+Declare how a value is computed, write only the inputs, read a document that is always consistent:
+
+```jsonc
+// 1. the spec says how `total` is computed — you never write it
+"derivations": [ { "path": "$.total", "expr": "subtotal + tax" } ]
+```
+
+```bash
+# 2. mutate base fields
+curl -X POST localhost:8080/models/order/mutations \
+     -d '{ "$.subtotal": 100, "$.tax": 8 }'
+
+# 3. read the merged state
+curl localhost:8080/models/order/state
+#  → { "subtotal": 100, "tax": 8, "total": 108 }
+```
+
+`total` recomputed itself, in dependency order, touching only what the change affected — and any
+constraint you declared was enforced before the mutation was allowed to commit. That is the whole
+idea; everything else is scale, governance, and reach.
+
+## What it's for
+
+An LLM is good at *describing* a domain and bad at *maintaining consistent state* over it. Valem
 closes that gap. You give it a **ModelSpec** — a declarative JSON document (typically LLM-generated)
-that names a domain's fields, the formulas that derive values from them, the invariants that must
-always hold, and the side effects that fire when conditions are met. Valem compiles that into a live,
-reactive model: mutate a base field and every dependent value recomputes in dependency order,
-constraints are enforced, and nothing is left inconsistent.
+naming a domain's fields, the formulas that derive values from them, the invariants that must always
+hold, and the side effects that fire when conditions are met. Valem compiles that into a live,
+reactive model.
 
 Think of a spreadsheet — cells, formulas, validation — but addressed by JSON Path, expressed in
 JSONata, and driven over a REST/WebSocket API, an in-process library, an MCP server, or a console.
 
-The name says it: ***valem*** is the Estonian word for **"formula"**. It's pronounced
-**VAH-lem** (IPA [ˈvɑlem]) — stress on the first syllable, *a* as in "father", never
-"va-LEM".
+[What is Valem? →]({% link getting-started/what-is-valem.md %})
+
+## See it running
+
+[![The Valem sandbox running a generated car-loan model: inputs on the left, derived payment figures and a full amortization schedule recomputed live](assets/img/sandbox-view.png)]({{ site.sandbox_url }}){: target="_blank" rel="noopener" }
+
+A zero-setup public demo: describe a domain in plain language, watch an LLM generate a ModelSpec,
+then type into it and see derivations, constraints, and effects react live.
+[Open the sandbox →]({{ site.sandbox_url }}){: target="_blank" rel="noopener" } ·
+[what to do in it]({% link getting-started/sandbox.md %})
 
 ## Why it exists
 
@@ -46,44 +76,28 @@ The name says it: ***valem*** is the Estonian word for **"formula"**. It's prono
   tamper-evident audit trail.
 - **Embeddable.** A pure-Java core with no framework lock-in, wrapped by an à-la-carte Spring layer.
 
-## Live sandbox
-
-A zero-setup public demo runs on Render: describe a domain in plain language, watch an LLM generate a
-ModelSpec, then mutate fields and see derivations, constraints, and effects react live.
-
-[Open the Valem sandbox →]({{ site.sandbox_url }}){: target="_blank" rel="noopener" }
+Not sure it fits your problem? [Usage scenarios]({% link usage-scenarios/index.md %}) covers the four
+shapes it fits best, and the [FAQ]({% link getting-started/faq.md %}) is blunt about when to use
+something else.
 
 ## The documentation, in six chapters
 
-| Chapter | What's in it |
+| Chapter | Start here if you want to… |
 |---|---|
-| [Getting started]({% link getting-started/index.md %}) | What Valem is, the hosted sandbox, running it locally, pairing it with an AI agent. |
-| [Usage scenarios]({% link usage-scenarios/index.md %}) | Where it fits in a real project: agent state, rules and calculations, effect-driven workflows, model-driven UIs. |
-| [Model guide]({% link model-guide/index.md %}) | The principles: what a spec contains, what the reactive pipeline does, effects, views, composition. |
-| [Reference]({% link reference/index.md %}) | Authoritative surfaces: spec format, REST/WebSocket API, MCP tools, LLM prompts, view components. |
-| [Deployment]({% link deployment/index.md %}) | Running the web API and the MCP server, configuration, persistence, security. |
-| [Extending]({% link extending/index.md %}) | Embedding the engine, client SDKs, custom effect kinds and renderers, internals. |
+| [Getting started]({% link getting-started/index.md %}) | See it work, run it locally, or pair it with an AI agent. |
+| [Usage scenarios]({% link usage-scenarios/index.md %}) | Decide whether it fits your project. |
+| [Model guide]({% link model-guide/index.md %}) | Write and understand a model. |
+| [Reference]({% link reference/index.md %}) | Look up a field, endpoint, tool, or component. |
+| [Deployment]({% link deployment/index.md %}) | Run the API or the MCP server for real. |
+| [Extending]({% link extending/index.md %}) | Embed the engine or build on its seams. |
 
-Plus a [glossary]({% link glossary.md %}) and the
+Plus a [glossary]({% link glossary.md %}), the [FAQ]({% link getting-started/faq.md %}), and the
 [third-party libraries]({% link libraries.md %}) Valem stands on.
-
-## Where to next
-
-| If you want to… | Go to |
-|---|---|
-| See it work in two minutes | [Try the sandbox]({% link getting-started/sandbox.md %}) |
-| Run it on your machine | [Quickstart]({% link getting-started/quickstart.md %}) |
-| Drive a model from an AI agent | [Connect your agent]({% link getting-started/connect-your-agent.md %}) |
-| Understand the spec format | [Anatomy of a model]({% link model-guide/anatomy.md %}) |
-| Start from a working example | [Examples gallery]({% link usage-scenarios/examples-gallery.md %}) |
-| Reach the outside world (HTTP, LLM, timers) | [Effects]({% link model-guide/effects.md %}) |
-| Add Valem to your own project | [Embed Valem in your project]({% link extending/embedding.md %}) |
-| Look up an endpoint or property | [API reference]({% link reference/api-reference.md %}) · [Configuration]({% link deployment/configuration.md %}) |
-| See how it works inside | [Architecture overview]({% link extending/architecture.md %}) |
 
 ---
 
-**Requirements:** Java 21+ · Maven 3.9+ · Node.js 20+ (for the UI only). Licensed under Apache-2.0.
+**Requirements:** Java 21+ · Maven 3.9+ · Node.js 20+ (for the UI only) — or Docker, which needs
+none of them. Apache-2.0. Latest release: [v1.0.0]({{ site.gh_repo }}/releases/latest).
 
 ## See also
 - [Valem sandbox](https://valem.onrender.com/)

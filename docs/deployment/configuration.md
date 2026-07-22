@@ -7,12 +7,16 @@ redirect_from:
   - /reference/configuration.html
 ---
 
-# Configuration Reference
+# Configuration
+{: .no_toc }
 
 Single source of truth for every `valem.*` property. Other docs link here rather than
 listing partial, divergent subsets.
 
 ---
+
+1. TOC
+{:toc}
 
 ## Core runtime
 

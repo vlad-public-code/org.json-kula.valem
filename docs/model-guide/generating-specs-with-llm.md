@@ -7,7 +7,7 @@ redirect_from:
   - /guides/generating-specs-with-llm.html
 ---
 
-# Generating Specs with an LLM
+# Generating specs with an LLM
 
 Valem can have an LLM compile a plain-text domain description into a runnable `ModelSpec`,
 with an automatic validate-and-repair loop. This guide covers setup and the workflow; for the

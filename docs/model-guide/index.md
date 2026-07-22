@@ -48,3 +48,5 @@ a spreadsheet doesn't recalculate every cell when you type in one.
 Writing your first spec: [Anatomy of a model](anatomy.md), then the
 [examples gallery]({% link usage-scenarios/examples-gallery.md %}) for something running.
 Debugging one: [The reactive pipeline](reactive-pipeline.md), then `explain`.
+Unsure what a word means: every term used across this chapter is defined in the
+[glossary]({% link glossary.md %}).

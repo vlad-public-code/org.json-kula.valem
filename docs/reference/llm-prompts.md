@@ -5,13 +5,17 @@ nav_order: 4
 description: "Exactly what is sent to the LLM on every spec-generation call."
 ---
 
-# Valem — AI / LLM Prompt Reference
+# LLM prompts
+{: .no_toc }
 
 This document describes what is sent to the LLM on every call.
 Source: `valem-core/.../llm/SpecGenerationPrompt.java`, `SpecGenerator.java`,
 `valem-api/.../config/LlmConfig.java`.
 
 ---
+
+1. TOC
+{:toc}
 
 ## Structure of every prompt
 

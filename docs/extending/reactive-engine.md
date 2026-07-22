@@ -7,13 +7,10 @@ redirect_from:
   - /architecture/reactive-engine.html
 ---
 
-# Reactive Engine — Internals
+# Reactive engine internals
 
 How the runtime turns a compiled model + a mutation into settled, derived, constraint-checked
 state. This is the as-built internal reference for contributors.
-
-Related: [architecture.md](architecture.md) (component map, data flow),
-[../reference/model-spec-format.md](../reference/model-spec-format.md) (spec format).
 
 ---
 
@@ -205,3 +202,9 @@ Exposed via `GET /models/{id}/explain/{path}`.
 Path notation: spec/API use JsonPath (`$.order.items[*].qty`); the runtime converts to
 `JsonPointer` via `PathConverter`. JSONata `expr` fields use JSONata's own dot-notation
 (`order.total`) and are never rewritten.
+
+## Related
+
+- [Architecture overview](architecture.md) — component map and data flow.
+- [The reactive pipeline](../model-guide/reactive-pipeline.md) — the same cycle, explained rather than specified.
+- [Model spec format](../reference/model-spec-format.md) — what the compiler consumes.

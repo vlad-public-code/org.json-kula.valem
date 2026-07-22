@@ -35,9 +35,9 @@ flowchart LR
    invalid write costs nothing and returns `422`.
 2. **Apply** the mutations to the base document (a rollback snapshot is taken first).
 3. **Default** newly-created containers from `defaultValues`, filling only caller-absent fields.
-4. **Propagate** dirtiness through the dependency graph — reachable nodes only, wildcard patterns
+4. **Propagate** [dirtiness](../glossary.md#dirty-propagation) through the [dependency graph](../glossary.md#dependency-graph) — reachable nodes only, wildcard patterns
    matched per element.
-5. **Derive** dirty fields in topological level order. Each level evaluates against the merged
+5. **Derive** dirty fields in topological [level](../glossary.md#evaluation-level) order. Each level evaluates against the merged
    document as of the previous level.
 6. **Meta-derive** per-field metadata (min / max / required), per element for `[*]` paths.
 7. **Check constraints** against the merged document: `rollback` aborts the whole cycle and restores
@@ -88,7 +88,7 @@ per section. Existing state is carried forward, unchanged expressions keep their
   constant name) instead of wholesale replacement.
 
 That's what makes iterating on a live model — with an agent, or in the sandbox — safe enough to do
-casually. Details: [model spec format]({% link reference/model-spec-format.md %}#spec-evolution-post-modelsidspecevolve).
+casually. Details: [tests & spec evolution]({% link reference/model-spec/tests-and-evolution.md %}).
 
 ## Concurrency, briefly
 

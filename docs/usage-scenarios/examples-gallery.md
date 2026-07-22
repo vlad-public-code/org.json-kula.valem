@@ -7,7 +7,7 @@ redirect_from:
   - /guides/examples-gallery.html
 ---
 
-# Example gallery
+# Examples gallery
 
 Ready-to-run `ModelSpec` documents that double as demos, integration fixtures, and starting points
 for your own models. The canonical copies live in [`valem-ui/src/examples/`](https://github.com/vlad-public-code/org.json-kula.valem/blob/main/valem-ui/src/examples/)

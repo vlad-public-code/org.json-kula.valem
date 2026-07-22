@@ -28,8 +28,8 @@ export default function ExplainPanel({ modelId }: Props) {
   return (
     <>
       <div className="banner banner-info" style={{ fontSize: 12, fontFamily: 'inherit' }}>
-        Enter a target path to fetch evaluation traces. Constraint traces use synthetic keys like{' '}
-        <code>$constraint:my-constraint-id</code>. Derivation traces are not yet recorded by the runtime.
+        Enter a target path to fetch evaluation traces — a derived field (<code>$.total</code>) or a
+        constraint, which uses a synthetic key like <code>$constraint:my-constraint-id</code>.
       </div>
 
       <div className="card">

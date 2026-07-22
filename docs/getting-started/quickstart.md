@@ -8,6 +8,7 @@ redirect_from:
 ---
 
 # Quickstart
+{: .no_toc }
 
 Run Valem on your own machine three ways: the console (fastest, no server), the backend API, and the
 developer UI. For full endpoint details see
@@ -15,6 +16,18 @@ developer UI. For full endpoint details see
 [../deployment/configuration.md](../deployment/configuration.md).
 
 Want to try it without installing anything first? [Use the hosted sandbox](sandbox.md).
+
+{: .tip }
+> No Java or Maven on this machine? The whole server runs in a container:
+>
+> ```bash
+> docker build -t valem . && docker run --rm -p 8080:8080 valem
+> ```
+>
+> See [Running the web API](../deployment/web-api.md#run-with-docker).
+
+1. TOC
+{:toc}
 
 ## Prerequisites
 - Java 21+, Maven 3.9+

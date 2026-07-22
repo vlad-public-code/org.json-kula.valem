@@ -7,7 +7,7 @@ redirect_from:
   - /reference/security-model.html
 ---
 
-# Security Model
+# Security model
 
 How authentication, authorization, and the network-egress surfaces work in the as-built system —
 and their current limits.
