@@ -1,8 +1,9 @@
 import { useViewContext } from '../ViewContext';
 import { useDeferredMutate } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
+import type { BasicInputSpec } from '../types';
 
-export function PasswordField({ component: c, enabled, readOnly, required }: BaseComponentProps) {
+export function PasswordField({ component: c, enabled, readOnly, required }: BaseComponentProps<BasicInputSpec>) {
   const { state } = useViewContext();
   const { draft, schedule, handleBlur } = useDeferredMutate(c.bind, state);
 

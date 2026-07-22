@@ -1,7 +1,8 @@
 import { useViewContext } from '../ViewContext';
 import type { BaseComponentProps } from '../ComponentRenderer';
+import type { MenuSpec } from '../types';
 
-export function MenuComponent({ component: c }: BaseComponentProps) {
+export function MenuComponent({ component: c }: BaseComponentProps<MenuSpec>) {
   const { onNavigate, activeViewId } = useViewContext();
   const items = c.menuItems ?? [];
   const orientation = (c.orientation as string) ?? 'horizontal';

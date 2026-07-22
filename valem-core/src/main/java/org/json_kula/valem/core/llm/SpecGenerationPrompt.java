@@ -82,7 +82,6 @@ public final class SpecGenerationPrompt {
               "placeholder": "<string>",
               "helperText":  "<string>",
               "tooltip":     "<string>",
-              "className":   "<string>|<JSONata>",
               "onChange":    <EventHandler>,
               "onClick":     <EventHandler>
             }

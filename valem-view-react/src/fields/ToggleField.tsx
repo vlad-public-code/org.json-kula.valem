@@ -1,8 +1,9 @@
 import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
+import type { BasicInputSpec } from '../types';
 
-export function ToggleField({ component: c, enabled, readOnly, required }: BaseComponentProps) {
+export function ToggleField({ component: c, enabled, readOnly, required }: BaseComponentProps<BasicInputSpec>) {
   const { state, onMutate } = useViewContext();
   const checked = c.bind ? Boolean(getByPath(state, c.bind.replace(/^\$\./, ''))) : false;
   const interactive = enabled && !readOnly;

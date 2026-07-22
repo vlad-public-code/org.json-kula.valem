@@ -2,8 +2,9 @@ import { useViewContext } from '../ViewContext';
 import { useRegions } from '../hooks/useRegions';
 import { getByPath } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
+import type { DependentSelectorSpec } from '../types';
 
-export function CountryRegionSelector({ component: c, enabled, readOnly, required }: BaseComponentProps) {
+export function CountryRegionSelector({ component: c, enabled, readOnly, required }: BaseComponentProps<DependentSelectorSpec>) {
   const { state, onMutate } = useViewContext();
 
   const countryBind = c.dependsOn ?? '';

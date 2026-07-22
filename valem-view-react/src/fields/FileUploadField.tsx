@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
+import type { FileUploadSpec } from '../types';
 
 interface StoredBlobRef {
   $blobId: string;
@@ -111,7 +112,7 @@ function FileRow({
   );
 }
 
-export function FileUploadField({ component: c, enabled, readOnly, required }: BaseComponentProps) {
+export function FileUploadField({ component: c, enabled, readOnly, required }: BaseComponentProps<FileUploadSpec>) {
   const { state, onMutate } = useViewContext();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
