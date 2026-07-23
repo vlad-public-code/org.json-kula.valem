@@ -79,12 +79,18 @@ public class AnthropicLlmClient implements LlmClient {
         // No grounding tools on this path, so we can FORCE structured output: the model can only answer
         // by calling submit_spec, giving schema-shaped JSON with no string-repair needed.
         if (schema != null)
-            return completeStructured(parts.user(), parts.system(), schema, temperature, maxTokensOverride);
-        return complete(parts.user(), parts.system(), temperature, maxTokensOverride);
+            return completeStructured(parts.user(), parts.system(), parts.sessionContext(), schema,
+                    temperature, maxTokensOverride);
+        return complete(parts.user(), parts.system(), parts.sessionContext(), temperature, maxTokensOverride);
     }
 
     private String complete(String prompt, String system, Double temperature, Integer maxTokensOverride)
             throws LlmException {
+        return complete(prompt, system, null, temperature, maxTokensOverride);
+    }
+
+    private String complete(String prompt, String system, String sessionContext, Double temperature,
+                            Integer maxTokensOverride) throws LlmException {
         int budget = effectiveMaxTokens(maxTokensOverride);
         log.debug("Calling Anthropic: model={} maxTokens={} temp={} system={} promptLen={}",
                 model, budget, temperature, system != null, prompt.length());
@@ -93,7 +99,7 @@ public class AnthropicLlmClient implements LlmClient {
             req.put("model", model);
             req.put("max_tokens", budget);
             if (temperature != null) req.put("temperature", temperature.doubleValue());
-            setSystem(req, system);
+            setSystem(req, system, sessionContext);
             ArrayNode messages = req.putArray("messages");
             ObjectNode msg = messages.addObject();
             msg.put("role", "user");
@@ -113,20 +119,20 @@ public class AnthropicLlmClient implements LlmClient {
     @Override
     public String completeWithTools(String prompt, java.util.List<ToolDefinition> toolDefs,
                                     ToolExecutor executor) throws LlmException {
-        return completeWithToolsImpl(prompt, null, toolDefs, executor, null, null, null, null);
+        return completeWithToolsImpl(prompt, null, null, toolDefs, executor, null, null, null, null);
     }
 
     @Override
     public String completeWithTools(String prompt, java.util.List<ToolDefinition> toolDefs,
                                     ToolExecutor executor, double temperature) throws LlmException {
-        return completeWithToolsImpl(prompt, null, toolDefs, executor, Double.valueOf(temperature), null, null, null);
+        return completeWithToolsImpl(prompt, null, null, toolDefs, executor, Double.valueOf(temperature), null, null, null);
     }
 
     @Override
     public String completeWithTools(String prompt, java.util.List<ToolDefinition> toolDefs,
                                     ToolExecutor executor, CompletionOptions options,
                                     Consumer<LlmProgressEvent> onProgress) throws LlmException {
-        return completeWithToolsImpl(prompt, null, toolDefs, executor,
+        return completeWithToolsImpl(prompt, null, null, toolDefs, executor,
                 options == null ? null : options.temperature(),
                 options == null ? null : options.responseSchema(),
                 options == null ? null : options.maxTokens(), onProgress);
@@ -137,13 +143,13 @@ public class AnthropicLlmClient implements LlmClient {
                                     java.util.List<ToolDefinition> toolDefs, ToolExecutor executor,
                                     CompletionOptions options, Consumer<LlmProgressEvent> onProgress)
             throws LlmException {
-        return completeWithToolsImpl(parts.user(), parts.system(), toolDefs, executor,
+        return completeWithToolsImpl(parts.user(), parts.system(), parts.sessionContext(), toolDefs, executor,
                 options == null ? null : options.temperature(),
                 options == null ? null : options.responseSchema(),
                 options == null ? null : options.maxTokens(), onProgress);
     }
 
-    private String completeWithToolsImpl(String prompt, String system,
+    private String completeWithToolsImpl(String prompt, String system, String sessionContext,
                                          java.util.List<ToolDefinition> toolDefs,
                                          ToolExecutor executor, Double temperature,
                                          JsonNode responseSchema, Integer maxTokensOverride,
@@ -180,14 +186,14 @@ public class AnthropicLlmClient implements LlmClient {
                     if (onProgress != null)
                         onProgress.accept(new LlmProgressEvent.ToolCompleted(
                                 "tool-loop", "iteration cap (" + maxToolIterations + ") reached — forcing final answer"));
-                    return finalAnswerWithoutTools(messages, system, temperature, budget, responseSchema);
+                    return finalAnswerWithoutTools(messages, system, sessionContext, temperature, budget, responseSchema);
                 }
 
                 ObjectNode req = mapper.createObjectNode();
                 req.put("model", model);
                 req.put("max_tokens", budget);
                 if (temperature != null) req.put("temperature", temperature.doubleValue());
-                setSystem(req, system);
+                setSystem(req, system, sessionContext);
                 req.set("tools", tools);
                 req.set("messages", messages);
 
@@ -255,8 +261,8 @@ public class AnthropicLlmClient implements LlmClient {
      * with {@code tools} withheld, so the model cannot keep calling tools. If it somehow still tries,
      * we throw rather than loop forever.
      */
-    private String finalAnswerWithoutTools(ArrayNode messages, String system, Double temperature,
-                                           int budget, JsonNode responseSchema)
+    private String finalAnswerWithoutTools(ArrayNode messages, String system, String sessionContext,
+                                           Double temperature, int budget, JsonNode responseSchema)
             throws JsonProcessingException {
         ObjectNode nudge = messages.addObject();
         nudge.put("role", "user");
@@ -266,7 +272,7 @@ public class AnthropicLlmClient implements LlmClient {
         req.put("model", model);
         req.put("max_tokens", budget);
         if (temperature != null) req.put("temperature", temperature.doubleValue());
-        setSystem(req, system);
+        setSystem(req, system, sessionContext);
         req.set("messages", messages);   // no "tools" → the model cannot call any
 
         String responseJson = sendRequest(req);
@@ -310,8 +316,8 @@ public class AnthropicLlmClient implements LlmClient {
      * {@code tool_choice}, so the model cannot answer any other way. Returns the tool input as clean
      * JSON. Used only when no grounding tools are configured (nothing else the model needs to call).
      */
-    private String completeStructured(String prompt, String system, JsonNode schema, Double temperature,
-                                      Integer maxTokensOverride) throws LlmException {
+    private String completeStructured(String prompt, String system, String sessionContext, JsonNode schema,
+                                      Double temperature, Integer maxTokensOverride) throws LlmException {
         log.debug("Calling Anthropic (forced structured output): model={} temp={} system={}",
                 model, temperature, system != null);
         try {
@@ -327,7 +333,7 @@ public class AnthropicLlmClient implements LlmClient {
             req.put("model", model);
             req.put("max_tokens", effectiveMaxTokens(maxTokensOverride));
             if (temperature != null) req.put("temperature", temperature.doubleValue());
-            setSystem(req, system);
+            setSystem(req, system, sessionContext);
             req.set("tools", tools);
             ObjectNode toolChoice = req.putObject("tool_choice");
             toolChoice.put("type", "tool");
@@ -349,24 +355,40 @@ public class AnthropicLlmClient implements LlmClient {
     }
 
     /**
-     * Attaches the stable system context to the request. With prompt caching on, it is sent as a
-     * one-element block array carrying an {@code ephemeral} {@code cache_control} breakpoint — the
-     * cache prefix then covers {@code tools} + {@code system}, both identical across every attempt and
-     * tool-loop turn of a session (and across sessions with the same view mode), so re-reads cost ~10%
-     * of input price. With caching off (a proxy that chokes on block-array {@code system}), it is sent
-     * as a plain string. Prompt caching is GA on the {@code 2023-06-01} API version — no beta header.
+     * Attaches the stable context to the request. With prompt caching on it is sent as a block array,
+     * each block carrying an {@code ephemeral} {@code cache_control} breakpoint:
+     * <ul>
+     *   <li>block 1 = {@code system} — the spec-format instructions, identical across every session
+     *       with the same view mode (the primary, widely-shared cache prefix);</li>
+     *   <li>block 2 = {@code sessionContext} (when present) — content stable within one session but
+     *       varying between sessions (the current spec JSON on the evolution path). A second breakpoint
+     *       lets it be re-read at ~10% price across the retry loop instead of re-billed each attempt.</li>
+     * </ul>
+     * The cache prefix then covers {@code tools} + both system blocks. With caching off (a proxy that
+     * chokes on block-array {@code system}) the two are concatenated into a single plain string. Prompt
+     * caching is GA on the {@code 2023-06-01} API version — no beta header.
      */
-    private void setSystem(ObjectNode req, String system) {
-        if (system == null || system.isBlank()) return;
+    private void setSystem(ObjectNode req, String system, String sessionContext) {
+        boolean hasSystem  = system != null && !system.isBlank();
+        boolean hasSession = sessionContext != null && !sessionContext.isBlank();
+        if (!hasSystem && !hasSession) return;
         if (promptCacheEnabled) {
             ArrayNode sys = req.putArray("system");
-            ObjectNode block = sys.addObject();
-            block.put("type", "text");
-            block.put("text", system);
-            block.putObject("cache_control").put("type", "ephemeral");
+            if (hasSystem)  addCachedBlock(sys, system);
+            if (hasSession) addCachedBlock(sys, sessionContext);
         } else {
-            req.put("system", system);
+            String combined = hasSystem && hasSession ? system + "\n\n" + sessionContext
+                            : hasSystem ? system : sessionContext;
+            req.put("system", combined);
         }
+    }
+
+    /** Adds a {@code text} system block carrying an {@code ephemeral} cache breakpoint. */
+    private static void addCachedBlock(ArrayNode sys, String text) {
+        ObjectNode block = sys.addObject();
+        block.put("type", "text");
+        block.put("text", text);
+        block.putObject("cache_control").put("type", "ephemeral");
     }
 
     private static String toolCallDetail(String toolName, JsonNode arguments) {

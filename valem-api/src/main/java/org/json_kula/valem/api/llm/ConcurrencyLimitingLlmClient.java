@@ -2,6 +2,7 @@ package org.json_kula.valem.api.llm;
 
 import org.json_kula.valem.core.llm.LlmClient;
 import org.json_kula.valem.core.llm.LlmProgressEvent;
+import org.json_kula.valem.core.llm.SpecGenerationPrompt;
 
 import java.util.List;
 import java.util.function.Consumer;
@@ -75,6 +76,22 @@ public final class ConcurrencyLimitingLlmClient implements LlmClient {
                                     CompletionOptions options, Consumer<LlmProgressEvent> onProgress)
             throws LlmException {
         return gated(() -> delegate.completeWithTools(prompt, tools, executor, options, onProgress));
+    }
+
+    // ── PromptParts (system/user split) — forward to the delegate so the system/user split and its
+    // prompt caching survive; the inherited defaults would flatten parts to concatenated() and lose it.
+
+    @Override
+    public String complete(SpecGenerationPrompt.PromptParts parts, CompletionOptions options)
+            throws LlmException {
+        return gated(() -> delegate.complete(parts, options));
+    }
+
+    @Override
+    public String completeWithTools(SpecGenerationPrompt.PromptParts parts, List<ToolDefinition> tools,
+                                    ToolExecutor executor, CompletionOptions options,
+                                    Consumer<LlmProgressEvent> onProgress) throws LlmException {
+        return gated(() -> delegate.completeWithTools(parts, tools, executor, options, onProgress));
     }
 
     private String gated(Supplier<String> call) {

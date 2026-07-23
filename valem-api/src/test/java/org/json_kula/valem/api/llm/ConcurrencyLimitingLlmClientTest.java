@@ -1,7 +1,10 @@
 package org.json_kula.valem.api.llm;
 
 import org.json_kula.valem.core.llm.LlmClient;
+import org.json_kula.valem.core.llm.SpecGenerationPrompt;
 import org.junit.jupiter.api.Test;
+
+import java.util.concurrent.atomic.AtomicReference;
 
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
@@ -20,6 +23,29 @@ class ConcurrencyLimitingLlmClientTest {
         LlmClient delegate = prompt -> "echo:" + prompt;
         var limited = new ConcurrencyLimitingLlmClient(delegate, 1);
         assertThat(limited.complete("hi")).isEqualTo("echo:hi");
+    }
+
+    @Test
+    void forwards_prompt_parts_to_the_delegate_preserving_the_split() {
+        // Regression: without an explicit override the inherited default flattens PromptParts to
+        // concatenated() before gating, so the delegate never sees the system/sessionContext/user
+        // split and its prompt caching is silently lost. The override must forward parts intact.
+        AtomicReference<SpecGenerationPrompt.PromptParts> seen = new AtomicReference<>();
+        LlmClient delegate = new LlmClient() {
+            @Override public String complete(String prompt) { return "unused"; }
+            @Override public String complete(SpecGenerationPrompt.PromptParts parts, CompletionOptions options) {
+                seen.set(parts);
+                return "ok";
+            }
+        };
+        var limited = new ConcurrencyLimitingLlmClient(delegate, 1);
+
+        var parts = new SpecGenerationPrompt.PromptParts("SYS", "SESSION", "USER");
+        assertThat(limited.complete(parts, new LlmClient.CompletionOptions(null, null))).isEqualTo("ok");
+        assertThat(seen.get()).isNotNull();
+        assertThat(seen.get().system()).isEqualTo("SYS");
+        assertThat(seen.get().sessionContext()).isEqualTo("SESSION");
+        assertThat(seen.get().user()).isEqualTo("USER");
     }
 
     @Test

@@ -59,17 +59,17 @@ public class OpenAiLlmClient implements LlmClient {
 
     @Override
     public String complete(String prompt) throws LlmException {
-        return completeJson(prompt, null, null, null, null);
+        return completeJson(prompt, null, null, null, null, null);
     }
 
     @Override
     public String complete(String prompt, double temperature) throws LlmException {
-        return completeJson(prompt, null, temperature, null, null);
+        return completeJson(prompt, null, null, temperature, null, null);
     }
 
     @Override
     public String complete(String prompt, CompletionOptions options) throws LlmException {
-        return completeJson(prompt, null,
+        return completeJson(prompt, null, null,
                 options == null ? null : options.temperature(),
                 options == null ? null : options.responseSchema(),
                 options == null ? null : options.maxTokens());
@@ -78,14 +78,14 @@ public class OpenAiLlmClient implements LlmClient {
     @Override
     public String complete(SpecGenerationPrompt.PromptParts parts, CompletionOptions options)
             throws LlmException {
-        return completeJson(parts.user(), parts.system(),
+        return completeJson(parts.user(), parts.system(), parts.sessionContext(),
                 options == null ? null : options.temperature(),
                 options == null ? null : options.responseSchema(),
                 options == null ? null : options.maxTokens());
     }
 
-    private String completeJson(String prompt, String system, Double temperature, JsonNode responseSchema,
-                                Integer maxTokensOverride) throws LlmException {
+    private String completeJson(String prompt, String system, String sessionContext, Double temperature,
+                                JsonNode responseSchema, Integer maxTokensOverride) throws LlmException {
         int budget = effectiveMaxTokens(maxTokensOverride);
         log.debug("Calling OpenAI-compatible API: endpoint={} model={} maxTokens={} temp={} schema={} system={} promptLen={}",
                 endpoint, model, budget, temperature, responseSchema != null, system != null, prompt.length());
@@ -99,8 +99,11 @@ public class OpenAiLlmClient implements LlmClient {
             if (temperature != null) req.put("temperature", temperature.doubleValue());
             ArrayNode messages = req.putArray("messages");
             // A distinct system role improves instruction adherence; OpenAI-compatible providers
-            // auto-cache long stable prefixes, so no explicit cache control is needed.
+            // auto-cache long stable prefixes, so no explicit cache control is needed. The
+            // session-stable context (e.g. the current spec on the evolution path) is a second system
+            // message so it stays part of the auto-cached prefix, ahead of the volatile user turn.
             addSystemMessage(messages, system);
+            addSystemMessage(messages, sessionContext);
             ObjectNode msg = messages.addObject();
             msg.put("role", "user");
             msg.put("content", prompt);
@@ -119,19 +122,19 @@ public class OpenAiLlmClient implements LlmClient {
     @Override
     public String completeWithTools(String prompt, java.util.List<ToolDefinition> toolDefs,
                                     ToolExecutor executor) throws LlmException {
-        return completeWithToolsImpl(prompt, null, toolDefs, executor, null, null, null, null);
+        return completeWithToolsImpl(prompt, null, null, toolDefs, executor, null, null, null, null);
     }
 
     @Override
     public String completeWithTools(String prompt, java.util.List<ToolDefinition> toolDefs,
                                     ToolExecutor executor, double temperature) throws LlmException {
-        return completeWithToolsImpl(prompt, null, toolDefs, executor, temperature, null, null, null);
+        return completeWithToolsImpl(prompt, null, null, toolDefs, executor, temperature, null, null, null);
     }
 
     @Override
     public String completeWithTools(String prompt, java.util.List<ToolDefinition> toolDefs,
                                     ToolExecutor executor, CompletionOptions options) throws LlmException {
-        return completeWithToolsImpl(prompt, null, toolDefs, executor,
+        return completeWithToolsImpl(prompt, null, null, toolDefs, executor,
                 options == null ? null : options.temperature(),
                 options == null ? null : options.responseSchema(),
                 options == null ? null : options.maxTokens(), null);
@@ -141,7 +144,7 @@ public class OpenAiLlmClient implements LlmClient {
     public String completeWithTools(String prompt, java.util.List<ToolDefinition> toolDefs,
                                     ToolExecutor executor, CompletionOptions options,
                                     Consumer<LlmProgressEvent> onProgress) throws LlmException {
-        return completeWithToolsImpl(prompt, null, toolDefs, executor,
+        return completeWithToolsImpl(prompt, null, null, toolDefs, executor,
                 options == null ? null : options.temperature(),
                 options == null ? null : options.responseSchema(),
                 options == null ? null : options.maxTokens(), onProgress);
@@ -152,13 +155,13 @@ public class OpenAiLlmClient implements LlmClient {
                                     java.util.List<ToolDefinition> toolDefs, ToolExecutor executor,
                                     CompletionOptions options, Consumer<LlmProgressEvent> onProgress)
             throws LlmException {
-        return completeWithToolsImpl(parts.user(), parts.system(), toolDefs, executor,
+        return completeWithToolsImpl(parts.user(), parts.system(), parts.sessionContext(), toolDefs, executor,
                 options == null ? null : options.temperature(),
                 options == null ? null : options.responseSchema(),
                 options == null ? null : options.maxTokens(), onProgress);
     }
 
-    private String completeWithToolsImpl(String prompt, String system,
+    private String completeWithToolsImpl(String prompt, String system, String sessionContext,
                                          java.util.List<ToolDefinition> toolDefs,
                                          ToolExecutor executor, Double temperature,
                                          JsonNode responseSchema, Integer maxTokensOverride,
@@ -180,6 +183,7 @@ public class OpenAiLlmClient implements LlmClient {
 
             ArrayNode messages = mapper.createArrayNode();
             addSystemMessage(messages, system);
+            addSystemMessage(messages, sessionContext);
             ObjectNode userMsg = messages.addObject();
             userMsg.put("role", "user");
             userMsg.put("content", prompt);
