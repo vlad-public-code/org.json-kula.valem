@@ -91,7 +91,11 @@ export default function LivePanel({ modelId }: Props) {
               {evt.flaggedConstraints.length > 0 && (
                 <div>
                   <strong>flagged:</strong>{' '}
-                  {evt.flaggedConstraints.map(p => <span key={p} className="badge badge-orange" style={{ marginRight: 3 }}>{p}</span>)}
+                  {evt.flaggedConstraints.map(c => (
+                    <span key={c.constraintId} className="badge badge-orange" style={{ marginRight: 3 }} title={c.message}>
+                      {c.constraintId}
+                    </span>
+                  ))}
                 </div>
               )}
               {evt.dispatchedEffects.length > 0 && (

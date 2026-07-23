@@ -54,8 +54,16 @@ describe('StaticText format modes', () => {
     id: 'st', type: 'staticText', ...over,
   });
 
-  it('keeps html the default so existing specs are unaffected', () => {
+  it('defaults to markdown, so a stored tag is escaped rather than injected', () => {
+    // The default must be safe: staticText is often bound to model state, and rendering that as
+    // raw HTML is stored XSS. An unset format escapes.
     renderComponent(spec({ text: '<b>hi</b>' }));
+    expect(screen.getByTestId('st').querySelector('b')).toBeNull();
+    expect(screen.getByTestId('st')).toHaveTextContent('<b>hi</b>');
+  });
+
+  it('renders html only when explicitly opted in', () => {
+    renderComponent(spec({ text: '<b>hi</b>', format: 'html' }));
     expect(screen.getByTestId('st').querySelector('b')).not.toBeNull();
   });
 

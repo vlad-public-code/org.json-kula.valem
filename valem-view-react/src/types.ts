@@ -195,8 +195,9 @@ export interface LabelSpec extends ComponentSpecBase {
 }
 
 /**
- * staticText. `format` selects rendering: `html` (default, unescaped — the wrong choice for
- * user-typed content), `markdown` (the read half of richTextField; escapes first), or `text`.
+ * staticText. `format` selects rendering: `markdown` (default — escapes then applies light
+ * formatting; safe for content bound to model state), `text` (escaped, verbatim), or `html`
+ * (unescaped — opt in only for authored, trusted content).
  */
 export interface StaticTextSpec extends ComponentSpecBase {
   type: 'staticText';

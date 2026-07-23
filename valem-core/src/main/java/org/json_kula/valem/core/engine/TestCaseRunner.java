@@ -65,6 +65,19 @@ public final class TestCaseRunner {
     private static TestResult runOne(CompiledModel model, TestCase test) {
         ModelRuntime rt = new ModelRuntime(model, new ModelState(model, new InMemoryBlobStore()));
 
+        // Apply defaultValues before the given mutations, exactly as real model creation does
+        // (ModelService.createModel runs initialize() right after constructing the runtime).
+        // Without this, a spec whose derivations read a defaulted field — e.g. a premium computed
+        // against a regionMultiplier seeded to 1.0 until a live rate is fetched — evaluates that
+        // field as absent and every dependent derivation comes back null, so the spec fails its
+        // own self-tests for a reason that never occurs in production.
+        try {
+            rt.initialize();
+        } catch (Exception e) {
+            return failure(test, "initialize", null, null,
+                    "Applying defaultValues failed: " + e.getMessage());
+        }
+
         if (test.given() != null && !test.given().isEmpty()) {
             try {
                 rt.mutate(test.given());

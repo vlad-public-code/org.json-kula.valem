@@ -363,13 +363,19 @@ Non-reactive text block. `text` is a literal or a JSONata expression; no binding
 | Extra field | Description |
 |---|---|
 | `text` | Literal or JSONata expression |
-| `format` | `"html"` (default), `"markdown"`, or `"text"` |
+| `format` | `"markdown"` (default), `"text"`, or `"html"` |
 
-`html` is the default so existing specs are unaffected, but it is the one mode that injects its
-content **unescaped** — the wrong choice for anything a user typed. `markdown` is the read half of
-`richTextField`: it escapes the source first and then applies the subset that field's toolbar
-produces, so a stored `<script>` renders as visible text rather than executing. `text` shows the
-content verbatim.
+`markdown` is the default because it is **safe**: it escapes the source before applying light
+formatting, and a `staticText` is often bound (via a JSONata `text`) to model state — which, since
+Valem has no per-field access control, a low-trust mutator can set. It is also the read half of
+`richTextField`, applying the subset that field's toolbar produces, so a stored `<script>` renders
+as visible text rather than executing. `text` shows the content verbatim (escaped, no formatting).
+`html` injects its content **unescaped** and must be opted into explicitly — use it only for
+authored, trusted content.
+
+> **Changed default.** Before the catalog expansion `staticText` always rendered as raw HTML.
+> Unset `format` now means `markdown`; a spec that relied on raw `<tag>` markup must set
+> `"format": "html"`.
 
 ```json
 { "id": "intro", "type": "staticText",

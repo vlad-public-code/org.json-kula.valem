@@ -14,7 +14,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,30 +38,6 @@ class BundledExamplesTest {
      */
     private static final ObjectMapper MAPPER = new ObjectMapper()
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
-
-    /**
-     * Examples whose embedded self-tests the pure {@link TestCaseRunner} cannot satisfy today.
-     *
-     * <p>Two causes, neither related to the view layer — both reproduce with no view involvement:
-     *
-     * <ul>
-     *   <li><b>car-loan-calculator, savings-growth</b> — build an array with a derivation and then
-     *       assert on its elements ({@code $.schedule[0].interest},
-     *       {@code $.projection[30].balance}); the runner reports the actual value as absent.</li>
-     *   <li><b>insurance-quote, world-clock</b> — expect values that only exist after an effect
-     *       folds back ({@code $.quote.annualPremium}, {@code $.clock.tick}). The runner is pure
-     *       and effects execute post-commit in the shell, so it never produces them. Arguably the
-     *       specs are asserting the wrong thing rather than the runner being wrong.</li>
-     * </ul>
-     *
-     * <p>Listed rather than silently skipped so the count cannot grow unnoticed. Structural
-     * validation below still covers all four.
-     */
-    private static final Set<String> SELF_TESTS_NOT_SATISFIABLE_BY_THE_PURE_RUNNER = Set.of(
-            "car-loan-calculator.json",
-            "savings-growth.json",
-            "insurance-quote.json",
-            "world-clock.json");
 
     static Stream<File> examples() {
         Path dir = resolveExamplesDir();
@@ -94,8 +69,6 @@ class BundledExamplesTest {
     @ParameterizedTest(name = "{0}")
     @MethodSource("examples")
     void example_embedded_self_tests_pass(File specFile) throws Exception {
-        if (SELF_TESTS_NOT_SATISFIABLE_BY_THE_PURE_RUNNER.contains(specFile.getName())) return;
-
         ModelSpec spec = MAPPER.treeToValue(strip(MAPPER.readTree(specFile)), ModelSpec.class);
 
         for (TestCaseRunner.TestResult r : TestCaseRunner.run(spec, spec.tests())) {

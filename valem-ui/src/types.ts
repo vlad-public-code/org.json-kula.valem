@@ -55,7 +55,10 @@ export interface ChangeEvent {
   modelId: string;
   mutatedPaths: string[];
   derivedUpdated: string[];
-  flaggedConstraints: string[];
+  // Objects, not ids — the broadcast carries the same {constraintId, message, policy} shape as a
+  // mutation response. Typing this as string[] is what let LivePanel render the raw object as a
+  // React child and blank the page once a flag constraint fired over a live WebSocket.
+  flaggedConstraints: ConstraintViolationItem[];
   dispatchedEffects: DispatchedEffect[];
   /** Present on a spec-evolved frame: the new spec version. */
   version?: string;

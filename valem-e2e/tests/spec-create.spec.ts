@@ -34,7 +34,11 @@ test.describe('Spec tab', () => {
     await openModel(page, modelId);
     await switchTab(page, 'spec');
 
-    await expect(page.getByText('$.total')).toBeVisible();
+    // The spec JSON renders the derivation path as the quoted string node `"$.total"`. Match that
+    // exact form: a bare `$.total` also appears as help text in the (hidden, inactive) Explain
+    // tab's `<code>` example, so an unquoted match tripped strict mode and `.first()` landed on the
+    // hidden one. The quoted string only exists in the spec viewer, which is on screen here.
+    await expect(page.getByText('"$.total"', { exact: true })).toBeVisible();
   });
 });
 
