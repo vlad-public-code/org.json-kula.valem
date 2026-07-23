@@ -123,6 +123,36 @@ describe('NumericStepper', () => {
     fireEvent.click(screen.getByTestId('qty-increment'));
     expect(onMutate).not.toHaveBeenCalled();
   });
+
+  it('lets a typed value stick instead of snapping back, and commits it on blur', () => {
+    // A fully state-controlled number input reverts to the model value on each keystroke; the
+    // draft keeps what was typed. This is both a UX fix and what makes a fill-based interaction
+    // (in the browser or a test) reliable rather than racing the mutation round-trip.
+    const { onMutate } = renderComponent(stepper({ max: 60 }), { state: { qty: 8 } });
+    const input = screen.getByRole('spinbutton');
+    fireEvent.change(input, { target: { value: '30' } });
+    expect(input).toHaveValue(30);              // held, not snapped back to 8
+    expect(onMutate).not.toHaveBeenCalled();    // not yet — deferred to blur
+    fireEvent.blur(input);
+    expect(onMutate).toHaveBeenCalledWith({ '$.qty': 30 });
+  });
+
+  it('commits a typed value on Enter, clamped to the bounds', () => {
+    const { onMutate } = renderComponent(stepper({ max: 60 }), { state: { qty: 8 } });
+    const input = screen.getByRole('spinbutton');
+    fireEvent.change(input, { target: { value: '999' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onMutate).toHaveBeenCalledWith({ '$.qty': 60 });
+  });
+
+  it('reverts an emptied input to the model value rather than writing NaN', () => {
+    const { onMutate } = renderComponent(stepper(), { state: { qty: 5 } });
+    const input = screen.getByRole('spinbutton');
+    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.blur(input);
+    expect(onMutate).not.toHaveBeenCalled();
+    expect(input).toHaveValue(5);
+  });
 });
 
 describe('RatingField', () => {

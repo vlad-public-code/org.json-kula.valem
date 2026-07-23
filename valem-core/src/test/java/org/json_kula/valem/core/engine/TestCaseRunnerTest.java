@@ -207,6 +207,85 @@ class TestCaseRunnerTest {
         assertThat(results.getFirst().passed()).isTrue();
     }
 
+    // ── defaultValues are applied, as in real model creation ────────────────────
+
+    @Test
+    void applies_default_values_before_the_given_mutations() throws Exception {
+        // ModelService.createModel runs initialize() right after constructing the runtime, so a
+        // derivation reading a defaulted field works in production. The runner must match: without
+        // it, `rate` here is absent and `total` comes back null even though the mutation is valid.
+        var results = run("""
+                {
+                  "id": "m", "schema": {},
+                  "defaultValues": [
+                    { "path": "$", "expr": "{ 'rate': 1.5 }" }
+                  ],
+                  "derivations": [
+                    { "path": "$.total", "expr": "qty * rate" }
+                  ],
+                  "tests": [
+                    {
+                      "description": "total uses the defaulted rate",
+                      "given":  { "$.qty": 100 },
+                      "expect": { "$.rate": 1.5, "$.total": 150 }
+                    }
+                  ]
+                }
+                """);
+
+        assertThat(results.getFirst().failures()).isEmpty();
+        assertThat(results.getFirst().passed()).isTrue();
+    }
+
+    @Test
+    void a_given_mutation_still_overrides_a_default() throws Exception {
+        var results = run("""
+                {
+                  "id": "m", "schema": {},
+                  "defaultValues": [
+                    { "path": "$", "expr": "{ 'rate': 1.5 }" }
+                  ],
+                  "derivations": [
+                    { "path": "$.total", "expr": "qty * rate" }
+                  ],
+                  "tests": [
+                    {
+                      "description": "an explicit rate wins over the default",
+                      "given":  { "$.qty": 100, "$.rate": 2 },
+                      "expect": { "$.total": 200 }
+                    }
+                  ]
+                }
+                """);
+
+        assertThat(results.getFirst().passed()).isTrue();
+    }
+
+    @Test
+    void asserts_on_an_element_of_a_derived_array() throws Exception {
+        // The other half of what fixed car-loan / savings-growth: a derivation building an array,
+        // asserted on by index. Before the getValue fix these came back absent.
+        var results = run("""
+                {
+                  "id": "m", "schema": {},
+                  "derivations": [
+                    { "path": "$.rows",
+                      "expr": "$map([1..n], function($i) { { 'i': $i, 'sq': $i * $i } })" }
+                  ],
+                  "tests": [
+                    {
+                      "description": "third row is 3 squared",
+                      "given":  { "$.n": 5 },
+                      "expect": { "$.rows[2].i": 3, "$.rows[2].sq": 9 }
+                    }
+                  ]
+                }
+                """);
+
+        assertThat(results.getFirst().failures()).isEmpty();
+        assertThat(results.getFirst().passed()).isTrue();
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private List<TestCaseRunner.TestResult> run(String specJson) throws Exception {

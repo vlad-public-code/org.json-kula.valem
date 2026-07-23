@@ -372,7 +372,7 @@ class ResourceRegistry {
             | `type` | Extra fields |
             |---|---|
             | `label` | `text`, or `bind` to show a value |
-            | `staticText` | `text` (this is the literal-text component) |
+            | `staticText` | `text`, `format` (`markdown` default/escaped, `text`, or `html` opt-in) |
             | `badge` | `text`, `variant` (inline pill) |
             | `alert` / `callout` | `label` (heading), `text` (body), `variant` (block-level) |
             | `separatorLine` | — |

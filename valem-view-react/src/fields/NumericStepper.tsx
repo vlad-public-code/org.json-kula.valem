@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
@@ -18,12 +19,23 @@ export function NumericStepper(
   const step = c.step ?? 1;
   const interactive = enabled && !readOnly;
 
-  const write = (next: number) => {
-    const clamped = Math.min(Math.max(next, min), max);
+  // A local draft so typed digits stick. A fully state-controlled number input snaps back to the
+  // committed value on every keystroke until the mutation round-trips — the field visibly fighting
+  // the user mid-type — and it makes any fill-then-read interaction racy. The draft holds what is
+  // being typed; it re-syncs from the model whenever the user is not editing.
+  const [draft, setDraft] = useState<string>(String(value));
+  const [editing, setEditing] = useState(false);
+  useEffect(() => { if (!editing) setDraft(String(value)); }, [value, editing]);
+
+  const commit = (next: number) => {
+    const safe = Number.isFinite(next) ? next : value; // empty / half-typed input reverts
+    const clamped = Math.min(Math.max(safe, min), max);
     // Floating-point steps accumulate error (0.1 + 0.2), and the stored value is the model's —
     // rounding to the step's precision keeps 0.30000000000000004 out of the document.
     const decimals = (String(step).split('.')[1] ?? '').length;
     const rounded = Number(clamped.toFixed(decimals));
+    setEditing(false);
+    setDraft(String(rounded));
     if (c.bind && interactive && rounded !== value) onMutate({ [c.bind]: rounded });
   };
 
@@ -40,18 +52,20 @@ export function NumericStepper(
           label="−"
           testId={`${c.id}-decrement`}
           disabled={!interactive || value <= min}
-          onClick={() => write(value - step)}
+          onClick={() => commit(value - step)}
         />
         <input
           id={c.id}
           type="number"
-          value={value}
+          value={draft}
           min={min}
           max={max === Number.MAX_SAFE_INTEGER ? undefined : max}
           step={step}
           disabled={!enabled}
           readOnly={readOnly}
-          onChange={e => write(parseFloat(e.target.value))}
+          onChange={e => { setEditing(true); setDraft(e.target.value); }}
+          onBlur={() => commit(parseFloat(draft))}
+          onKeyDown={e => { if (e.key === 'Enter') commit(parseFloat(draft)); }}
           style={{
             width: 64,
             border: 'none',
@@ -67,7 +81,7 @@ export function NumericStepper(
           label="+"
           testId={`${c.id}-increment`}
           disabled={!interactive || value >= max}
-          onClick={() => write(value + step)}
+          onClick={() => commit(value + step)}
         />
       </div>
       {c.helperText && <span style={{ fontSize: 11, color: '#666' }}>{c.helperText}</span>}

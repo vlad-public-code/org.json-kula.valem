@@ -106,6 +106,18 @@ export default function ViewPanel({ modelId }: Props) {
     }
   }, [modelId]);
 
+  // Switching views must refresh state, not just swap which components render. A mutation's
+  // viewDelta only keeps the fields bound in the *active* view current, and the per-mutation
+  // background loadState can land while a different view is showing — so a view that binds fields
+  // the previous one didn't (a summary of derived totals, say) would otherwise show values stale
+  // from before the user's edits elsewhere. Refetching on navigate keeps every view's derived
+  // figures honest.
+  const handleNavigate = useCallback((viewId: string) => {
+    setActiveViewId(viewId);
+    void loadState();
+    void loadMeta();
+  }, [loadState, loadMeta]);
+
   useEffect(() => {
     loadSpec();
     loadState();
@@ -295,7 +307,7 @@ export default function ViewPanel({ modelId }: Props) {
         state={state}
         meta={meta}
         onMutate={handleMutate}
-        onNavigate={setActiveViewId}
+        onNavigate={handleNavigate}
         activeViewId={activeViewId}
         violations={fieldErrors}
         formErrors={formErrors}

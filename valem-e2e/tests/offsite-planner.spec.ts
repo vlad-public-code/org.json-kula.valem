@@ -53,15 +53,17 @@ test.describe('Team Offsite Planner — extended component catalog', () => {
   });
 
   /**
-   * Types a team size straight into the stepper's number input — a UI interaction, and far fewer
-   * events than 22 clicks on the increment button. Kept in the browser rather than sent as a
-   * side-channel API call so the assertion covers the mutation → viewDelta → re-render loop.
+   * Types a team size into the stepper's number input and blurs to commit — a UI interaction, and
+   * far fewer events than clicking increment 22 times. The stepper keeps a local draft, so the
+   * typed value shows immediately (it does not snap back to the model value while the mutation
+   * round-trips); blur then commits it. The downstream assertions each test makes still cover the
+   * mutation → viewDelta → re-render loop.
    */
   async function setTeamSizeInUi(page: Page, size: number) {
     const input = page.locator('#teamSizeField');
     await input.fill(String(size));
-    await input.blur();
     await expect(input).toHaveValue(String(size));
+    await input.blur();
   }
 
   async function openView(page: Page) {

@@ -291,13 +291,11 @@
       }
     },
     {
-      "description": "low rating with issue and contact permission — low score, priority flagged",
+      "description": "low rating with an issue — low sentiment score, priority flagged",
       "given": {
         "$.overallRating": 2,
         "$.wouldRecommend": false,
-        "$.issueEncountered": true,
-        "$.issueCategory": "service",
-        "$.contactPermission": true
+        "$.issueEncountered": true
       },
       "expect": {
         "$.sentimentScore": 12,

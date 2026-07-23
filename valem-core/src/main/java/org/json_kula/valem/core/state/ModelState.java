@@ -62,11 +62,56 @@ public final class ModelState {
     /**
      * Reads the effective value of a field: derived cache first, then base document.
      * Returns a {@link com.fasterxml.jackson.databind.node.MissingNode} when the path is absent.
+     *
+     * <p>A path that <em>dives into</em> a derived value is resolved too: a whole derived array is
+     * cached under one key (e.g. {@code $.schedule}), so {@code $.schedule[0].interest} is neither
+     * an exact cache hit nor present in the base document. When both of those miss, the longest
+     * cached ancestor is located and the remaining segments are navigated within it. Without this,
+     * every reader that goes through {@code getValue} — {@code explain}, {@code TestCaseRunner},
+     * the REST {@code get_state} for a specific path — sees a derived array as unindexable, while
+     * {@link #mergedDocument} (which the UI reads wholesale) shows it correctly. The two disagreeing
+     * is the bug.
      */
     public JsonNode getValue(String dotPath) {
         JsonNode derived = derivedCache.get(dotPath);
         if (derived != null) return derived;
-        return baseDoc.at(PathConverter.toJsonPointer(dotPath));
+
+        JsonNode base = baseDoc.at(PathConverter.toJsonPointer(dotPath));
+        if (!base.isMissingNode()) return base;
+
+        return resolveInDerivedAncestor(dotPath);
+    }
+
+    /**
+     * Handles the {@code getValue} case where {@code dotPath} points inside a derived container.
+     * Finds the derived-cache entry whose segments are the longest prefix of the requested path,
+     * then navigates the leftover segments within it. Matching on segments (rather than
+     * reconstructing an address string to look up) sidesteps the bracket-vs-dot formatting the
+     * cache key uses. Only entered on a cache-and-base miss, so it costs nothing on the common path.
+     */
+    private JsonNode resolveInDerivedAncestor(String dotPath) {
+        List<String> target = PathConverter.toSegments(dotPath);
+
+        String bestKey = null;
+        int bestLen = 0;
+        for (String key : derivedCache.keySet()) {
+            List<String> keySegs = PathConverter.toSegments(key);
+            if (keySegs.size() < target.size() && keySegs.size() > bestLen
+                    && target.subList(0, keySegs.size()).equals(keySegs)) {
+                bestKey = key;
+                bestLen = keySegs.size();
+            }
+        }
+        if (bestKey == null) {
+            return baseDoc.at(PathConverter.toJsonPointer(dotPath)); // MissingNode
+        }
+
+        JsonNode node = derivedCache.get(bestKey);
+        for (String seg : target.subList(bestLen, target.size())) {
+            node = seg.matches("\\d+") ? node.path(Integer.parseInt(seg)) : node.path(seg);
+            if (node.isMissingNode()) break;
+        }
+        return node;
     }
 
     /**

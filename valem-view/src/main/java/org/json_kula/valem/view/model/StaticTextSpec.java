@@ -5,11 +5,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 /**
  * {@code staticText} — a block of text, or a JSONata expression producing one.
  *
- * <p>{@code format} selects how it is rendered: {@code html} (the default, kept so existing specs
- * are unaffected), {@code markdown}, or {@code text}. Only {@code html} injects its content
- * unescaped, so it is the wrong choice for anything a user typed — {@code markdown} is the read
- * half of {@code richTextField} and escapes the source before adding markup, and {@code text}
- * shows the content verbatim.
+ * <p>{@code format} selects how it is rendered: {@code markdown} (the default — escapes the
+ * source, then applies light formatting), {@code text} (escaped, verbatim), or {@code html}
+ * (unescaped). The default is safe because a {@code staticText} is often bound to model state and
+ * Valem has no per-field access control, so {@code html} — which injects its content unescaped —
+ * must be opted into for authored, trusted content only.
  */
 public record StaticTextSpec(
         String id,

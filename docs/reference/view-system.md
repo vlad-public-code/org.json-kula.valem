@@ -158,7 +158,7 @@ uses on the output side:
 | `DateRangeSpec` | `dateRangeField` | `label`, `enabled`, `readOnly`, `required`, `bindFrom`, `bindTo`, `fromLabel`, `toLabel`, `helperText`, `tooltip`, `minDate`, `maxDate`, `onChange` |
 | `FileUploadSpec` | `fileUploadField` | `label`, `enabled`, `readOnly`, `required`, `helperText`, `tooltip`, `accept`, `multiple`, `minFiles`, `maxFiles`, `minSize`, `maxSize`, `allowedMediaTypes`, `onChange` |
 | `LabelSpec` | `label` | `label`, `text` |
-| `StaticTextSpec` | `staticText` | `text` |
+| `StaticTextSpec` | `staticText` | `text`, `format` |
 | `BadgeSpec` | `badge`, `alert`, `callout` | `label`, `text`, `variant` |
 | `SeparatorLineSpec` | `separatorLine`, `spacer` | `size` |
 | `ImageSpec` | `image` | `label`, `src`, `alt`, `width`, `height`, `fit` |
@@ -256,7 +256,7 @@ record EventHandler(String mutations, String navigate)
 | `type` | Extra fields | Notes |
 |---|---|---|
 | `label` | `text` | dynamic text or bound value |
-| `staticText` | `text` | markdown/HTML literal |
+| `staticText` | `text`, `format` | `format`: `markdown` (default, escaped) / `text` / `html` (unescaped, opt-in) |
 | `badge` | `text`, `variant` | status indicator. `variant` is a plain string, **not** JSONata-capable server-side — `ViewEvaluator` passes it through unevaluated. The bundled React renderer re-evaluates a JSONata `variant` expression client-side, so it only resolves correctly through the built-in UI, not through the raw `GET /models/{id}/view` (or MCP/console) response. |
 | `separatorLine` | — | horizontal rule |
 | `dataTable` | `tableColumns`, `pageSize` | tabular view of array |

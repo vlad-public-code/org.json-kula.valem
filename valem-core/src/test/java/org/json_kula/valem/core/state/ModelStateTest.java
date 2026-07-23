@@ -208,4 +208,61 @@ class ModelStateTest {
         var root = state.asRoot();
         assertThat(root.get("order").get("subtotal").asDouble()).isEqualTo(42.0);
     }
+
+    // ── Reading inside a derived container ──────────────────────────────────────
+    //
+    // A whole derived array is cached under one key, so an indexed sub-path is neither an exact
+    // cache hit nor present in the base doc. getValue must still resolve it — otherwise a reader
+    // like TestCaseRunner or explain sees a derived array as unindexable while mergedDocument (what
+    // the UI reads) shows it correctly, and the two disagree. This is what made the car-loan and
+    // savings-growth examples fail their own $.schedule[0].* / $.projection[N].* self-tests.
+
+    @Test
+    void getValue_indexes_into_a_derived_array() {
+        var arr = MAPPER.createArrayNode();
+        arr.add(MAPPER.createObjectNode().put("month", 1).put("interest", 100.0));
+        arr.add(MAPPER.createObjectNode().put("month", 2).put("interest", 90.0));
+        state.setDerived("$.schedule", arr);
+
+        assertThat(state.getValue("$.schedule[0].interest").asDouble()).isEqualTo(100.0);
+        assertThat(state.getValue("$.schedule[1].month").asInt()).isEqualTo(2);
+        assertThat(state.getValue("$.schedule").isArray()).isTrue();
+    }
+
+    @Test
+    void getValue_indexes_into_a_derived_array_of_scalars() {
+        var arr = MAPPER.createArrayNode();
+        arr.add(10);
+        arr.add(20);
+        state.setDerived("$.projection", arr);
+
+        assertThat(state.getValue("$.projection[1]").asInt()).isEqualTo(20);
+    }
+
+    @Test
+    void getValue_returns_missing_for_an_out_of_range_derived_index() {
+        var arr = MAPPER.createArrayNode();
+        arr.add(MAPPER.createObjectNode().put("x", 1));
+        state.setDerived("$.schedule", arr);
+
+        assertThat(state.getValue("$.schedule[5].x").isMissingNode()).isTrue();
+        assertThat(state.getValue("$.schedule[0].nope").isMissingNode()).isTrue();
+    }
+
+    @Test
+    void getValue_prefers_an_exact_derived_hit_over_navigating_an_ancestor() {
+        // A wildcard element derivation caches each element under its own concrete key; that exact
+        // key must win rather than being recomputed by navigating a coarser ancestor.
+        var arr = MAPPER.createArrayNode();
+        arr.add(MAPPER.createObjectNode().put("lineTotal", 5));
+        state.setDerived("$.items", arr);
+        state.setDerived("$.items[0].lineTotal", JsonNodeFactory.instance.numberNode(999));
+
+        assertThat(state.getValue("$.items[0].lineTotal").asInt()).isEqualTo(999);
+    }
+
+    @Test
+    void getValue_still_misses_cleanly_when_no_derived_ancestor_exists() {
+        assertThat(state.getValue("$.nothing.here[0]").isMissingNode()).isTrue();
+    }
 }
