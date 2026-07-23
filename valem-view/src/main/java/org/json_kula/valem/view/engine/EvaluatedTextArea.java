@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.json_kula.valem.view.model.EventHandler;
 
+/** Covers: textAreaField, richTextField. */
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public record EvaluatedTextArea(
         String id,
@@ -23,5 +24,6 @@ public record EvaluatedTextArea(
         String helperText,
         String tooltip,
         Integer rows,
+        String toolbar,
         EventHandler onChange
 ) implements EvaluatedComponent {}

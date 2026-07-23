@@ -51,15 +51,28 @@ value it shows or edits.
 
 | Group | Types |
 |---|---|
-| Inputs | `textField`, `textAreaField`, `numericField`, `passwordField`, `emailField`, `phoneNumberField`, `checkboxField`, `toggleField`, `dateField`, `dateTimeField`, `timeField`, `sliderField`, `fileUploadField`, `countrySelector`, `countryRegionSelector` |
-| Choice | `selectField`, `radioField`, `multiSelectField` |
-| Display | `label`, `staticText`, `badge`, `separatorLine`, `progressBar` |
-| Data | `dataTable`, `dataChart` |
-| Containers | `group`, `fieldSet`, `sectionItem`, `sectionList` |
-| Actions | `button`, `menu` |
+| Inputs | `textField`, `textAreaField`, `richTextField`, `numericField`, `currencyField`, `percentField`, `passwordField`, `emailField`, `phoneNumberField`, `checkboxField`, `toggleField`, `dateField`, `dateTimeField`, `timeField`, `dateRangeField`, `sliderField`, `ratingField`, `numericStepper`, `fileUploadField`, `countrySelector`, `countryRegionSelector` |
+| Choice | `selectField`, `radioField`, `multiSelectField`, `autocompleteField`, `comboBox`, `tagsField` |
+| Display | `label`, `staticText`, `badge`, `alert`, `callout`, `separatorLine`, `spacer`, `image`, `link`, `progressBar`, `gauge` |
+| Data | `dataTable`, `dataChart`, `sparkline`, `keyValueList`, `summaryList`, `statTile`, `metric` |
+| Diagnostics | `explainPanel`, `auditTimeline`, `validationSummary`, `effectStatus`, `jsonViewer` |
+| Containers | `group`, `fieldSet`, `card`, `toolbar`, `buttonGroup`, `tabs`, `tabItem`, `accordion`, `collapsible`, `sectionItem`, `sectionList` |
+| Actions | `button`, `menu`, `stepper`, `breadcrumb` |
 
-An unrecognised `type` is not an error: the component keeps its raw JSON verbatim so a custom
-renderer can define its own types, and the built-in renderer falls back to a basic input.
+Many of these are the same record under a second name — a `ratingField` is a slider's
+`min`/`max`/`step` drawn as stars, an `alert` is a badge's `label`/`text`/`variant` as a block, a
+`card` is a group with a heading. Picking the closest name costs nothing and reads better; nothing
+about the evaluation changes.
+
+The **Diagnostics** row is the one group with no equivalent in an ordinary form library: those
+components surface Valem's own derivation trace, audit trail, flagged constraints and effect
+status inside the view. See [component-catalog.md](../reference/model-spec/component-catalog.md)
+for what each of them does and does not resolve server-side.
+
+An unrecognised `type` is rejected at write time with the closest legal spelling — `ModelSpec`
+validation checks it against this vocabulary, so a typo is a 422 rather than an error box in the
+browser. (A component that *reaches* a renderer with an unknown type still keeps its raw JSON
+verbatim, so a custom renderer can define its own types.)
 
 ## Dynamic properties
 

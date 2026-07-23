@@ -81,9 +81,13 @@ and household-driven threshold scaling.
 | `daily-wellness.json` | Conditionally read-only fields; per-field gating. |
 | `support-ticket-triage.json` | All four effect executors together (`llm` classify, `server` SLA lookup, `caller` alert, `timer` auto-escalate). |
 | `world-clock.json` | A minimal, focused pair: only `server` (http) and `timer` effects composing into a **self-refreshing poll** — the http effect fetches the current date/time for a chosen country from a real public API ([timeapi.io](https://timeapi.io)), and the timer re-arms every 10s by bumping a tick the http effect is keyed to, so the clock keeps updating itself. |
+| `team-offsite-planner.json` | The **component catalog**, end to end. Three views navigated by a `stepper`; a `tabs` container over currency/percent inputs, a `dateRangeField` writing two paths, a `tagsField`, a `ratingField`, and a `collapsible` revealed by a `relevant` meta-derivation. The summary view pairs `statTile`s with a `summaryList` and an `alert` driven by a `flag` constraint, and the diagnostics view puts `explainPanel`, `auditTimeline` and `jsonViewer` on the model itself. |
 
 Each spec ships its own `tests`; the console module runs them through the real pipeline in
-`ConsoleExamplesIntegrationTest`, so the gallery is also a regression suite. `world-clock.json`
+`ConsoleExamplesIntegrationTest`, and `BundledExamplesTest` in valem-core validates every file in
+the directory and runs its self-tests — so the gallery is also a regression suite.
+`team-offsite-planner.json` additionally has a Playwright suite,
+`valem-e2e/tests/offsite-planner.spec.ts`, driving each new component through the browser. `world-clock.json`
 additionally has its own end-to-end test,
 [`WorldClockExampleTest`](https://github.com/vlad-public-code/org.json-kula.valem/blob/main/valem-api/src/test/java/org/json_kula/valem/api/effects/WorldClockExampleTest.java),
 which drives it through the real REST API — creating the model, evaluating its `viewDefinition` form via

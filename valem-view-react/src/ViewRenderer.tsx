@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import type { ViewDefinition, ModelState, MetaCache, MutationMap } from './types';
 import { ViewContext } from './ViewContext';
-import { ComponentRenderer } from './ComponentRenderer';
+import { LayoutContainer } from './aggregates/LayoutContainer';
 import { useJSONataBoolean, useJSONataText } from './hooks/useJSONata';
 
 export interface ViewRendererProps {
@@ -12,7 +12,13 @@ export interface ViewRendererProps {
   onMutate: (mutations: MutationMap) => Promise<void>;
   onNavigate?: (viewId: string) => void;
   activeViewId?: string;
+  /** Constraint violations keyed by the bound path they resolved to. */
   violations?: Record<string, string>;
+  /**
+   * Violations that resolved to no path. Passing these lets a `validationSummary` show the
+   * constraints that have no field to sit beside — the ones that motivate the component.
+   */
+  formErrors?: string[];
 }
 
 /**
@@ -28,6 +34,7 @@ export function ViewRenderer({
   onNavigate,
   activeViewId: externalViewId,
   violations = {},
+  formErrors = [],
 }: ViewRendererProps) {
   const [internalViewId, setInternalViewId] = useState<string>(
     externalViewId ?? viewDef.defaultView ?? viewDef.views[0]?.id ?? '',
@@ -47,32 +54,26 @@ export function ViewRenderer({
 
   return (
     <ViewContext.Provider
-      value={{ modelId, state, meta, onMutate, onNavigate: handleNavigate, activeViewId, fieldErrors: violations }}
+      value={{
+        modelId, state, meta, onMutate,
+        onNavigate: handleNavigate, activeViewId,
+        fieldErrors: violations, formErrors,
+      }}
     >
-      <ViewContainer layout={view.layout} columns={view.columns}>
-        {view.components.map(c => (
-          <ComponentRenderer key={c.id} component={c} state={state} />
-        ))}
-      </ViewContainer>
+      {/*
+        `tabs` and `wizard` have always been legal values of `ViewSpec.layout`, but nothing
+        rendered them — a view asking for either silently got a vertical stack. LayoutContainer
+        implements all five, and is shared with the container components so a view-level
+        `layout: "wizard"` and a `group` with the same layout behave identically.
+      */}
+      <LayoutContainer
+        components={view.components}
+        layout={view.layout}
+        columns={view.columns}
+        state={state}
+      />
     </ViewContext.Provider>
   );
-}
-
-interface ViewContainerProps {
-  layout?: string;
-  columns?: number;
-  children: React.ReactNode;
-}
-
-function ViewContainer({ layout = 'vertical', columns = 2, children }: ViewContainerProps) {
-  const style: React.CSSProperties =
-    layout === 'grid'
-      ? { display: 'grid', gridTemplateColumns: `repeat(${columns}, 1fr)`, gap: 16 }
-      : layout === 'horizontal'
-        ? { display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 16 }
-        : { display: 'flex', flexDirection: 'column', gap: 12 };
-
-  return <div style={style}>{children}</div>;
 }
 
 // ── Helpers exported for use in field components ──────────────────────────────

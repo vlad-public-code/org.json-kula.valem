@@ -8,5 +8,6 @@ public record EvaluatedStaticText(
         String type,
         @JsonInclude(value = JsonInclude.Include.CUSTOM, valueFilter = BooleanTrueFilter.class)
         boolean visible,
-        String text
+        String text,
+        String format
 ) implements EvaluatedComponent {}

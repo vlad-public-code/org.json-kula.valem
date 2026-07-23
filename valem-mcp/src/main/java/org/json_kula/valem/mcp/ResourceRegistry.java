@@ -353,8 +353,16 @@ class ResourceRegistry {
             | `selectField` | `options`, `optionsExpr` |
             | `radioField` | `options`, `optionsExpr` |
             | `multiSelectField` | `options`, `optionsExpr` |
+            | `autocompleteField` / `comboBox` | `options`, `optionsExpr`, `allowCustom` (filtering select — prefer over `selectField` past ~50 options) |
+            | `tagsField` | `options`, `allowCustom` (bind to a `string[]`; writes the whole array) |
+            | `currencyField` | `currency` (ISO-4217). Stores a plain number |
+            | `percentField` | — Stores a plain number; the `%` is display only, values are NOT rescaled |
+            | `richTextField` | `rows`, `toolbar` (stores markdown in a plain string field) |
             | `dateField` / `dateTimeField` / `timeField` | — |
+            | `dateRangeField` | `bindFrom`, `bindTo` (NOT `bind` — two separate paths), `minDate`, `maxDate` |
             | `sliderField` | `min`, `max`, `step` |
+            | `ratingField` | `min`, `max`, `step` (stars; default 1–5) |
+            | `numericStepper` | `min`, `max`, `step` (−/+ buttons, for quantities) |
             | `fileUploadField` | `accept`, `multiple`, `minFiles`/`maxFiles`, `minSize`/`maxSize` |
             | `countrySelector` | — |
             | `countryRegionSelector` | `dependsOn` (bind path of a `countrySelector`) |
@@ -365,11 +373,24 @@ class ResourceRegistry {
             |---|---|
             | `label` | `text`, or `bind` to show a value |
             | `staticText` | `text` (this is the literal-text component) |
-            | `badge` | `text`, `variant` |
+            | `badge` | `text`, `variant` (inline pill) |
+            | `alert` / `callout` | `label` (heading), `text` (body), `variant` (block-level) |
             | `separatorLine` | — |
+            | `spacer` | `size` (px) |
+            | `image` | `src` or `bind` (a `fileUploadField`'s BlobRef resolves automatically), `alt` |
+            | `link` | `href`, `text`, `target` (external only — use `button` + `navigate` for views) |
             | `dataTable` | `bind` (array), `tableColumns`, `pageSize` |
             | `dataChart` | `bind` (array), `chartType`, `chartX`, `chartSeries` |
+            | `sparkline` | `bind` (array), `chartSeries` (inline trend, first series only) |
             | `progressBar` | `bind`, `min`, `max`, `showValue`, `format` |
+            | `gauge` | `bind`, `min`, `max`, `showValue` (arc) |
+            | `keyValueList` / `summaryList` | `items: [{label, bind, format, currency}]` — the review/summary block |
+            | `statTile` / `metric` | `bind` or `value`, `delta`, `caption`, `trend`, `format`, `currency` |
+            | `jsonViewer` | `bind` (`"$"` = whole merged document), `maxDepth`, `collapsed` |
+            | `explainPanel` | `bind` (path to explain), `limit` — shows why a derived field holds its value |
+            | `auditTimeline` | `bind` (path prefix), `limit` — the committed change history |
+            | `validationSummary` | `pathPrefix`, `variant` — collects `flag`-policy constraint violations |
+            | `effectStatus` | `bind` (the effect's `statusPath`), `errorPath`, `effectId`, `onRetry` |
 
             **Containers and actions:**
 
@@ -377,10 +398,35 @@ class ResourceRegistry {
             |---|---|
             | `group` | `layout`, `columns`, `components` (this is the generic container) |
             | `fieldSet` | `legend`, `components` |
+            | `card` | `label` (heading), `components` |
+            | `toolbar` / `buttonGroup` | `components` (a row of actions) |
+            | `tabs` | `components` — each child (usually `tabItem`) becomes a tab, captioned by its `label` |
+            | `tabItem` | `label`, `components` |
+            | `accordion` / `collapsible` | `label`, `collapsed` (INITIAL state only), `components` |
             | `sectionList` | `bind` (array), `itemView`, `canAdd`, `canRemove` (this is the list) |
             | `sectionItem` | `bind`, `components` |
             | `button` | `label`, `variant`, `icon`, `onClick` |
             | `menu` | `menuItems`, `orientation` |
+            | `stepper` / `breadcrumb` | `menuItems` — progress/trail over views, same shape as `menu` |
+
+            `ViewSpec.layout` accepts `vertical | horizontal | grid | tabs | wizard`; a container's
+            `layout` accepts the same five.
+
+            **Reaching for the right one:**
+
+            - Summarising computed fields (the "review" step) → `summaryList`, not a stack of `label`s.
+            - A headline number on a dashboard → `statTile`.
+            - Showing that an `effects` request is running or failed → `effectStatus`, not a `badge`
+              with a JSONata `variant` (the server passes `variant` through unevaluated, so that only
+              works in the bundled UI).
+            - Surfacing `flag`-policy constraint violations → `validationSummary`. A `rollback`
+              constraint needs nothing: it already fails the call.
+            - Explaining a derived value to the user → `explainPanel` bound to that path.
+
+            Three of these — `explainPanel`, `auditTimeline`, `validationSummary` — evaluate to a
+            declaration, not to data: the server has no access to the trace log, audit store or
+            flagged-constraint set during view evaluation, so the renderer fetches the rows itself.
+            `GET /models/{id}/view` returns the declaration only.
 
             Run `validate_spec` before `create_model` — an unknown `type` is reported there with the
             closest legal spelling, whereas an unvalidated one renders as an error box in the UI.

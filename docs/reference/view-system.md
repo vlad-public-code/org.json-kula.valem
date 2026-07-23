@@ -150,24 +150,46 @@ uses on the output side:
 
 | Record | `type` values | Fields beyond `id`/`type`/`bind`/`visible` |
 |---|---|---|
-| `BasicInputSpec` | `textField`, `numericField`, `passwordField`, `emailField`, `phoneNumberField`, `checkboxField`, `toggleField`, `dateField`, `dateTimeField`, `timeField`, `countrySelector` | `label`, `enabled`, `readOnly`, `required`, `placeholder`, `helperText`, `tooltip`, `onChange` |
-| `TextAreaSpec` | `textAreaField` | basic-input fields + `rows` |
-| `ChoiceInputSpec` | `selectField`, `radioField`, `multiSelectField` | basic-input fields + `options`, `optionsExpr`, `optionsUrl`, `optionsPath`, `onOpen`, `onClose` |
+| `BasicInputSpec` | `textField`, `numericField`, `currencyField`, `percentField`, `passwordField`, `emailField`, `phoneNumberField`, `checkboxField`, `toggleField`, `dateField`, `dateTimeField`, `timeField`, `countrySelector` | `label`, `enabled`, `readOnly`, `required`, `placeholder`, `helperText`, `tooltip`, `format`, `currency`, `onChange` |
+| `TextAreaSpec` | `textAreaField`, `richTextField` | basic-input fields + `rows`, `toolbar` |
+| `ChoiceInputSpec` | `selectField`, `radioField`, `multiSelectField`, `autocompleteField`, `comboBox`, `tagsField` | basic-input fields + `options`, `optionsExpr`, `optionsUrl`, `optionsPath`, `allowCustom`, `onOpen`, `onClose` |
 | `DependentSelectorSpec` | `countryRegionSelector` | basic-input fields + `options`, `dependsOn` |
-| `SliderSpec` | `sliderField` | `label`, `enabled`, `readOnly`, `required`, `helperText`, `tooltip`, `min`, `max`, `step`, `onChange` |
+| `SliderSpec` | `sliderField`, `ratingField`, `numericStepper` | `label`, `enabled`, `readOnly`, `required`, `helperText`, `tooltip`, `min`, `max`, `step`, `onChange` |
+| `DateRangeSpec` | `dateRangeField` | `label`, `enabled`, `readOnly`, `required`, `bindFrom`, `bindTo`, `fromLabel`, `toLabel`, `helperText`, `tooltip`, `minDate`, `maxDate`, `onChange` |
 | `FileUploadSpec` | `fileUploadField` | `label`, `enabled`, `readOnly`, `required`, `helperText`, `tooltip`, `accept`, `multiple`, `minFiles`, `maxFiles`, `minSize`, `maxSize`, `allowedMediaTypes`, `onChange` |
 | `LabelSpec` | `label` | `label`, `text` |
 | `StaticTextSpec` | `staticText` | `text` |
-| `BadgeSpec` | `badge` | `label`, `text`, `variant` |
-| `SeparatorLineSpec` | `separatorLine` | — |
-| `ProgressBarSpec` | `progressBar` | `label`, `min`, `max`, `showValue`, `format`, `helperText`, `tooltip` |
+| `BadgeSpec` | `badge`, `alert`, `callout` | `label`, `text`, `variant` |
+| `SeparatorLineSpec` | `separatorLine`, `spacer` | `size` |
+| `ImageSpec` | `image` | `label`, `src`, `alt`, `width`, `height`, `fit` |
+| `LinkSpec` | `link` | `label`, `href`, `text`, `target`, `icon` |
+| `ProgressBarSpec` | `progressBar`, `gauge` | `label`, `min`, `max`, `showValue`, `format`, `helperText`, `tooltip` |
 | `DataTableSpec` | `dataTable` | `label`, `tableColumns`, `pageSize`, `tooltip` |
-| `DataChartSpec` | `dataChart` | `label`, `chartType`, `chartX`, `chartSeries` |
-| `ContainerSpec` | `group`, `fieldSet`, `sectionItem` | `label`, `layout`, `columns`, `legend`, `components` |
+| `DataChartSpec` | `dataChart`, `sparkline` | `label`, `chartType`, `chartX`, `chartSeries` |
+| `KeyValueListSpec` | `keyValueList`, `summaryList` | `label`, `items`, `columns`, `tooltip` |
+| `StatTileSpec` | `statTile`, `metric` | `label`, `value`, `delta`, `caption`, `trend`, `format`, `currency`, `variant`, `icon`, `tooltip` |
+| `JsonViewerSpec` | `jsonViewer` | `label`, `collapsed`, `maxDepth`, `tooltip` |
+| `TracePanelSpec` | `explainPanel`, `auditTimeline` | `label`, `limit`, `showConstraints`, `collapsed`, `tooltip` |
+| `ValidationSummarySpec` | `validationSummary` | `label`, `pathPrefix`, `variant`, `maxItems`, `emptyText` |
+| `EffectStatusSpec` | `effectStatus` | `label`, `effectId`, `errorPath`, `showRetry`, `retryLabel`, `tooltip`, `onRetry` |
+| `ContainerSpec` | `group`, `fieldSet`, `card`, `toolbar`, `buttonGroup`, `tabs`, `tabItem`, `accordion`, `collapsible`, `sectionItem` | `label`, `layout`, `columns`, `legend`, `collapsed`, `components` |
 | `SectionListSpec` | `sectionList` | `label`, `itemView`, `canAdd`, `canRemove`, `addLabel`, `removeLabel`, `layout`, `columns`, `components`, `onChange` |
 | `ButtonSpec` | `button` | `label`, `enabled`, `variant`, `icon`, `onClick` |
-| `MenuSpec` | `menu` | `orientation`, `menuItems` |
+| `MenuSpec` | `menu`, `stepper`, `breadcrumb` | `orientation`, `menuItems` |
 | `UnknownComponentSpec` | anything else | *(no fixed shape — see below)* |
+
+**Why so many type names on so few records.** Grouping by field shape is what makes most of the
+catalog cheap: a `ratingField` *is* a slider's `min`/`max`/`step`, an `alert` *is* a badge's
+`label`/`text`/`variant`, a `card` *is* a group with a heading. Only nine of the types added
+beyond the original catalog needed a record of their own. It also means the alternative spellings
+cost nothing at evaluation time and cannot diverge in behaviour — switching a `group` to a `card`
+provably cannot change what a view computes, because the evaluator runs the same arm.
+
+The full vocabulary is enumerated **three times** — `ViewComponentTypes` (valem-core, write-time
+validation), `@JsonSubTypes` (valem-view, record binding), and `KNOWN_COMPONENT_TYPES`
+(valem-view-react, dispatch). Each drifts silently on its own, so
+`ViewComponentTypesCoverageTest` in valem-view reads all three (including the TypeScript source)
+and fails until they agree.
 
 `bind` is on every record, not only the value-carrying ones, because it is the anchor for the
 meta-driven `visible`/`readOnly`/`required` inheritance described below — not just a value locator.
@@ -222,6 +244,13 @@ record EventHandler(String mutations, String navigate)
 | `countrySelector` | — | fetches from restcountries.com automatically |
 | `countryRegionSelector` | `dependsOn` | `dependsOn` = bind path of countrySelector |
 
+| `currencyField` / `percentField` | `format`, `currency` | numeric field plus a display convention; the stored value stays a plain number. `percent` appends `%` and does **not** rescale |
+| `richTextField` | `rows`, `toolbar` | stores markdown, not HTML — the value stays readable to derivations and constraints |
+| `autocompleteField` / `comboBox` | `options`, `optionsExpr`, `optionsUrl`, `optionsPath`, `allowCustom` | filtering select; `allowCustom` defaults true for `comboBox` |
+| `tagsField` | `options`, `allowCustom` | array of scalars as chips; writes the whole array in one mutation |
+| `dateRangeField` | `bindFrom`, `bindTo`, `fromLabel`, `toLabel`, `minDate`, `maxDate` | two paths, not one object bind — each end mutates independently so the audit shows which changed |
+| `ratingField` / `numericStepper` | `min`, `max`, `step` | slider affordances; commit on click rather than deferring |
+
 **Data output** (`bind`, `label`, `visible` on all):
 
 | `type` | Extra fields | Notes |
@@ -232,7 +261,19 @@ record EventHandler(String mutations, String navigate)
 | `separatorLine` | — | horizontal rule |
 | `dataTable` | `tableColumns`, `pageSize` | tabular view of array |
 | `dataChart` | `chartType`, `chartX`, `chartSeries` | recharts chart |
+| `sparkline` | `chartType`, `chartSeries` | axis-less inline trend; first series only |
 | `progressBar` | `min`, `max`, `showValue`, `format` | numeric value as filled bar; `format`: `percent` (default) or `value` (`75 / 100`) |
+| `gauge` | `min`, `max`, `showValue`, `format` | the same value as a 180° arc |
+| `alert` / `callout` | `text`, `variant` | block-level badge; `danger`/`warning` render as `role="alert"` |
+| `spacer` | `size` | vertical gap without a rule |
+| `image` | `src`, `alt`, `width`, `height`, `fit` | resolves a bound `BlobRef` to `/blobs/{id}`, so an upload and its preview share one path |
+| `link` | `href`, `text`, `target`, `icon` | external anchor; `_blank` gets `rel="noopener noreferrer"` automatically |
+| `keyValueList` / `summaryList` | `items`, `columns` | caption/value summary; rows resolved server-side. `bind` on a row wins over `text`; `format`/`currency` are per row |
+| `statTile` / `metric` | `value`, `delta`, `caption`, `trend`, `format`, `currency`, `variant`, `icon` | `trend` is authored, not inferred from the delta's sign — whether "up" is good is a domain question |
+| `jsonViewer` | `collapsed`, `maxDepth` | bound subtree as JSON; bind to `$` for the whole merged document |
+| `explainPanel` / `auditTimeline` | `limit`, `showConstraints`, `collapsed` | **declaration only** — the renderer fetches `/explain/{path}` or `/audit` itself (see below) |
+| `validationSummary` | `pathPrefix`, `variant`, `maxItems`, `emptyText` | the `flag`-policy violations that have no field to sit beside |
+| `effectStatus` | `effectId`, `errorPath`, `showRetry`, `retryLabel`, `onRetry` | an effect's `statusPath` machine; fully resolved server-side since the status is ordinary model state |
 
 **Aggregates**:
 
@@ -240,6 +281,10 @@ record EventHandler(String mutations, String navigate)
 |---|---|---|
 | `group` | `layout`, `columns`, `components` | layout container |
 | `fieldSet` | `legend`, `components` | HTML `<fieldset>` |
+| `card` | `label`, `layout`, `components` | group on a titled surface |
+| `toolbar` / `buttonGroup` | `components` | row of actions; ignore `layout` |
+| `tabs` / `tabItem` | `label`, `components` | one panel per child, captioned by the child's `label` |
+| `accordion` / `collapsible` | `label`, `collapsed`, `components` | `collapsed` is the *initial* state, not a live binding |
 | `sectionList` | `bind`, `itemView`, `canAdd`, `canRemove`, labels | array add/remove |
 | `sectionItem` | `bind`, `components` | single element editor (sub-view); evaluates to an `EvaluatedContainer` carrying `bind` |
 
@@ -249,23 +294,45 @@ record EventHandler(String mutations, String navigate)
 |---|---|---|
 | `button` | `variant`, `icon`, `onClick`, `enabled` | |
 | `menu` | `menuItems`, `orientation` | view navigation |
+| `stepper` / `breadcrumb` | `menuItems`, `orientation` | the same items as a progression or a trail; position **is** the active view id, so it survives a reload |
+
+> **Tabs and wizards hold no model state.** Which tab is open is local UI state and deliberately
+> not in the document — it is not something a derivation, a constraint or an audit record should
+> have an opinion about. When the position must survive a reload, use separate views and navigate
+> between them: the active view id is then the step, and a `stepper` renders it.
+
+> **What the server does not evaluate.** `explainPanel`, `auditTimeline` and `validationSummary`
+> evaluate to a *declaration* — which path, how many rows — not to data. `ViewEvaluator` receives
+> only `mergedDocument`/`metaCache`/`exprCache`/`constants`; it has no access to the trace ring
+> buffer, the audit store or the runtime's flagged-constraint set, and wiring one in would put an
+> unbounded read inside every view evaluation and every `viewDelta`. The renderer fetches those
+> itself, the same division of labour as `optionsUrl`. `effectStatus` and `jsonViewer` are the
+> exceptions: their data *is* ordinary model state, so both resolve fully server-side.
 
 ### `view/engine` package
 
 **`EvaluatedComponent`** — a **sealed interface**, not a flat record. Each component type
-serializes as one of 17 concrete records, each carrying only the fields relevant to that type
+serializes as one of 26 concrete records, each carrying only the fields relevant to that type
 (`@JsonInclude(NON_NULL)`, with a `BooleanTrueFilter` suppressing default `true`/`false`
 booleans): `EvaluatedBasicInput`, `EvaluatedTextArea`, `EvaluatedSelectField`,
-`EvaluatedDependentSelector`, `EvaluatedSlider`, `EvaluatedFileUpload`, `EvaluatedLabel`,
-`EvaluatedStaticText`, `EvaluatedBadge`, `EvaluatedProgressBar`, `EvaluatedDataTable`,
-`EvaluatedDataChart`, `EvaluatedContainer`, `EvaluatedSectionList`, `EvaluatedButton`,
-`EvaluatedMenu`, `EvaluatedSeparatorLine`. For example `EvaluatedBadge` carries only
-`id, type, visible, variant, text, label` — no `bind`/`value`/`enabled`. This mirrors the
-`ComponentSpec` hierarchy on the input side one-for-one, minus `UnknownComponentSpec` (an
-unrecognised `type` evaluates to an `EvaluatedBasicInput`).
+`EvaluatedDependentSelector`, `EvaluatedSlider`, `EvaluatedDateRange`, `EvaluatedFileUpload`,
+`EvaluatedLabel`, `EvaluatedStaticText`, `EvaluatedBadge`, `EvaluatedImage`, `EvaluatedLink`,
+`EvaluatedProgressBar`, `EvaluatedDataTable`, `EvaluatedDataChart`, `EvaluatedKeyValueList`,
+`EvaluatedStatTile`, `EvaluatedJsonViewer`, `EvaluatedTracePanel`,
+`EvaluatedValidationSummary`, `EvaluatedEffectStatus`, `EvaluatedContainer`,
+`EvaluatedSectionList`, `EvaluatedButton`, `EvaluatedMenu`, `EvaluatedSeparatorLine`. For example
+`EvaluatedBadge` carries only `id, type, visible, variant, text, label` — no
+`bind`/`value`/`enabled`. This mirrors the `ComponentSpec` hierarchy on the input side
+one-for-one, minus `UnknownComponentSpec` (an unrecognised `type` evaluates to an
+`EvaluatedBasicInput`).
 
-`EvaluatedContainer` covers `group`, `fieldSet` **and** `sectionItem`; its `bind` is populated
-only by `sectionItem`, and is omitted from the JSON otherwise.
+`EvaluatedKeyValueList` additionally nests `EvaluatedKeyValueItem`, the only supporting record on
+the output side that is itself resolved (each row's value is read out of the merged document).
+
+`EvaluatedContainer` covers all ten container types; its `bind` is populated only by
+`sectionItem`, and is omitted from the JSON otherwise. It carries `label` because for a `card`,
+a `tabItem` and a `collapsible` the label is the visible heading — the tab's title, the panel's
+summary row — rather than decoration a renderer may drop.
 
 The interface exposes ~25 `default` methods (returning `null`/`false` for fields a given
 subtype doesn't carry) so callers can treat any `EvaluatedComponent` uniformly:
@@ -447,26 +514,55 @@ interface ViewRendererProps {
 src/
   index.ts
   types.ts
+  format.ts                  ← formatValue / currencySymbol, for `format` + `currency`
   ViewRenderer.tsx
   ViewContext.tsx
   ComponentRenderer.tsx
   hooks/
-    useJSONata.ts, useCountries.ts, useRegions.ts
+    useJSONata.ts, useCountries.ts, useRegions.ts,
+    useDeferredMutate.ts, useResolvedOptions.ts
   fields/
-    TextField.tsx, TextAreaField.tsx, NumericField.tsx, PasswordField.tsx,
-    EmailField.tsx, CheckboxField.tsx, ToggleField.tsx,
+    TextField.tsx, TextAreaField.tsx, RichTextField.tsx, NumericField.tsx,
+    PasswordField.tsx, EmailField.tsx, CheckboxField.tsx, ToggleField.tsx,
     SelectField.tsx, RadioField.tsx, MultiSelectField.tsx,
-    DateField.tsx, DateTimeField.tsx, TimeField.tsx,
-    SliderField.tsx, FileUploadField.tsx,
+    AutocompleteField.tsx, TagsField.tsx,
+    DateField.tsx, DateTimeField.tsx, TimeField.tsx, DateRangeField.tsx,
+    SliderField.tsx, RatingField.tsx, NumericStepper.tsx, FileUploadField.tsx,
     CountrySelector.tsx, CountryRegionSelector.tsx, PhoneNumberField.tsx
   output/
-    LabelComponent.tsx, StaticText.tsx, Badge.tsx, SeparatorLine.tsx,
-    DataTable.tsx, DataChart.tsx, ProgressBar.tsx
+    LabelComponent.tsx, StaticText.tsx, Badge.tsx, Alert.tsx, SeparatorLine.tsx,
+    ImageComponent.tsx, LinkComponent.tsx,
+    DataTable.tsx, DataChart.tsx, Sparkline.tsx, ProgressBar.tsx, Gauge.tsx,
+    KeyValueList.tsx, StatTile.tsx, JsonViewer.tsx,
+    TracePanel.tsx, ValidationSummary.tsx, EffectStatus.tsx
   aggregates/
-    GroupComponent.tsx, FieldSetComponent.tsx, SectionList.tsx, SectionItem.tsx
+    LayoutContainer.tsx        ← the five layouts, shared with ViewRenderer
+    GroupComponent.tsx, FieldSetComponent.tsx, CardComponent.tsx,
+    ToolbarComponent.tsx, TabsComponent.tsx, CollapsibleComponent.tsx,
+    SectionList.tsx, SectionItem.tsx
   actions/
-    ButtonComponent.tsx, MenuComponent.tsx
+    ButtonComponent.tsx, MenuComponent.tsx, StepperComponent.tsx
 ```
+
+**Layouts.** `ViewSpec.layout` has always documented `vertical | horizontal | grid | tabs |
+wizard`, but only the first three were ever rendered — a view asking for `tabs` silently got a
+vertical stack. `LayoutContainer` implements all five and is shared by `ViewRenderer` and every
+container component, so a view-level `layout: "wizard"` and a `group` with the same layout behave
+identically.
+
+**Two guards keep the renderer honest.** `renderKnown`'s `switch` is exhaustiveness-checked by
+its `ReactElement` return type (a missing case fails `tsc` with "function lacks ending return
+statement"), and a `const _typesInSync: AssertEqual<…> = true` in `types.ts` fails to compile
+when `KNOWN_COMPONENT_TYPES` and the `KnownComponentSpec` union disagree — the array drives
+`isKnownComponent`'s narrowing while the union drives dispatch, so a type present in one and not
+the other passes the guard and then reaches a switch with no case for it.
+
+**`useJSONataLiteral`.** The client evaluates text fields that the server leaves alone:
+`ViewEvaluator` only evaluates a string containing `$`, whereas `jsonata("up")` parses fine and
+resolves to nothing. Fields that are usually a literal and occasionally an expression —
+`variant`, `trend`, `icon`, `target` — go through `useJSONataLiteral`, which falls back to the
+literal, so the same spec renders identically through the raw-spec path and through
+`GET /models/{id}/view`.
 
 ---
 
