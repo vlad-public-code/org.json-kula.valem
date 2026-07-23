@@ -96,6 +96,51 @@ class AnthropicLlmClientTest {
     }
 
     @Test
+    void promptParts_with_session_context_send_two_cached_system_blocks_before_user() throws Exception {
+        mockServer.expect(requestTo(ENDPOINT))
+                .andExpect(req -> {
+                    String body = ((MockClientHttpRequest) req).getBodyAsString();
+                    // two system blocks, each carrying its own ephemeral cache breakpoint
+                    assertThat(body).contains("\"system\":[{");
+                    int cacheBreakpoints = body.split("\"cache_control\":\\{\"type\":\"ephemeral\"\\}", -1).length - 1;
+                    assertThat(cacheBreakpoints).isEqualTo(2);
+                    assertThat(body).contains("GLOBAL SYSTEM").contains("SESSION SPEC");
+                    // both stable tiers precede the user turn; the volatile user text is in the message
+                    int roleIdx = body.indexOf("\"role\":\"user\"");
+                    assertThat(body.indexOf("SESSION SPEC")).isLessThan(roleIdx);
+                    assertThat(body.indexOf("VOLATILE USER")).isGreaterThan(roleIdx);
+                })
+                .andRespond(withSuccess("""
+                        {"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn"}
+                        """, MediaType.APPLICATION_JSON));
+
+        var parts = new SpecGenerationPrompt.PromptParts("GLOBAL SYSTEM", "SESSION SPEC", "VOLATILE USER");
+        client.complete(parts, new LlmClient.CompletionOptions(null, null));
+        mockServer.verify();
+    }
+
+    @Test
+    void session_context_with_cache_disabled_concatenates_into_a_single_plain_system() throws Exception {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        AnthropicLlmClient noCache =
+                new AnthropicLlmClient("test-key", "claude-sonnet-4-6", 256, false, MAPPER, builder.build());
+        server.expect(requestTo(ENDPOINT))
+                .andExpect(req -> {
+                    String body = ((MockClientHttpRequest) req).getBodyAsString();
+                    assertThat(body).contains("\"system\":\"SYS\\n\\nCTX\"");
+                    assertThat(body).doesNotContain("cache_control");
+                })
+                .andRespond(withSuccess("""
+                        {"content":[{"type":"text","text":"ok"}],"stop_reason":"end_turn"}
+                        """, MediaType.APPLICATION_JSON));
+
+        noCache.complete(new SpecGenerationPrompt.PromptParts("SYS", "CTX", "U"),
+                new LlmClient.CompletionOptions(null, null));
+        server.verify();
+    }
+
+    @Test
     void promptParts_with_cache_disabled_sends_plain_string_system() throws Exception {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();

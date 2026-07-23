@@ -75,7 +75,7 @@ public class RecordingLlmClient implements LlmClient {
     @Override
     public String complete(SpecGenerationPrompt.PromptParts parts, CompletionOptions options)
             throws LlmException {
-        return doRecord(parts.system(), parts.user(), parts.concatenated(),
+        return doRecord(parts.system(), recordedUser(parts), parts.concatenated(),
                 () -> delegate.complete(parts, options), List::of);
     }
 
@@ -85,8 +85,17 @@ public class RecordingLlmClient implements LlmClient {
                                     Consumer<LlmProgressEvent> onProgress) throws LlmException {
         Supplier<List<WebFetchFact>> getFacts =
                 executor instanceof FactProvider fp ? fp::facts : List::of;
-        return doRecord(parts.system(), parts.user(), parts.concatenated(),
+        return doRecord(parts.system(), recordedUser(parts), parts.concatenated(),
                 () -> delegate.completeWithTools(parts, tools, executor, options, onProgress), getFacts);
+    }
+
+    /**
+     * The user text to record: the volatile user turn, prefixed with any session-stable context (the
+     * current spec on the evolution path) so the interaction log keeps showing the full prompt that was
+     * sent, even though the two travel as separate cache tiers on the wire.
+     */
+    private static String recordedUser(SpecGenerationPrompt.PromptParts parts) {
+        return parts.hasSessionContext() ? parts.sessionContext() + "\n\n" + parts.user() : parts.user();
     }
 
     private String doRecord(String prompt, LlmCallable call, Supplier<List<WebFetchFact>> getFacts) {

@@ -26,17 +26,40 @@ public final class SpecGenerationPrompt {
     private SpecGenerationPrompt() {}
 
     /**
-     * A prompt split into its stable {@code system} context (the spec-format instructions and,
-     * optionally, the view catalog) and the per-call {@code user} text (task, spec JSON, error
-     * feedback, exemplars). Provider clients send these as separate roles — improving instruction
-     * adherence, enabling Anthropic prompt caching of the large stable prefix, and separating trusted
-     * instructions from user-controlled text. {@link #concatenated()} reproduces the legacy single
-     * string ({@code system + "\n\n" + user}) for the default {@link LlmClient} path and the UI
-     * preview endpoint.
+     * A prompt split into three cache tiers:
+     * <ul>
+     *   <li>{@code system} — the spec-format instructions (and, optionally, the view catalog). Stable
+     *       across every call in every session with the same view mode → the primary prompt-cache
+     *       prefix (breakpoint 1).</li>
+     *   <li>{@code sessionContext} — content that is stable within one generation/evolution
+     *       <em>session</em> but varies between sessions: on the evolution path, the full current spec
+     *       JSON and its derived-paths block, re-sent identically on every retry. Carrying it behind a
+     *       <em>second</em> cache breakpoint lets those (often large) tokens be re-read at ~10% price
+     *       across the retry loop instead of billed in full each attempt. Empty ({@code ""}) on paths
+     *       with no session-stable content (initial generation, validation/test repair).</li>
+     *   <li>{@code user} — the volatile per-attempt text (task, error/test feedback, exemplars, the
+     *       rejected previous output). This is the only tier that carries user-controlled free text, so
+     *       keeping it distinct also preserves the prompt-injection boundary.</li>
+     * </ul>
+     * Provider clients send {@code system}+{@code sessionContext} as cacheable prefix blocks and
+     * {@code user} as the volatile message. {@link #concatenated()} reproduces the legacy single string
+     * for the default {@link LlmClient} path and the UI preview endpoint.
      */
-    public record PromptParts(String system, String user) {
+    public record PromptParts(String system, String sessionContext, String user) {
+        /** Legacy two-tier prompt (no session-stable middle segment). */
+        public PromptParts(String system, String user) {
+            this(system, "", user);
+        }
+
         public String concatenated() {
-            return system + "\n\n" + user;
+            return sessionContext == null || sessionContext.isBlank()
+                    ? system + "\n\n" + user
+                    : system + "\n\n" + sessionContext + "\n\n" + user;
+        }
+
+        /** True when there is a session-stable middle segment to cache behind its own breakpoint. */
+        public boolean hasSessionContext() {
+            return sessionContext != null && !sessionContext.isBlank();
         }
     }
 
@@ -148,18 +171,15 @@ public final class SpecGenerationPrompt {
             for JSON data models. Your task is to produce valid Valem model specifications \
             in JSON format.
 
-            If a web_fetch tool is available, use it to look up authoritative domain information \
-            before writing derivation expressions — for example, fetch official tax tables, \
-            rate schedules, or formula references. Prefer primary sources (government sites, \
-            official standards). Fetch at most 2-3 relevant pages, then generate the spec.
+            If a web_fetch tool is available, use it to look up authoritative domain info (official \
+            tax tables, rate schedules, formulas) before writing expressions — prefer primary \
+            sources; fetch 2-3 pages, then generate.
+            If an eval_jsonata tool is available, TEST any non-trivial expression before finalizing: \
+            pass the candidate expr and a small sample input; it returns the value or the exact \
+            compiler error, so you fix syntax and logic in place rather than guessing.
 
-            If an eval_jsonata tool is available, use it to TEST any non-trivial derivation or \
-            constraint expression before finalizing the spec: pass the candidate expr and a small \
-            sample input matching your schema. It returns the computed value or the exact compiler \
-            error, so you can fix syntax (parentheses, lambda { } bodies, operators) and logic in \
-            place rather than guessing. Verify your hardest expressions (schedules, chained formulas) \
-            this way.
-
+            Your output shape is enforced by a response JSON Schema (structured output). This section \
+            gives the FIELD SEMANTICS the schema cannot express — read it for meaning, not field names.
             A Valem model spec has this structure:
             {
               "id": "<string>",                      // required: unique model identifier
@@ -214,9 +234,7 @@ public final class SpecGenerationPrompt {
                   // "path" is OPTIONAL. DEFAULT: omit path entirely (global constraint).
                   // Global constraints see the full document — use qualified field names.
                   //
-                  // ╔══════════════════════════════════════════════════════════════╗
-                  // ║  CONSTRAINT PATH RULE — violating this causes 409 at create  ║
-                  // ╚══════════════════════════════════════════════════════════════╝
+                  // CONSTRAINT PATH RULE — violating this causes 409 at create:
                   // When path IS omitted (global): expr has the FULL document as context.
                   //   CORRECT: { "expr": "vehicle.year >= 1900" }
                   //
@@ -229,13 +247,9 @@ public final class SpecGenerationPrompt {
                   // RULE: DEFAULT to global constraints (no path). Only add path when you
                   // explicitly need per-field dirty tracking. If you add path, use $ in expr.
                   //
-                  // ╔══════════════════════════════════════════════════════════════════════╗
-                  // ║  INITIAL-STATE RULE — rollback constraints are evaluated against the  ║
-                  // ║  freshly-created state. A rollback constraint that fails on the       ║
-                  // ║  initial state causes 409 at create. The initial state (after your    ║
-                  // ║  "$" defaultValues are applied) MUST satisfy EVERY rollback           ║
-                  // ║  constraint.                                                          ║
-                  // ╚══════════════════════════════════════════════════════════════════════╝
+                  // INITIAL-STATE RULE: rollback constraints are evaluated against the freshly-
+                  // created state (after "$" defaultValues). A rollback constraint that fails on the
+                  // initial state causes 409 at create — the initial state MUST satisfy EVERY one.
                   // If a rollback constraint requires a field to be positive / non-empty /
                   // in-range (e.g. floorArea > 0, quantity >= 1, name != ""), you MUST seed
                   // that field with a satisfying value via a "$" defaultValues rule — an
@@ -255,29 +269,17 @@ public final class SpecGenerationPrompt {
                   // satisfy every "rollback" constraint so the model registers cleanly.
                 }
               ],
-              "effects": [                           // OPTIONAL: side effects run by a SHELL, not the pure core.
-                {                                     //           Omit entirely unless the domain needs one.
-                  "id": "<string>",
-                  "executor": "caller" | "server" | "llm" | "timer",  // who runs the effect
-                  "trigger": "<JSONata boolean>",     // fires once when it becomes true after a mutation
-                  "dedupeKey": "<JSONata>",           // OPTIONAL edge key: re-fire only when this value changes
-                  "statusPath": "$.thing.ioName",     // OPTIONAL: shell writes {phase,key,at}. Use a PLAIN name
-                                                      //           (ioName), NOT "$io" — $io breaks JSONata.
-                  // executor "caller" — pure; surfaced to the client in the mutation response (no I/O):
-                  "emit":    "<event name>",          // caller only
-                  "payload": { "<key>": "<JSONata over state>" },   // caller only
-                  // executor "llm" — calls a language model, folds the JSON completion back:
-                  "prompt":  "'Classify: ' & ticket.body",          // llm only: JSONata -> the prompt text
-                  "responseSchema": { "type":"object", "properties": { } },  // llm OPTIONAL: structured-output shape
-                  // executor "timer" — schedules the fold-back at a future time (use afterMs OR at):
-                  "afterMs": "86400000",              // timer: relative delay in ms (JSONata -> number)
-                  "at":      "<JSONata -> epoch millis or ISO-8601 string>",  // timer: absolute fire time
-                  // executor "server" — HTTP to a spec-provided ABSOLUTE url (SSRF-guarded at runtime):
-                  "request": { "method":"GET", "url":"https://api.example.com/x?q={ field }" },
-                  // llm / server / timer: map the result back into writable state
-                  "response": { "set": { "$.path": "$response.field" } }
-                  //   $response = the LLM/HTTP JSON. For a timer, response.set values are plain JSONata
-                  //   over the current state at fire time (e.g. "$.quote.status": "'expired'").
+              "effects": [   // OPTIONAL — side effects run by a SHELL, not the pure core. Omit unless needed.
+                {            // Common: id; executor ("caller"|"server"|"llm"|"timer"); trigger (JSONata bool,
+                             // fires once when it becomes true); optional dedupeKey; optional statusPath
+                             // ("$.thing.ioName" — a PLAIN name, NOT "$io" which breaks JSONata).
+                  //  caller — pure; no I/O; surfaced in the mutation response:  "emit", "payload":{k:JSONata}
+                  //  llm    — "prompt": JSONata->text; optional "responseSchema"; folds JSON completion back
+                  //  timer  — "afterMs" (JSONata->ms) OR "at" (JSONata->epoch ms / ISO-8601)
+                  //  server — "request": {method,url} to an ABSOLUTE url (SSRF-guarded at runtime)
+                  //  llm/server/timer: "response": {"set": {"$.path": "$response.field"}} maps result to
+                  //  writable state ($response = the LLM/HTTP JSON; timer set values are JSONata over state).
+                  "id": "<string>", "executor": "...", "trigger": "<JSONata boolean>"
                 }
               ],
               "tests": [                             // REQUIRED: 1-2 self-checks of your own math
@@ -293,9 +295,7 @@ public final class SpecGenerationPrompt {
                 // a boundary). Prefer asserting the easiest derived field over a long chained one; do
                 // NOT invent an expected value you are unsure of — a wrong expectation wastes a retry.
                 //
-                // ╔══════════════════════════════════════════════════════════════════════════╗
-                // ║  expect ONLY scalar, deterministic values — these two rules are STRICT    ║
-                // ╚══════════════════════════════════════════════════════════════════════════╝
+                // expect ONLY scalar, deterministic values — these two rules are STRICT:
                 //  1. Assert a single SCALAR (number / boolean / string). NEVER assert an
                 //     array- or object-valued derived field — you cannot hand-compute a whole
                 //     computed array (e.g. an amortization "schedule") exactly, so it always
@@ -347,36 +347,17 @@ public final class SpecGenerationPrompt {
                      ↑ $balance is declared in the outer scope; rebinding it in the lambda = compile error.
               RIGHT: Use $reduce with an accumulator — see Pattern B in the schedules section below.
 
-            // ╔══════════════════════════════════════════════════════════════════════════╗
-            // ║  CRITICAL — multi-statement sequences REQUIRE outer parentheses ()       ║
-            // ╚══════════════════════════════════════════════════════════════════════════╝
-            //  The ; separator is valid ONLY inside ( ).  Without ( ), ; is a syntax error.
-            //
-            //  RIGHT: "expr": "($r := annualRate/1200; $n := termMonths; $r > 0 ? principal * $r * (1+$r)**$n / ((1+$r)**$n - 1) : principal/$n)"
-            //  WRONG: "expr": "$r := annualRate/1200; $n := termMonths; $r > 0 ? ..."
-            //                                        ↑ ; without outer () = Syntax error at ;
-            //  Rule: any expression that contains ; (variable bindings OR sequenced steps) MUST
-            //  be wrapped in ( ).
+            CRITICAL — multi-statement sequences REQUIRE outer parentheses ():
+              The ; separator is valid ONLY inside ( ). Any expression containing ; (bindings OR
+              sequenced steps) MUST be wrapped in ( ), else ; is a syntax error.
+              RIGHT: "($r := annualRate/1200; $n := termMonths; $r > 0 ? principal * $r * (1+$r)**$n / ((1+$r)**$n - 1) : principal/$n)"
+              WRONG: "$r := annualRate/1200; $n := termMonths; ..."   (no outer () = Syntax error at ;)
 
-            // ╔══════════════════════════════════════════════════════════════════════════╗
-            // ║  CRITICAL — lambda body MUST use { }, NEVER ( )                         ║
-            // ╚══════════════════════════════════════════════════════════════════════════╝
-            //  function($param) { body }   ← CORRECT: {} is the function body delimiter
-            //  function($param) ( body )   ← WRONG: parser expects { but found (
-            //
-            //  Return a plain scalar:
-            //    function($m) {$m * 2}
-            //
-            //  Return an object (no local vars):
-            //    function($m) {{"month": $m, "payment": monthlyPayment}}
-            //    Note double {{ }}: outer {} = function body, inner {} = object literal
-            //
-            //  Multiple steps / local variables — still use {}, with ; to separate steps:
-            //    function($acc, $m) {$i := $acc[-1].balance * rate; $append($acc, {"balance": $acc[-1].balance - $i})}
-            //                       ↑ {} is function body; ; separates steps; last expr is returned
-            //
-            //  WRONG: function($acc, $m) ($i := $acc[-1].balance * rate; $append(...))
-            //                             ↑ () instead of {} — runtime rejects with "Expected LBRACE"
+            CRITICAL — lambda body MUST use { }, NEVER ( ) (runtime rejects () with "Expected LBRACE"):
+              function($m) {$m * 2}                                   (scalar return)
+              function($m) {{"month": $m, "payment": monthlyPayment}} (object return; double {{ }} = body + object literal)
+              function($acc, $m) {$i := $acc[-1].balance * rate; $append($acc, {"balance": $acc[-1].balance - $i})}
+                                                                      (multi-step: {} body, ; separates steps, last expr returned)
 
             JSONata input context per expression type (what $ and bare names resolve to):
             ($const is bound in EVERY expression below — reference named constants as $const.<name>,
@@ -397,30 +378,17 @@ public final class SpecGenerationPrompt {
               view text/visible/readOnly   | full mergedDocument       | —
 
             Generating computed arrays (schedules, time series, amortization tables):
-            - Model per-period data as a SINGLE derived field that returns an array.
-              Pattern A — independent rows (no carry-forward state):
-                "path": "$.schedule",
-                "expr": "$map([1..termMonths], function($m) {{\\"month\\": $m, \\"payment\\": monthlyPayment}})"
-                Double {{ }}: outer {} = function body, inner {} = object literal being returned.
-              Pattern B — amortization (each row depends on the previous balance):
-                "path": "$.schedule",
-                "expr": "$reduce([1..termMonths], function($acc, $m) {$i := $round($acc[-1].balance * monthlyRate, 2); $append($acc, {\\"month\\": $m, \\"interest\\": $i, \\"balance\\": $acc[-1].balance - $i})}, [{\\"balance\\": loanAmount}])"
-                Lambda body uses {} even with local variable bindings; ; separates steps.
-                Keep the schedule a SINGLE $reduce(...) call. Reference already-derived fields
-                (e.g. monthlyPayment) DIRECTLY — do NOT re-bind them in an outer ( ... ; $reduce(...))
-                sequence: that wrapper adds a closing ) that is easy to drop, producing
-                "Expected RPAREN but reached end of expression". If you must pre-compute a value,
-                make it its own derivation and reference it by name instead.
-            - WRONG — $map with outer-scope variable reassignment (NEVER do this):
-                "expr": "($balance := loan; $map([1..n], function($m) {$interest := ...; $balance := $balance - $principal; ...}))"
-                ↑ $balance is bound in the outer ( ) scope; rebinding it inside the lambda causes
-                  a compile error: "variable $balance is already defined". $map does NOT carry
-                  state between iterations — every call to the lambda starts fresh.
-                  USE $reduce (Pattern B) instead — $acc carries the running state.
-            - NEVER create one derivation per period (e.g. month1Payment, month2Payment…).
-              That hard-codes the term length and explodes the spec size.
-            - For financial schedules, keep the expr concise — compute balance, interest,
-              principal columns in a single object literal per iteration.
+            - Model per-period data as a SINGLE derived field returning an array — NEVER one
+              derivation per period (month1Payment, month2Payment…): that hard-codes the term and
+              explodes the spec.
+              Pattern A — independent rows:
+                "$map([1..termMonths], function($m) {{\\"month\\": $m, \\"payment\\": monthlyPayment}})"
+              Pattern B — carry-forward (amortization; each row needs the previous balance):
+                "$reduce([1..termMonths], function($acc, $m) {$i := $round($acc[-1].balance * monthlyRate, 2); $append($acc, {\\"month\\": $m, \\"interest\\": $i, \\"balance\\": $acc[-1].balance - $i})}, [{\\"balance\\": loanAmount}])"
+              Keep it a SINGLE $reduce; reference already-derived fields (monthlyPayment) directly — do
+              NOT wrap in an outer ( …; $reduce(…) ) sequence (a dropped closing ) causes "Expected
+              RPAREN"). $map does NOT carry state between iterations — use $reduce ($acc) for
+              carry-forward; never reassign an outer-scope variable inside a lambda ("already defined").
 
             COMPLETE EXAMPLE — a small, valid spec. Match this structure exactly (note: the derived
             field `area` is `readOnly` in the schema; the constraint is global and uses the bare field
@@ -455,14 +423,11 @@ public final class SpecGenerationPrompt {
             JSON output (CRITICAL):
             - Output exactly one JSON object — no markdown fences, no text before or after.
             - String escaping: use \\" for a literal quote, \\\\ for a backslash. One level only —
-              never backslash-escape a field name; never double-escape a string value.
-            - In JSON Schema type definitions the string value MUST be closed before the object closes:
-                RIGHT: {"type":"boolean"}   WRONG: {"type":"boolean}
-                RIGHT: {"type":"string"}    WRONG: {"type":"string}
-              A missing close-quote propagates the error through the entire remainder of the document.
-            - Keep the spec concise. Do NOT repeat the same derivation pattern for every
-              possible period/bucket. Use array derivations or conditional expressions instead.
-            - Before finishing, verify: every opening " has a closing ", every { has a }, every [ has a ].
+              never backslash-escape a field name; never double-escape a string value. Close every
+              string value before its object closes ({"type":"string"} not {"type":"string}); a
+              missing close-quote corrupts the rest of the document.
+            - Keep the spec concise (array derivations / conditionals, not one entry per period), and
+              verify before finishing: every " { [ has its closing " } ].
             """;
 
     /**
@@ -716,13 +681,9 @@ public final class SpecGenerationPrompt {
                 Your previous response for '""" + modelId + """
                 ' was cut off before the JSON was complete — it exceeded the output token limit.
 
-                Please generate a MUCH SHORTER spec. Strict size budget:
-                - Schema: include ONLY the essential input fields; omit descriptions, readOnly flags, \
-                and any derived or computed fields (those belong in derivations, not schema).
-                - Derivations: at most 4, each as a single concise expression (avoid multi-line blocks).
-                - Constraints: at most 2, one-liner boolean expressions only.
-                - No metaDerivations, no tests.
-                - defaultValues: at most one "$" seed rule with 3–5 representative fields.
+                Generate a MUCH SHORTER spec. Budget: schema = essential input fields only (no
+                descriptions/readOnly/derived fields); <=4 single-line derivations; <=2 one-line
+                constraints; no metaDerivations or tests; one "$" defaultValues seed (3-5 fields).
 
                 Domain:
                 """ + domainDescription + """
@@ -880,15 +841,8 @@ public final class SpecGenerationPrompt {
             List<String> derivedPaths) {
 
         String user = """
-                The current Valem model spec for '""" + modelId + """
-                ' is:
-                ```json
-                """ + currentSpec + """
-                ```
-                """ + derivedPathsBlock(derivedPaths) + """
-
-                Apply the following changes and output a SpecEvolution JSON object \
-                (not a full spec — only the diff fields that change):
+                Apply the following changes to the current spec (shown above) and output a \
+                SpecEvolution JSON object (not a full spec — only the diff fields that change):
 
                 """ + evolutionRequest + shapeExemplars(evolutionRequest) + (includeView ? """
 
@@ -900,7 +854,8 @@ public final class SpecGenerationPrompt {
 
                 Output only the JSON SpecEvolution, nothing else.
                 """;
-        return new PromptParts(systemContext(includeView), user);
+        return new PromptParts(systemContext(includeView),
+                currentSpecContext(modelId, currentSpec, derivedPaths), user);
     }
 
     /** Calls {@link #evolutionPrompt(String, String, String, boolean, List)} with no derived paths. */
@@ -954,7 +909,7 @@ public final class SpecGenerationPrompt {
 
         String user = """
                 You are evolving the Valem model spec for '""" + modelId + """
-                '. Your previous SpecEvolution was rejected:
+                ' (shown above). Your previous SpecEvolution was rejected:
 
                 """ + feedback + """
 
@@ -963,13 +918,7 @@ public final class SpecGenerationPrompt {
                 """ + previousEvolution + """
                 ```
 
-                The current (unchanged) spec is:
-                ```json
-                """ + currentSpec + """
-                ```
-                """ + derivedPathsBlock(derivedPaths) + """
-
-                Re-apply this change request, fixing the problem above:
+                Re-apply this change request against the current (unchanged) spec, fixing the problem above:
 
                 """ + evolutionRequest + shapeExemplars(evolutionRequest) + """
 
@@ -978,7 +927,8 @@ public final class SpecGenerationPrompt {
 
                 Output only the corrected JSON SpecEvolution, nothing else.
                 """;
-        return new PromptParts(systemContext(includeView), user);
+        return new PromptParts(systemContext(includeView),
+                currentSpecContext(modelId, currentSpec, derivedPaths), user);
     }
 
     /** The optional-field list for a SpecEvolution, with view fields only when views are on. */
@@ -1030,6 +980,20 @@ public final class SpecGenerationPrompt {
      * evolution upserts them by the SAME path instead of duplicating them or redeclaring them as
      * writable schema fields. Returns {@code ""} when there are none.
      */
+    /**
+     * The session-stable evolution context: the full current spec JSON plus its derived-paths block.
+     * Identical on every attempt — and byte-for-byte identical between the evolution and
+     * evolution-repair prompts — of one evolution session, so a provider can cache it behind a second
+     * breakpoint and re-read the (often large) spec at ~10% price across the whole retry loop instead
+     * of re-billing it in full each attempt. Both evolution prompts share this method so the cached
+     * prefix matches exactly.
+     */
+    private static String currentSpecContext(String modelId, String currentSpec,
+                                             List<String> derivedPaths) {
+        return "The current Valem model spec for '" + modelId + "' is:\n```json\n"
+                + currentSpec + "\n```\n" + derivedPathsBlock(derivedPaths);
+    }
+
     private static String derivedPathsBlock(List<String> derivedPaths) {
         if (derivedPaths == null || derivedPaths.isEmpty()) return "";
         return "\nThese paths are already DERIVED (read-only computed fields):\n  "

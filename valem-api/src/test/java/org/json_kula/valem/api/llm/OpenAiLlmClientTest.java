@@ -3,6 +3,7 @@ package org.json_kula.valem.api.llm;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.json_kula.valem.core.llm.LlmClient.CompletionOptions;
+import org.json_kula.valem.core.llm.SpecGenerationPrompt;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -57,6 +58,40 @@ class OpenAiLlmClientTest {
         }).andRespond(withSuccess(OK_RESPONSE, MediaType.APPLICATION_JSON));
 
         client.complete("hi", new CompletionOptions(0.0, schema));
+        mockServer.verify();
+    }
+
+    @Test
+    void prompt_parts_send_system_and_session_context_as_two_system_messages_before_user()
+            throws Exception {
+        mockServer.expect(requestTo(ENDPOINT)).andExpect(req -> {
+            JsonNode body = MAPPER.readTree(((MockClientHttpRequest) req).getBodyAsString());
+            JsonNode messages = body.at("/messages");
+            // system (global) + sessionContext (current spec) both as system roles, before the user turn
+            assertThat(messages.get(0).at("/role").asText()).isEqualTo("system");
+            assertThat(messages.get(0).at("/content").asText()).isEqualTo("GLOBAL SYSTEM");
+            assertThat(messages.get(1).at("/role").asText()).isEqualTo("system");
+            assertThat(messages.get(1).at("/content").asText()).isEqualTo("SESSION SPEC");
+            assertThat(messages.get(2).at("/role").asText()).isEqualTo("user");
+            assertThat(messages.get(2).at("/content").asText()).isEqualTo("VOLATILE USER");
+        }).andRespond(withSuccess(OK_RESPONSE, MediaType.APPLICATION_JSON));
+
+        client.complete(new SpecGenerationPrompt.PromptParts("GLOBAL SYSTEM", "SESSION SPEC", "VOLATILE USER"),
+                new CompletionOptions(null, null));
+        mockServer.verify();
+    }
+
+    @Test
+    void prompt_parts_without_session_context_send_single_system_message() throws Exception {
+        mockServer.expect(requestTo(ENDPOINT)).andExpect(req -> {
+            JsonNode body = MAPPER.readTree(((MockClientHttpRequest) req).getBodyAsString());
+            JsonNode messages = body.at("/messages");
+            assertThat(messages.size()).isEqualTo(2);   // one system + one user, no empty session block
+            assertThat(messages.get(0).at("/role").asText()).isEqualTo("system");
+            assertThat(messages.get(1).at("/role").asText()).isEqualTo("user");
+        }).andRespond(withSuccess(OK_RESPONSE, MediaType.APPLICATION_JSON));
+
+        client.complete(new SpecGenerationPrompt.PromptParts("SYS", "USER"), new CompletionOptions(null, null));
         mockServer.verify();
     }
 }
