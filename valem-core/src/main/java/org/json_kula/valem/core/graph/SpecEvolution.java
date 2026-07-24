@@ -11,6 +11,7 @@ import org.json_kula.valem.core.model.DerivationSpec;
 import org.json_kula.valem.core.model.EffectSpec;
 import org.json_kula.valem.core.model.MetaDerivationSpec;
 import org.json_kula.valem.core.model.ModelSpec;
+import org.json_kula.valem.core.model.TestCase;
 import org.json_kula.valem.core.state.PathConverter;
 
 import java.util.ArrayList;
@@ -62,7 +63,8 @@ public record SpecEvolution(
         List<ComponentUpsert>   upsertComponents,   // per-view component upserts (by component id)
         List<ComponentRemove>   removeComponents,   // per-view component removals (by component id)
         Map<String, JsonNode>   upsertConstants,    // constant name → value (wholesale per name)
-        List<String>            removeConstants     // constant names to drop (rejected if referenced)
+        List<String>            removeConstants,    // constant names to drop (rejected if referenced)
+        List<TestCase>          newTests            // full replacement of the embedded test list (null = keep)
 ) {
     /** A component upsert: place {@code component} within {@code viewId} at the given location. */
     public record ComponentUpsert(String viewId, String parentId, String beforeId, JsonNode component) {
@@ -129,7 +131,8 @@ public record SpecEvolution(
             @JsonProperty("upsertComponents")      List<ComponentUpsert>    upsertComponents,
             @JsonProperty("removeComponents")      List<ComponentRemove>    removeComponents,
             @JsonProperty("upsertConstants")       Map<String, JsonNode>    upsertConstants,
-            @JsonProperty("removeConstants")       List<String>             removeConstants) {
+            @JsonProperty("removeConstants")       List<String>             removeConstants,
+            @JsonProperty("newTests")              List<TestCase>           newTests) {
         return new SpecEvolution(
                 newVersion,
                 removeDerivations     != null ? List.copyOf(removeDerivations)     : List.of(),
@@ -163,7 +166,8 @@ public record SpecEvolution(
                 upsertComponents      != null ? List.copyOf(upsertComponents)      : List.of(),
                 removeComponents      != null ? List.copyOf(removeComponents)      : List.of(),
                 upsertConstants       != null ? new LinkedHashMap<>(upsertConstants) : Map.of(),
-                removeConstants       != null ? List.copyOf(removeConstants)       : List.of());
+                removeConstants       != null ? List.copyOf(removeConstants)       : List.of(),
+                newTests              != null ? List.copyOf(newTests)              : null);
     }
 
     /** Normalizes an explicit JSON {@code null} ({@link JsonNode#isNull()}) to a Java {@code null}. */
@@ -198,11 +202,12 @@ public record SpecEvolution(
         List<EffectSpec>         effects         = evolveList(
                 base.effects(), upsertEffects, removeEffects, EffectSpec::id);
         Map<String, JsonNode>    constants       = evolveConstants(base);
+        List<TestCase>           tests           = newTests != null ? newTests : base.tests();
 
         ModelSpec evolved = ModelSpec.of(
                 base.id(), version, schema,
                 derivations, metaDerivations, constraints,
-                base.tests(), defaultValues, constants, viewDefinition,
+                tests, defaultValues, constants, viewDefinition,
                 effects,
                 base.template(),   // carry the branch parent forward
                 base.lineage(),    // carry pinned provenance forward

@@ -90,14 +90,28 @@ Advanced mode also lets you **import** a spec JSON file to run a model you wrote
 
 ## 4. Change the model without losing your data
 
-Two ways, both non-destructive:
+Several ways, all non-destructive:
 
 - **Evolve with AI** — describe the change ("add a co-borrower and split the affordability check")
   and the model is evolved in place. A toast reports the new version, and **View changes** lists
   exactly what was added, changed, or removed. Your entered data carries forward.
+- **Edit the view** — the **✎ Edit view** button opens a direct-manipulation editor for the form
+  itself: drag a component from the palette onto the canvas, click any field to change its label,
+  binding, or options in the inspector, reorder or delete, then **Save view**. It is deterministic —
+  no LLM round-trip — and saves as an ordinary version bump, so **View changes**, history, and
+  **Revert** cover it too. Only the presentation (`viewDefinition`) is edited; the schema,
+  derivations, and rules are untouched.
+- **Edit the logic** — the **⚙ Edit spec** button opens a structured editor for everything *behind*
+  the form: the **schema** (which fields exist and their types, with nested objects, arrays, and
+  reusable definitions), **constants**, **derivations** (computed fields), **meta-derivations** (live
+  field metadata), **constraints** (the rules), **effects** (side effects — with the right fields per
+  executor), **default values**, and embedded **tests**. Each is a form-based list you add to, edit,
+  and remove from — expression fields validate as you type and offer an insert menu of your model's
+  fields and functions, with a JSON escape hatch when you need it. Also deterministic, and it saves
+  only what you changed as a version bump, so history and **Revert** cover it the same way.
 - **Version history** — the sidebar keeps the model's earlier versions; **Revert** puts one back.
 
-Under the hood both are spec evolution, described in
+Under the hood these are all spec evolution, described in
 [Composition & branching]({% link model-guide/composition-and-branching.md %}) and, field by field,
 in the [model spec format]({% link reference/model-spec-format.md %}).
 
