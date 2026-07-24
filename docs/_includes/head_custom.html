@@ -24,6 +24,59 @@ page-specific rather than all showing the site blurb.
 <meta name="description" content="{{ og_desc }}" />
 
 {%- comment -%}
+Canonical URL. `redirect_from` keeps the pre-restructure paths alive (via meta-refresh stubs),
+so several URLs can resolve to the same content; this tells search engines which one is the
+original and consolidates ranking signals onto it. `absolute_url` already folds in site.url +
+baseurl, so it's correct for the project-page subpath.
+{%- endcomment -%}
+<link rel="canonical" href="{{ page.url | absolute_url }}" />
+
+{%- comment -%}
+Structured data (JSON-LD). On the home page, describe the project itself as a SoftwareApplication
+so it's eligible for an app/rich result; on every other page emit a TechArticle plus a two-level
+BreadcrumbList (site -> page) to reinforce the hierarchy. `jsonify` does the JSON string escaping,
+and the descriptions reuse the same front-matter `description` the meta tags use — one source of
+truth, so a page's card and its structured data never drift apart.
+{%- endcomment -%}
+{%- if page.url == '/' -%}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": {{ site.title | jsonify }},
+  "description": {{ site.description | strip_newlines | strip | jsonify }},
+  "url": {{ '/' | absolute_url | jsonify }},
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "Any",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "license": "https://www.apache.org/licenses/LICENSE-2.0",
+  "codeRepository": {{ site.gh_repo | jsonify }}
+}
+</script>
+{%- else -%}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "TechArticle",
+  "headline": {{ og_title | jsonify }},
+  "description": {{ og_desc | jsonify }},
+  "url": {{ page.url | absolute_url | jsonify }},
+  "isPartOf": { "@type": "WebSite", "name": {{ site.title | jsonify }}, "url": {{ '/' | absolute_url | jsonify }} }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    { "@type": "ListItem", "position": 1, "name": {{ site.title | jsonify }}, "item": {{ '/' | absolute_url | jsonify }} },
+    { "@type": "ListItem", "position": 2, "name": {{ og_title | jsonify }}, "item": {{ page.url | absolute_url | jsonify }} }
+  ]
+}
+</script>
+{%- endif -%}
+
+{%- comment -%}
 Dark mode. The theme is pinned to `light` in _config.yml; this follows the visitor's OS
 preference on first visit and remembers an explicit choice afterwards. Everything is guarded:
 if `jtd` is ever unavailable the page simply stays in the configured light scheme.

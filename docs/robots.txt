@@ -1,0 +1,9 @@
+---
+# Front matter (even empty) makes Jekyll process this file so the Liquid below resolves.
+# Excluded from the sitemap since robots.txt is a directive file, not a page.
+sitemap: false
+---
+User-agent: *
+Allow: /
+
+Sitemap: {{ '/sitemap.xml' | absolute_url }}
