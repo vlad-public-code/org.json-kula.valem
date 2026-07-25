@@ -1,29 +1,46 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api';
 import JsonViewer from './JsonViewer';
 
 interface Props { modelId: string }
 
+// The path whose schema is loaded automatically when the tab opens — the root of the model.
+const ROOT_PATH = '$';
+
 export default function SchemaPanel({ modelId }: Props) {
-  const [path, setPath] = useState('');
+  const [path, setPath] = useState(ROOT_PATH);
   const [schema, setSchema] = useState<Record<string, unknown> | null>(null);
+  // The path the currently-shown schema was fetched for, so the heading tracks the result and not
+  // whatever the user has since typed into the input.
+  const [loadedPath, setLoadedPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleFetch = async () => {
-    if (!path.trim()) return;
+  const fetchSchema = async (target: string) => {
+    const trimmed = target.trim();
+    if (!trimmed) return;
     setError(null);
     setSchema(null);
     setLoading(true);
     try {
-      const result = await api.effectiveSchema(modelId, path.trim());
+      const result = await api.effectiveSchema(modelId, trimmed);
       setSchema(result);
+      setLoadedPath(trimmed);
     } catch (e) {
       setError(String(e));
     } finally {
       setLoading(false);
     }
   };
+
+  const handleFetch = () => fetchSchema(path);
+
+  // On open (and if the model changes) load the root schema so the tab shows something immediately.
+  useEffect(() => {
+    setPath(ROOT_PATH);
+    fetchSchema(ROOT_PATH);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelId]);
 
   return (
     <>
@@ -53,7 +70,7 @@ export default function SchemaPanel({ modelId }: Props) {
 
       {schema !== null && (
         <div className="card">
-          <div className="card-title">Effective Schema — {path}</div>
+          <div className="card-title">Effective Schema — {loadedPath ?? path}</div>
           <div className="json-viewer">
             <JsonViewer value={schema} initialDepth={4} />
           </div>
