@@ -64,8 +64,26 @@ public final class ModelSpecValidator {
      * <p>Never throws — all problems are returned as {@link ValidationError} entries.
      */
     public static ValidationResult validate(ModelSpec spec) {
+        return validate(spec, new ExpressionCache(), true);
+    }
+
+    /**
+     * Validates {@code spec}, compiling every expression through the supplied {@code cache} rather
+     * than a throw-away one, and optionally running the spec's embedded self-tests.
+     *
+     * <p>Passing a shared, server-lifetime cache lets validation, the runtime, and (when enabled) the
+     * test-runner all reuse the same compiled expressions, so each distinct expression is compiled
+     * once rather than once per pass. Pre-warming that cache in a batch
+     * ({@code ExpressionCache.warm}) turns every {@code validateExpr} below into a cache hit.
+     *
+     * <p>{@code runEmbeddedTests} lets the end-user create path skip the spec-embedded self-tests —
+     * an authoring/CI concern that adds a full runtime construction and evaluation pass — while other
+     * callers (generation, evolution) keep running them.
+     *
+     * <p>Never throws — all problems are returned as {@link ValidationError} entries.
+     */
+    public static ValidationResult validate(ModelSpec spec, ExpressionCache cache, boolean runEmbeddedTests) {
         List<ValidationError> findings = new ArrayList<>();
-        ExpressionCache cache = new ExpressionCache();
 
         checkSpec(spec, findings);
         checkSchema(spec, findings);
@@ -82,10 +100,10 @@ public final class ModelSpecValidator {
         boolean hasErrors = findings.stream().anyMatch(f -> f.severity() == Severity.ERROR);
         if (!hasErrors) {
             checkCycles(spec, findings);
-            // Run embedded test cases only when the spec compiles cleanly
+            // Run embedded test cases only when the spec compiles cleanly (and when requested)
             boolean cycleErrorAdded = findings.stream().anyMatch(f -> f.severity() == Severity.ERROR);
-            if (!cycleErrorAdded) {
-                checkTests(spec, findings);
+            if (!cycleErrorAdded && runEmbeddedTests) {
+                checkTests(spec, cache, findings);
             }
         }
 
@@ -598,9 +616,9 @@ public final class ModelSpecValidator {
         }
     }
 
-    private static void checkTests(ModelSpec spec, List<ValidationError> out) {
+    private static void checkTests(ModelSpec spec, ExpressionCache cache, List<ValidationError> out) {
         if (spec.tests().isEmpty()) return;
-        for (TestCaseRunner.TestResult result : TestCaseRunner.run(spec, spec.tests())) {
+        for (TestCaseRunner.TestResult result : TestCaseRunner.run(spec, spec.tests(), cache)) {
             if (result.failed()) {
                 String label = result.description() != null
                         ? "'" + result.description() + "'" : "(unnamed)";

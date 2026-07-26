@@ -64,20 +64,47 @@ public final class ModelRuntime {
     }
 
     /**
-     * Constructs a runtime whose expression cache is pre-seeded from {@code seedCache} (may be
-     * {@code null}). Used on spec evolution to carry compiled expressions forward, so unchanged
-     * expressions are not recompiled by the fresh runtime.
+     * Constructs a runtime whose expression cache is a fresh cache pre-seeded (copied) from
+     * {@code seedCache} (may be {@code null}). Used on spec evolution to carry compiled expressions
+     * forward, so unchanged expressions are not recompiled by the fresh runtime. The new runtime owns
+     * its cache independently — later compiles on either side do not affect the other.
      */
     public ModelRuntime(CompiledModel model, ModelState state, ExpressionCache seedCache) {
-        this.model           = model;
-        this.state           = state;
-        this.cache           = new ExpressionCache();
-        this.cache.seedFrom(seedCache);
-        this.derivationEval  = new DerivationEvaluator(cache);
-        this.metaEval        = new MetaDerivationEvaluator(cache);
-        this.constraintEval  = new ConstraintEvaluator(cache);
+        this(model, state, seededCopyOf(seedCache), null);
+    }
+
+    /**
+     * Constructs a runtime that <b>uses {@code sharedCache} directly</b> — no private copy. Every
+     * runtime built this way shares one cache, so each distinct expression string is compiled at most
+     * once across all of them (compiled expressions are immutable and stateless, so sharing is safe).
+     * This is how the service registers models against a single server-lifetime cache; pass a warmed
+     * cache ({@code ExpressionCache.warm}) to skip per-expression compilation entirely.
+     *
+     * @param sharedCache the cache to use directly; a fresh one is created if {@code null}
+     */
+    public static ModelRuntime withSharedCache(CompiledModel model, ModelState state,
+                                               ExpressionCache sharedCache) {
+        return new ModelRuntime(model, state,
+                sharedCache != null ? sharedCache : new ExpressionCache(), null);
+    }
+
+    /** Builds a fresh cache seeded (copied) from {@code seedCache}; {@code null} yields an empty one. */
+    private static ExpressionCache seededCopyOf(ExpressionCache seedCache) {
+        ExpressionCache copy = new ExpressionCache();
+        copy.seedFrom(seedCache);
+        return copy;
+    }
+
+    /** Core constructor: the runtime uses {@code cache} as-is. */
+    private ModelRuntime(CompiledModel model, ModelState state, ExpressionCache cache, Void marker) {
+        this.model            = model;
+        this.state            = state;
+        this.cache            = cache;
+        this.derivationEval   = new DerivationEvaluator(cache);
+        this.metaEval         = new MetaDerivationEvaluator(cache);
+        this.constraintEval   = new ConstraintEvaluator(cache);
         this.effectDispatcher = new EffectDispatcher(cache);
-        this.defaultApplier  = new DefaultValueApplier(cache);
+        this.defaultApplier   = new DefaultValueApplier(cache);
     }
 
     /** Registers an {@link EffectDispatcher.EffectSink} to receive emitted effect requests. */

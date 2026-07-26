@@ -4,9 +4,12 @@ import org.json_kula.jsonata_jvm.JsonataCompilationException;
 import org.json_kula.jsonata_jvm.JsonataExpression;
 import org.json_kula.jsonata_jvm.JsonataExpressionFactory;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Thread-safe, bounded cache of compiled {@link JsonataExpression} objects.
@@ -80,6 +83,40 @@ public final class ExpressionCache {
             return factory.compile(expr);
         } catch (JsonataCompilationException e) {
             throw new CompilationException(expr, e);
+        }
+    }
+
+    /**
+     * Pre-compiles every not-yet-cached expression in {@code expressions} in a <b>single</b> javac
+     * invocation via {@link JsonataExpressionFactory#compileAll}, rather than one invocation per
+     * expression. Each javac invocation carries a large fixed cost (compiler bootstrap, platform
+     * symbol loading, classpath indexing), so batching a model's expressions up front is markedly
+     * faster than compiling them lazily one at a time on first access.
+     *
+     * <p>Best-effort by design: if the batch contains a syntactically invalid expression, {@code
+     * compileAll} aborts and nothing is installed — the expressions are then compiled lazily on first
+     * {@link #get}, which surfaces the precise error (e.g. during validation). Warming never throws;
+     * a failure only forgoes the batch speedup. Blank/duplicate/already-cached entries are skipped.
+     */
+    public void warm(Collection<String> expressions) {
+        if (expressions == null || expressions.isEmpty()) return;
+        List<String> uncached = expressions.stream()
+                .filter(Objects::nonNull)
+                .filter(e -> !e.isBlank())
+                .distinct()
+                .filter(e -> !cache.containsKey(e))
+                .toList();
+        if (uncached.isEmpty()) return;
+        try {
+            List<JsonataExpression> compiled = factory.compileAll(uncached);
+            synchronized (cache) {
+                for (int i = 0; i < uncached.size(); i++) {
+                    cache.putIfAbsent(uncached.get(i), compiled.get(i));
+                }
+            }
+        } catch (JsonataCompilationException e) {
+            // Best-effort: leave the expressions for lazy per-expression compilation via get(),
+            // which reports the precise CompilationException at first use.
         }
     }
 

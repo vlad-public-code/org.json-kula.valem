@@ -40,6 +40,16 @@ public final class TestCaseRunner {
      * @return one {@link TestResult} per element of {@code tests}; empty list if {@code tests} is empty
      */
     public static List<TestResult> run(ModelSpec spec, List<TestCase> tests) {
+        return run(spec, tests, new ExpressionCache());
+    }
+
+    /**
+     * As {@link #run(ModelSpec, List)}, but each throw-away runtime uses {@code cache} directly rather
+     * than compiling into a private one. Passing the same (warmed) cache the surrounding validation
+     * and the registered runtime use means the tests reuse already-compiled expressions instead of
+     * paying the javac round-trip again.
+     */
+    public static List<TestResult> run(ModelSpec spec, List<TestCase> tests, ExpressionCache cache) {
         if (tests.isEmpty()) return List.of();
 
         CompiledModel model;
@@ -55,15 +65,16 @@ public final class TestCaseRunner {
 
         List<TestResult> results = new ArrayList<>(tests.size());
         for (TestCase test : tests) {
-            results.add(runOne(model, test));
+            results.add(runOne(model, test, cache));
         }
         return List.copyOf(results);
     }
 
     // ── Internals ─────────────────────────────────────────────────────────────
 
-    private static TestResult runOne(CompiledModel model, TestCase test) {
-        ModelRuntime rt = new ModelRuntime(model, new ModelState(model, new InMemoryBlobStore()));
+    private static TestResult runOne(CompiledModel model, TestCase test, ExpressionCache cache) {
+        ModelRuntime rt = ModelRuntime.withSharedCache(
+                model, new ModelState(model, new InMemoryBlobStore()), cache);
 
         // Apply defaultValues before the given mutations, exactly as real model creation does
         // (ModelService.createModel runs initialize() right after constructing the runtime).

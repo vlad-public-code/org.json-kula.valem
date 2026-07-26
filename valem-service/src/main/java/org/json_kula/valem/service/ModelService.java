@@ -10,12 +10,14 @@ import org.json_kula.valem.core.blob.BlobStore;
 import org.json_kula.valem.core.blob.NoSuchBlobException;
 import org.json_kula.valem.core.engine.ConstraintEvaluator;
 import org.json_kula.valem.core.engine.DerivationTrace;
+import org.json_kula.valem.core.engine.ExpressionCache;
 import org.json_kula.valem.core.engine.ModelRuntime;
 import org.json_kula.valem.core.engine.SchemaStateChecker;
 import org.json_kula.valem.core.graph.CompiledModel;
 import org.json_kula.valem.core.graph.ModelSpecCompiler;
 import org.json_kula.valem.core.graph.ModelSpecValidator;
 import org.json_kula.valem.core.graph.SpecEvolution;
+import org.json_kula.valem.core.graph.SpecExpressions;
 import org.json_kula.valem.core.model.BlobRef;
 import org.json_kula.valem.core.model.ModelSpec;
 import org.json_kula.valem.core.state.ModelState;
@@ -69,6 +71,15 @@ public class ModelService implements ModelOperations, ChangeSubscribable {
     private final BlobStore     blobStore;
     private final int           mutationQueueCapacity;
     private final int           maxModels;
+
+    /**
+     * One server-lifetime expression cache shared by every model this service registers, plus the
+     * validation and self-test passes that precede registration. Compiled JSONata expressions are
+     * immutable and stateless, so sharing is safe, and it means each distinct expression string is
+     * compiled at most once across the whole process — including across reloads of the same example
+     * and across models that share an expression. Bounded (LRU) internally; eviction just recompiles.
+     */
+    private final ExpressionCache expressionCache = new ExpressionCache();
 
     private static final int  QUEUE_MAX_MODELS = 10_000;
     private static final long QUEUE_IDLE_TTL_H = 1;
@@ -348,7 +359,15 @@ public class ModelService implements ModelOperations, ChangeSubscribable {
      * @throws ConstraintEvaluator.ConstraintViolationException if creation-time defaults trigger a ROLLBACK constraint
      */
     public void createModel(ModelSpec spec) {
-        ModelSpecValidator.ValidationResult validation = ModelSpecValidator.validate(spec);
+        // Compile every expression of this spec in a single javac invocation up front, into the
+        // shared cache. Validation, the runtime, and any self-tests below all read that same cache,
+        // so each expression compiles exactly once (in this batch) instead of once per pass.
+        expressionCache.warm(SpecExpressions.collect(spec));
+
+        // Skip the spec's embedded self-tests here: they are an authoring/CI concern that adds a
+        // whole extra runtime + evaluation pass, not something the end-user create path needs.
+        ModelSpecValidator.ValidationResult validation =
+                ModelSpecValidator.validate(spec, expressionCache, /*runEmbeddedTests=*/false);
         if (!validation.isValid()) {
             throw new ModelValidationException(validation);
         }
@@ -363,7 +382,7 @@ public class ModelService implements ModelOperations, ChangeSubscribable {
 
         CompiledModel model   = ModelSpecCompiler.compile(spec);
         ModelState    state   = new ModelState(model, blobStore);
-        ModelRuntime  runtime = new ModelRuntime(model, state);
+        ModelRuntime  runtime = ModelRuntime.withSharedCache(model, state, expressionCache);
         wireEffects(spec.id(), runtime);
 
         // Register BEFORE seeding — creation-time defaults can fire effects (e.g. a $-seeded status
@@ -401,10 +420,11 @@ public class ModelService implements ModelOperations, ChangeSubscribable {
      * Bypasses validation and initialState application — intended for startup restoration.
      */
     public void loadModel(ModelSpec spec, Optional<Snapshot> existingSnapshot) {
+        expressionCache.warm(SpecExpressions.collect(spec));
         CompiledModel model   = ModelSpecCompiler.compile(spec);
         ModelState    state   = new ModelState(model, blobStore);
         existingSnapshot.ifPresent(state::restore);
-        ModelRuntime  runtime = new ModelRuntime(model, state);
+        ModelRuntime  runtime = ModelRuntime.withSharedCache(model, state, expressionCache);
         wireEffects(spec.id(), runtime);
         // A restored snapshot may carry an empty/stale derivedCache (incremental mutation-log
         // replay persists only the base document). Recompute all EAGER derivations so the first
@@ -653,11 +673,14 @@ public class ModelService implements ModelOperations, ChangeSubscribable {
 
                 ModelSpec     evolved    = evolution.applyTo(current);
                 validateViewParses(evolved);
+                // Batch-compile any expressions the evolution introduced; unchanged ones are already
+                // in the shared cache, so this only pays for what actually changed.
+                expressionCache.warm(SpecExpressions.collect(evolved));
                 CompiledModel newModel   = ModelSpecCompiler.compile(evolved);
                 ModelState    newState   = rt.stateView().withModel(newModel);
-                // Carry compiled expressions forward so an evolution that leaves most expressions
-                // unchanged does not pay the javac round-trip to recompile them.
-                ModelRuntime  newRuntime = new ModelRuntime(newModel, newState, rt.expressionCache());
+                // The new runtime uses the shared server-lifetime cache directly, so expressions the
+                // evolution leaves unchanged are not recompiled.
+                ModelRuntime  newRuntime = ModelRuntime.withSharedCache(newModel, newState, expressionCache);
                 wireEffects(id, newRuntime);
 
                 // Backfill: seed values for new fields on the existing instance where they are
