@@ -78,7 +78,8 @@
           { "id": "dateTimeLabel",  "type": "label", "label": "Date & time",   "bind": "$.clock.dateTime" },
           { "id": "timeLabel",      "type": "label", "label": "Local time",    "bind": "$.clock.time" },
           { "id": "dayLabel",       "type": "label", "label": "Day of week",   "bind": "$.clock.dayOfWeek" },
-          { "id": "tickLabel",      "type": "label", "label": "Refresh #",     "bind": "$.clock.tick" },
+          { "id": "tickLabel",      "type": "label", "label": "Refresh #",     "bind": "$.clock.tick",
+  "format": "integer" },
           { "id": "sep2", "type": "separatorLine" },
           { "id": "fetchIoLabel",   "type": "label", "label": "Fetch status",   "bind": "$.clock.ioFetch.phase" },
           { "id": "refreshIoLabel", "type": "label", "label": "Refresh status", "bind": "$.clock.ioRefresh.phase" }

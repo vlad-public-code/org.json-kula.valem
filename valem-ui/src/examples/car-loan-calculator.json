@@ -163,19 +163,25 @@
                 "id": "paymentLabel",
                 "type": "label",
                 "label": "Monthly Payment",
-                "bind": "$.monthlyPayment"
+                "bind": "$.monthlyPayment",
+                "format": "currency",
+                "currency": "USD"
               },
               {
                 "id": "totalLabel",
                 "type": "label",
                 "label": "Total Payment",
-                "bind": "$.totalPayment"
+                "bind": "$.totalPayment",
+                "format": "currency",
+                "currency": "USD"
               },
               {
                 "id": "interestLabel",
                 "type": "label",
                 "label": "Total Interest",
-                "bind": "$.totalInterest"
+                "bind": "$.totalInterest",
+                "format": "currency",
+                "currency": "USD"
               }
             ]
           },

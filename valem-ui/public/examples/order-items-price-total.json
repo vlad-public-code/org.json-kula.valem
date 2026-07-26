@@ -103,7 +103,9 @@
             "id": "totalLabel",
             "type": "label",
             "label": "Grand Total",
-            "bind": "$.total"
+            "bind": "$.total",
+            "format": "currency",
+            "currency": "USD"
           }
         ]
       }
