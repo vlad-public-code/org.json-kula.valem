@@ -161,7 +161,7 @@
             "components": [
               {
                 "id": "paymentLabel",
-                "type": "label",
+                "type": "statTile",
                 "label": "Monthly Payment",
                 "bind": "$.monthlyPayment",
                 "format": "currency",
@@ -169,7 +169,7 @@
               },
               {
                 "id": "totalLabel",
-                "type": "label",
+                "type": "statTile",
                 "label": "Total Payment",
                 "bind": "$.totalPayment",
                 "format": "currency",
@@ -177,7 +177,7 @@
               },
               {
                 "id": "interestLabel",
-                "type": "label",
+                "type": "statTile",
                 "label": "Total Interest",
                 "bind": "$.totalInterest",
                 "format": "currency",

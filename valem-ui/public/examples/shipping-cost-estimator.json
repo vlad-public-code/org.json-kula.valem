@@ -160,7 +160,7 @@
             "components": [
               {
                 "id": "subtotalLabel",
-                "type": "label",
+                "type": "statTile",
                 "label": "Subtotal",
                 "bind": "$.subtotal",
                 "format": "currency",
@@ -168,7 +168,7 @@
               },
               {
                 "id": "totalLabel",
-                "type": "label",
+                "type": "statTile",
                 "label": "Total Cost",
                 "bind": "$.totalCost",
                 "format": "currency",
