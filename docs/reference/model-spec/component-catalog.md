@@ -341,11 +341,14 @@ Displays a bound value or a dynamic text expression next to an optional label ca
 | Extra field | Description |
 |---|---|
 | `text` | String literal or JSONata expression; overrides the bound value for display |
+| `format` | `"currency"`, `"percent"`, `"number"`, `"integer"` — formats a bound **numeric** value the same way `dataTable` columns, `keyValueList` rows and `statTile` do. Omit it and the value renders verbatim, so a label over an id, a year or free text is unaffected |
+| `currency` | ISO-4217 code, read only when `format` is `currency` |
 
 ```json
 {
   "id": "totalLabel", "type": "label",
-  "label": "Grand Total", "bind": "$.total"
+  "label": "Grand Total", "bind": "$.total",
+  "format": "currency", "currency": "USD"
 }
 ```
 
@@ -467,9 +470,10 @@ Tabular view of an array field.
 | `currency` | ISO-4217 code. Per **column**, since a table legitimately holds more than one; without it a `currency` format falls back to the renderer's default |
 | `width` | CSS width string (e.g. `"40%"`, `"120px"`) |
 
-Formatting is shared with `keyValueList` and `statTile`, so a column, a summary row and a tile over
-the same field always read the same. In particular `percent` **appends a sign and does not
-rescale** — a stored `7.5` shows as `7.5%`, not `750%`.
+Formatting is shared with `keyValueList`, `statTile` and `label`, so a column, a summary row, a tile
+and a label over the same field always read the same. In particular `percent` **appends a sign and
+does not rescale** — a stored `7.5` shows as `7.5%`, not `750%`. Currency uses the short symbol
+(`$1,250.00`, not `US$1,250.00`).
 
 #### `dataChart`
 
