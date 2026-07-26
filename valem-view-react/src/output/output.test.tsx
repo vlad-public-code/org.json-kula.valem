@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderComponent } from '../test/renderComponent';
-import type { KeyValueListSpec, StaticTextSpec, ValidationSummarySpec } from '../types';
+import type { KeyValueListSpec, LabelSpec, StaticTextSpec, ValidationSummarySpec } from '../types';
 
 describe('KeyValueList', () => {
   const spec = (over: Partial<KeyValueListSpec> = {}): KeyValueListSpec => ({
@@ -177,6 +177,28 @@ describe('LinkComponent', () => {
   it('renders nothing when it has no destination', () => {
     renderComponent({ id: 'l', type: 'link', label: 'Nowhere' });
     expect(screen.queryByTestId('l')).not.toBeInTheDocument();
+  });
+});
+
+describe('LabelComponent formatting', () => {
+  const spec = (over: Partial<LabelSpec> = {}): LabelSpec => ({ id: 'lbl', type: 'label', ...over });
+
+  it('formats a bound numeric value when a format is set', () => {
+    renderComponent(spec({ label: 'Total', bind: '$.total', format: 'currency', currency: 'USD' }),
+      { state: { total: 23199.6 } });
+    const el = screen.getByTestId('lbl');
+    // Symbol placement and grouping glyphs are locale-dependent (the CI locale prints "23,199.60 $"),
+    // so assert the placement-independent facts: it carries the short symbol and is no longer the raw
+    // number.
+    expect(el).toHaveTextContent('$');
+    expect(el).not.toHaveTextContent('US$');
+    expect(el.textContent).not.toContain('23199.6');
+  });
+
+  it('leaves an unformatted bound value verbatim, so ids and years are not grouped', () => {
+    renderComponent(spec({ label: 'Year', bind: '$.year' }), { state: { year: 2026 } });
+    expect(screen.getByTestId('lbl')).toHaveTextContent('2026');
+    expect(screen.getByTestId('lbl')).not.toHaveTextContent('2,026');
   });
 });
 

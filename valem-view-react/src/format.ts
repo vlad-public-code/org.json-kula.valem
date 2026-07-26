@@ -21,6 +21,9 @@ export function formatValue(value: unknown, format?: string, currency?: string):
         return new Intl.NumberFormat(undefined, {
           style: 'currency',
           currency: currency ?? 'USD',
+          // Prefer the short symbol ($, not US$). Without this, a non-US runtime locale disambiguates
+          // USD as "US$" — correct but noisy, and inconsistent with the input prefix below.
+          currencyDisplay: 'narrowSymbol',
         }).format(n);
       } catch {
         // An invalid ISO-4217 code throws rather than degrading; show the number and the code.
@@ -45,7 +48,7 @@ function formatNumber(n: number): string {
 export function currencySymbol(currency?: string): string {
   const code = currency ?? 'USD';
   try {
-    const parts = new Intl.NumberFormat(undefined, { style: 'currency', currency: code })
+    const parts = new Intl.NumberFormat(undefined, { style: 'currency', currency: code, currencyDisplay: 'narrowSymbol' })
       .formatToParts(0);
     return parts.find(p => p.type === 'currency')?.value ?? code;
   } catch {

@@ -1,6 +1,7 @@
 import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
 import { useJSONata, useJSONataLiteral, useJSONataText } from '../hooks/useJSONata';
+import { useFlashOnChange } from '../hooks/useFlashOnChange';
 import { formatValue } from '../format';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { StatTileSpec } from '../types';
@@ -31,8 +32,13 @@ export function StatTile({ component: c }: BaseComponentProps<StatTileSpec>) {
   const trendName = useJSONataLiteral(c.trend, state);
   const trend = trendName ? TRENDS[trendName] : undefined;
 
+  // Pulse the tile whenever its headline number is recomputed. The card's resting background is
+  // white, so the fade lands there with no snap.
+  const flashRef = useFlashOnChange<HTMLDivElement>(value, '#ffffff');
+
   return (
     <div
+      ref={flashRef}
       data-testid={c.id}
       title={c.tooltip}
       style={{

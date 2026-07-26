@@ -192,6 +192,13 @@ export interface LabelSpec extends ComponentSpecBase {
   type: 'label';
   label?: string;
   text?: string;
+  /**
+   * Formats a bound numeric value the same way statTile and keyValueList rows do (`currency`,
+   * `percent`, `integer`, `number`). Unset renders the value verbatim, so a label bound to an id,
+   * a year or free text is unaffected — only a label that asks to be formatted is.
+   */
+  format?: string;
+  currency?: string;
 }
 
 /**
