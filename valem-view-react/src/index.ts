@@ -17,6 +17,7 @@ export type { Country } from './hooks/useCountries';
 export { useRegions } from './hooks/useRegions';
 export type { Region } from './hooks/useRegions';
 export { useResolvedOptions } from './hooks/useResolvedOptions';
+export { useFlashOnChange } from './hooks/useFlashOnChange';
 
 // Formatting — the `format` / `currency` fields on inputs, tiles and summary rows
 export { formatValue, currencySymbol } from './format';

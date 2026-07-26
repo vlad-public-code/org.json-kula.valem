@@ -22,7 +22,9 @@ export function NumericField({ component: c, enabled, readOnly, required }: Base
   const suffix = format === 'percent' ? '%' : undefined;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+    // Numbers are short, so cap the field width: a full-canvas-wide box for a value like `60` reads
+    // as unfinished. It still shrinks to fit a narrower grid cell (maxWidth, not a fixed width).
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxWidth: 220 }}>
       {c.label && (
         <label htmlFor={c.id} style={{ fontSize: 13, fontWeight: 500 }}>
           {c.label}

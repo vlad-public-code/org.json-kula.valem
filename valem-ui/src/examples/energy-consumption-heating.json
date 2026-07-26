@@ -204,25 +204,30 @@
                 "id": "deltaLabel",
                 "type": "label",
                 "label": "Temp Delta (K)",
-                "bind": "$.tempDeltaK"
+                "bind": "$.tempDeltaK",
+                "format": "number"
               },
               {
                 "id": "demandLabel",
                 "type": "label",
                 "label": "Peak Heat Demand (kW)",
-                "bind": "$.heatDemandKw"
+                "bind": "$.heatDemandKw",
+                "format": "number"
               },
               {
                 "id": "kwhLabel",
                 "type": "label",
                 "label": "Monthly Consumption (kWh)",
-                "bind": "$.monthlyKwh"
+                "bind": "$.monthlyKwh",
+                "format": "number"
               },
               {
                 "id": "costLabel",
                 "type": "label",
                 "label": "Monthly Cost (€)",
-                "bind": "$.monthlyCostEur"
+                "bind": "$.monthlyCostEur",
+                "format": "currency",
+                "currency": "EUR"
               }
             ]
           }

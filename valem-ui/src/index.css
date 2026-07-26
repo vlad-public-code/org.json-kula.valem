@@ -293,7 +293,19 @@ a:hover { text-decoration: underline; text-underline-offset: 2px; }
 }
 .btn:hover { background: var(--surface-2); border-color: var(--border-strong); }
 .btn:active { transform: translateY(1px); }
-.btn:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+/* A flat, inert grey rather than a translucent one: fading a filled .btn-primary with opacity made
+ * the accent and its white label both semi-transparent, which read as a half-loaded/broken button.
+ * An explicit neutral fill (overriding the coloured variants and their :hover) reads as "unavailable".
+ * The :disabled:hover selector outweighs .btn-primary:hover, so a disabled primary can't re-tint. */
+.btn:disabled,
+.btn:disabled:hover {
+  cursor: not-allowed;
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text-muted);
+  box-shadow: none;
+  transform: none;
+}
 .btn-primary {
   background: var(--accent);
   border-color: transparent;

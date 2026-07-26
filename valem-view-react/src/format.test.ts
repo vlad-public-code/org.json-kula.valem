@@ -21,6 +21,14 @@ describe('formatValue', () => {
     expect(formatValue(10, 'currency')).toMatch(/10/);
   });
 
+  it('shows the short currency symbol, not the locale-disambiguated one', () => {
+    // narrowSymbol keeps USD as "$" even when the runtime locale would otherwise print "US$".
+    const usd = formatValue(1250.5, 'currency', 'USD');
+    expect(usd).toContain('$');
+    expect(usd).not.toContain('US$');
+    expect(currencySymbol('USD')).toBe('$');
+  });
+
   it('survives an invalid ISO code instead of throwing', () => {
     // Intl throws on a bad code; a spec typo must not take the whole view down.
     const out = formatValue(42, 'currency', 'NOTACODE');

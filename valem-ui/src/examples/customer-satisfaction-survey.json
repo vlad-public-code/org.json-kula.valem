@@ -249,7 +249,8 @@
                 "id": "sentimentLabel",
                 "type": "label",
                 "label": "Sentiment Score",
-                "bind": "$.sentimentScore"
+                "bind": "$.sentimentScore",
+                "format": "integer"
               },
               {
                 "id": "priorityBadge",

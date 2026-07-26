@@ -239,19 +239,25 @@
             "id": "totalIncomeLabel",
             "type": "label",
             "label": "Total Income",
-            "bind": "$.totalIncome"
+            "bind": "$.totalIncome",
+            "format": "currency",
+            "currency": "USD"
           },
           {
             "id": "totalExpensesLabel",
             "type": "label",
             "label": "Total Expenses",
-            "bind": "$.totalExpenses"
+            "bind": "$.totalExpenses",
+            "format": "currency",
+            "currency": "USD"
           },
           {
             "id": "balanceLabel",
             "type": "label",
             "label": "Balance",
-            "bind": "$.balance"
+            "bind": "$.balance",
+            "format": "currency",
+            "currency": "USD"
           },
           {
             "id": "statusBadge",

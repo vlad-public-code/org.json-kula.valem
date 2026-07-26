@@ -162,13 +162,17 @@
                 "id": "subtotalLabel",
                 "type": "label",
                 "label": "Subtotal",
-                "bind": "$.subtotal"
+                "bind": "$.subtotal",
+                "format": "currency",
+                "currency": "USD"
               },
               {
                 "id": "totalLabel",
                 "type": "label",
                 "label": "Total Cost",
-                "bind": "$.totalCost"
+                "bind": "$.totalCost",
+                "format": "currency",
+                "currency": "USD"
               }
             ]
           },
