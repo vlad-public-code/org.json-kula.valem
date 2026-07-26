@@ -247,7 +247,7 @@
             "components": [
               {
                 "id": "sentimentLabel",
-                "type": "label",
+                "type": "statTile",
                 "label": "Sentiment Score",
                 "bind": "$.sentimentScore",
                 "format": "integer"

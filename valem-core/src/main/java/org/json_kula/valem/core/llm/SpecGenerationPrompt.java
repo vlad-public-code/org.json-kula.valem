@@ -132,12 +132,20 @@ public final class SpecGenerationPrompt {
               multiSelectField     multi-select; same options fields as selectField
 
             Data output:
-              label          bound value or expression; extra: text (string or JSONata)
+              label          bound value or expression; extra: text (string or JSONata), format ("currency"|"percent"|"number"|"integer"), currency (ISO code, when format is currency)
+              statTile       one headline derived number as a card; extra: format, currency, delta (JSONata text), trend ("up"|"down"|"flat"), caption, icon
+              keyValueList   read-only summary of labelled values; extra: items [{label, bind (or text), format, currency}]
               staticText     non-reactive text block; extra: text (static string)
               badge          status chip; extra: text, variant ("primary"|"secondary"|"success"|"warning"|"danger")
               separatorLine  horizontal rule; no extra fields
               dataTable      array as table; extra: tableColumns [{field, header, format, width}], pageSize (int)
               dataChart      chart; extra: chartType ("bar"|"line"|"area"|"pie"), chartX, chartSeries [{field, label, color}]
+
+            Formatting numbers: on EVERY numeric output — label, statTile, keyValueList row and dataTable
+            column — set "format": "currency" (with a "currency" ISO code), "percent" (appends a % sign;
+            does NOT multiply by 100), "number", or "integer". Never render a raw derived number. Present
+            the one-to-three headline results a model computes as statTile cards grouped horizontally,
+            not plain labels.
 
             JSONata in view expressions — field reference syntax:
               Reference model fields by their unqualified name: age, totalTax, emissionsBand.

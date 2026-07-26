@@ -6,14 +6,20 @@ import { formatValue } from '../format';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { StatTileSpec } from '../types';
 
+// Trend colours read from the design tokens, with literal fallbacks for standalone use.
 const TRENDS: Record<string, { glyph: string; color: string }> = {
-  up:   { glyph: '▲', color: '#15803d' },
-  down: { glyph: '▼', color: '#b91c1c' },
-  flat: { glyph: '▬', color: '#6b7280' },
+  up:   { glyph: '▲', color: 'var(--green, #0e9f6e)' },
+  down: { glyph: '▼', color: 'var(--red, #e5484d)' },
+  flat: { glyph: '▬', color: 'var(--text-muted, #6a6b7c)' },
 };
 
 /**
  * `statTile` / `metric` — one headline number with its supporting text.
+ *
+ * Styled as the reactive instrument's readout: an emerald "computed" edge, monospace tabular
+ * numerals, and the emerald flash (via {@link useFlashOnChange}) when the number recomputes — so a
+ * derived total reads as the model's live answer, not body copy. Consumes the shared design tokens
+ * (`--signal`, `--panel-bg`, `--text`, …) and falls back to literals when they're absent.
  *
  * `trend` colours the delta and is authored separately from the delta's sign on purpose: rising
  * spend is bad news and rising savings is good, and only the spec knows which this is. With no
@@ -32,8 +38,7 @@ export function StatTile({ component: c }: BaseComponentProps<StatTileSpec>) {
   const trendName = useJSONataLiteral(c.trend, state);
   const trend = trendName ? TRENDS[trendName] : undefined;
 
-  // Pulse the tile whenever its headline number is recomputed. The card's resting background is
-  // white, so the fade lands there with no snap.
+  // The tile's resting background is white, so the emerald flash fades back to it with no snap.
   const flashRef = useFlashOnChange<HTMLDivElement>(value, '#ffffff');
 
   return (
@@ -45,37 +50,53 @@ export function StatTile({ component: c }: BaseComponentProps<StatTileSpec>) {
         display: 'flex',
         flexDirection: 'column',
         gap: 4,
-        padding: '12px 16px',
-        border: '1px solid #e5e7eb',
-        borderRadius: 8,
-        background: '#fff',
+        padding: '11px 14px',
+        border: '1px solid var(--border, #e7e8f1)',
+        borderLeft: '3px solid var(--signal, #0e9f6e)',
+        borderRadius: 'var(--radius, 10px)',
+        background: 'var(--panel-bg, #fff)',
         minWidth: 140,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {c.icon && <span aria-hidden style={{ fontSize: 14 }}>{c.icon}</span>}
         {c.label && (
-          <span style={{ fontSize: 12, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-muted, #6a6b7c)' }}>
             {c.label}
           </span>
         )}
       </div>
 
-      <span data-testid={`${c.id}-value`} style={{ fontSize: 24, fontWeight: 700, color: '#111827', lineHeight: 1.15 }}>
+      <span
+        data-testid={`${c.id}-value`}
+        style={{
+          fontFamily: 'var(--font-mono, ui-monospace, "SF Mono", "JetBrains Mono", Consolas, monospace)',
+          fontVariantNumeric: 'tabular-nums',
+          fontSize: 26,
+          fontWeight: 650,
+          letterSpacing: '-0.01em',
+          color: 'var(--text, #16161f)',
+          lineHeight: 1.1,
+          marginTop: 2,
+        }}
+      >
         {formatValue(value, c.format, c.currency) || '—'}
       </span>
 
       {delta && (
         <span
           data-testid={`${c.id}-delta`}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: trend?.color ?? '#6b7280' }}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12,
+            fontVariantNumeric: 'tabular-nums', color: trend?.color ?? 'var(--text-muted, #6a6b7c)',
+          }}
         >
           {trend && <span aria-hidden>{trend.glyph}</span>}
           {delta}
         </span>
       )}
 
-      {caption && <span style={{ fontSize: 11, color: '#9ca3af' }}>{caption}</span>}
+      {caption && <span style={{ fontSize: 11, color: 'var(--text-light, #85869a)' }}>{caption}</span>}
     </div>
   );
 }

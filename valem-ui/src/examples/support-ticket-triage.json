@@ -83,12 +83,19 @@
           { "id": "description", "type": "textField", "label": "Describe your issue", "bind": "$.ticket.description", "placeholder": "e.g. I was charged twice for my order" },
           { "id": "status", "type": "textField", "label": "Status", "bind": "$.ticket.status" },
           { "id": "sep1", "type": "separatorLine" },
-          { "id": "category", "type": "label", "label": "Category (from AI)", "bind": "$.ticket.category" },
-          { "id": "urgency", "type": "label", "label": "Urgency 1-5 (from AI)", "bind": "$.ticket.urgency",
+          {
+            "id": "triageResults",
+            "type": "group",
+            "layout": "horizontal",
+            "components": [
+              { "id": "category", "type": "label", "label": "Category (from AI)", "bind": "$.ticket.category" },
+              { "id": "urgency", "type": "statTile", "label": "Urgency 1-5 (from AI)", "bind": "$.ticket.urgency",
   "format": "integer" },
-          { "id": "highPriority", "type": "label", "label": "High priority", "bind": "$.ticket.highPriority" },
-          { "id": "responseMinutes", "type": "label", "label": "Promised response (minutes)", "bind": "$.ticket.responseMinutes",
-  "format": "number" },
+              { "id": "highPriority", "type": "label", "label": "High priority", "bind": "$.ticket.highPriority" },
+              { "id": "responseMinutes", "type": "statTile", "label": "Promised response (minutes)", "bind": "$.ticket.responseMinutes",
+  "format": "number" }
+            ]
+          },
           { "id": "sep2", "type": "separatorLine" },
           { "id": "classifyStatus", "type": "label", "label": "AI classification", "bind": "$.ticket.ioClassify.phase" },
           { "id": "slaStatus", "type": "label", "label": "SLA lookup", "bind": "$.ticket.ioSla.phase" },

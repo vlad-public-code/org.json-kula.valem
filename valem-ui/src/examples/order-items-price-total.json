@@ -100,12 +100,19 @@
           },
           { "id": "sep2", "type": "separatorLine" },
           {
-            "id": "totalLabel",
-            "type": "label",
-            "label": "Grand Total",
-            "bind": "$.total",
-            "format": "currency",
-            "currency": "USD"
+            "id": "totalRow",
+            "type": "group",
+            "layout": "horizontal",
+            "components": [
+              {
+                "id": "totalLabel",
+                "type": "statTile",
+                "label": "Grand Total",
+                "bind": "$.total",
+                "format": "currency",
+                "currency": "USD"
+              }
+            ]
           }
         ]
       }
