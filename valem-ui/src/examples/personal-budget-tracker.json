@@ -236,28 +236,35 @@
             ]
           },
           {
-            "id": "totalIncomeLabel",
-            "type": "label",
-            "label": "Total Income",
-            "bind": "$.totalIncome",
-            "format": "currency",
-            "currency": "USD"
-          },
-          {
-            "id": "totalExpensesLabel",
-            "type": "label",
-            "label": "Total Expenses",
-            "bind": "$.totalExpenses",
-            "format": "currency",
-            "currency": "USD"
-          },
-          {
-            "id": "balanceLabel",
-            "type": "label",
-            "label": "Balance",
-            "bind": "$.balance",
-            "format": "currency",
-            "currency": "USD"
+            "id": "budgetSummary",
+            "type": "group",
+            "layout": "horizontal",
+            "components": [
+              {
+                "id": "totalIncomeLabel",
+                "type": "statTile",
+                "label": "Total Income",
+                "bind": "$.totalIncome",
+                "format": "currency",
+                "currency": "USD"
+              },
+              {
+                "id": "totalExpensesLabel",
+                "type": "statTile",
+                "label": "Total Expenses",
+                "bind": "$.totalExpenses",
+                "format": "currency",
+                "currency": "USD"
+              },
+              {
+                "id": "balanceLabel",
+                "type": "statTile",
+                "label": "Balance",
+                "bind": "$.balance",
+                "format": "currency",
+                "currency": "USD"
+              }
+            ]
           },
           {
             "id": "statusBadge",

@@ -112,16 +112,23 @@
           { "id": "household", "type": "numericField", "label": "Household size",              "bind": "$.application.householdSize" },
           { "id": "age",       "type": "numericField", "label": "Age",                          "bind": "$.application.age" },
           { "id": "sep1",      "type": "separatorLine" },
-          { "id": "poverty",   "type": "label", "label": "Poverty line ($)",     "bind": "$.application.povertyLine",
+          {
+            "id": "results",
+            "type": "group",
+            "layout": "horizontal",
+            "components": [
+              { "id": "poverty",   "type": "statTile", "label": "Poverty line ($)",     "bind": "$.application.povertyLine",
   "format": "currency",
   "currency": "USD" },
-          { "id": "ratio",     "type": "label", "label": "Income ratio",         "bind": "$.application.incomeRatio",
+              { "id": "ratio",     "type": "statTile", "label": "Income ratio",         "bind": "$.application.incomeRatio",
   "format": "number" },
-          { "id": "tier",      "type": "label", "label": "Tier",                 "bind": "$.application.tier" },
-          { "id": "eligible",  "type": "label", "label": "Eligible",             "bind": "$.application.eligible" },
-          { "id": "benefit",   "type": "label", "label": "Monthly benefit ($)",  "bind": "$.application.monthlyBenefit",
+              { "id": "tier",      "type": "label", "label": "Tier",                 "bind": "$.application.tier" },
+              { "id": "eligible",  "type": "label", "label": "Eligible",             "bind": "$.application.eligible" },
+              { "id": "benefit",   "type": "statTile", "label": "Monthly benefit ($)",  "bind": "$.application.monthlyBenefit",
   "format": "currency",
-  "currency": "USD" },
+  "currency": "USD" }
+            ]
+          },
           { "id": "sep2",      "type": "separatorLine" },
           { "id": "verifyIo",  "type": "label", "label": "Income verification",  "bind": "$.application.ioVerify.phase" }
         ]
