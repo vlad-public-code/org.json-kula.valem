@@ -75,5 +75,11 @@ public record ModelSpec(
                 lineage          != null ? List.copyOf(lineage)          : List.of()
         );
     }
+
+    /** A copy of this spec carrying a different {@code id}; every other field is shared unchanged. */
+    public ModelSpec withId(String newId) {
+        return new ModelSpec(newId, version, schema, derivations, metaDerivations, constraints,
+                tests, defaultValues, constants, viewDefinition, effects, template, lineage);
+    }
 }
 

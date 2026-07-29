@@ -117,6 +117,22 @@ class ToolRegistryTest {
     }
 
     @Test
+    void create_model_postfixes_a_duplicate_id_instead_of_failing() {
+        createModel();                       // claims "mcp-test"
+
+        ObjectNode second = createModel();   // same spec/id again
+        assertThat(second.path("isError").asBoolean()).isFalse();
+        assertThat(payload(second).path("id").asText()).isEqualTo("mcp-test-2");
+
+        ObjectNode third = createModel();    // and again
+        assertThat(payload(third).path("id").asText()).isEqualTo("mcp-test-3");
+
+        // all three are distinct, live models
+        JsonNode ids = payload(registry.call("list_models", MAPPER.createObjectNode()));
+        assertThat(elems(ids)).contains("mcp-test", "mcp-test-2", "mcp-test-3");
+    }
+
+    @Test
     void list_models_reflects_created_model() {
         createModel();
         ObjectNode result = registry.call("list_models", MAPPER.createObjectNode());

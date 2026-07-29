@@ -20,6 +20,8 @@ import org.json_kula.valem.core.model.ModelSpec;
 import org.json_kula.valem.core.model.TestCase;
 import org.json_kula.valem.core.state.PathConverter;
 import org.json_kula.valem.core.state.Snapshot;
+import org.json_kula.valem.cli.RemoteOperationException;
+import org.json_kula.valem.service.ModelAlreadyExistsException;
 import org.json_kula.valem.service.ModelOperations;
 import org.json_kula.valem.service.ModelRegistry;
 import org.json_kula.valem.service.ModelService;
@@ -82,6 +84,41 @@ class ToolRegistry {
         register();
     }
 
+    /** Upper bound on postfix attempts, so a persistent non-duplicate failure still surfaces promptly. */
+    private static final int MAX_ID_COLLISION_RETRIES = 100;
+
+    /**
+     * Creates {@code spec}, retrying with an appended numeric postfix ({@code -2}, {@code -3}, …) if the
+     * requested id is already taken — so re-running {@code create_model} (a very common agent slip) mints
+     * a fresh model instead of failing. Only an id collision triggers a retry; any other failure (invalid
+     * spec, session model cap, transport error) propagates unchanged.
+     *
+     * @return the id the model was actually created under (the requested id, or a postfixed variant)
+     */
+    private String createWithUniqueId(ModelSpec spec) {
+        String baseId = spec.id();
+        for (int attempt = 1; ; attempt++) {
+            String candidateId = attempt == 1 ? baseId : baseId + "-" + attempt;
+            try {
+                service.createModel(attempt == 1 ? spec : spec.withId(candidateId));
+                return candidateId;
+            } catch (RuntimeException e) {
+                if (isDuplicateId(e) && attempt <= MAX_ID_COLLISION_RETRIES) continue;
+                throw e;
+            }
+        }
+    }
+
+    /** True if {@code e} is an id-already-exists failure — in embedded mode a typed exception, in
+     *  remote/sandbox mode a 409 whose server message names the collision. */
+    private static boolean isDuplicateId(RuntimeException e) {
+        if (e instanceof ModelAlreadyExistsException) return true;
+        return e instanceof RemoteOperationException roe
+                && roe.status() == 409
+                && roe.getMessage() != null
+                && roe.getMessage().contains("already exists");
+    }
+
     // ── Tool definitions ────────────────────────────────────────────────────────
 
     private void register() {
@@ -99,7 +136,9 @@ class ToolRegistry {
         add("create_model", "Create model",
             "Create a new model from a declarative ModelSpec. The spec carries the JSON schema plus "
             + "derivations (computed fields), constraints (invariants), and optional effects. Returns "
-            + "the created id. Fails (isError) on an invalid spec or a duplicate id."
+            + "the created id. Fails (isError) on an invalid spec. If the requested id is already "
+            + "taken, a numeric postfix (-2, -3, …) is appended so the create still succeeds — always "
+            + "read the returned id, it may differ from the one you sent."
             + (pairedCapable
                 ? " When paired with a browser (remote_with_browser mode), ALWAYS include a "
                   + "viewDefinition in the spec so the model is immediately visible/usable in the "
@@ -117,8 +156,8 @@ class ToolRegistry {
             annotations(false, false, false),
             args -> {
                 ModelSpec spec = mapper.treeToValue(required(args, "spec"), ModelSpec.class);
-                service.createModel(spec);
-                return service.getInfo(spec.id());   // richer than {id,status}: version + counts
+                String createdId = createWithUniqueId(spec);
+                return service.getInfo(createdId);   // richer than {id,status}: version + counts
             });
 
         add("get_model_info", "Get model info",
