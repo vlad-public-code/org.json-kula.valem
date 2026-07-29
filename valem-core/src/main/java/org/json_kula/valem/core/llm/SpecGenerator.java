@@ -598,7 +598,18 @@ public final class SpecGenerator {
         JsonNode schema    = structuredOutput ? responseSchema : null;
         LlmClient.CompletionOptions options =
                 new LlmClient.CompletionOptions(temperature, schema, maxTokensOverride);
-        return webTool != null && executor != null
+        // Web tools power the research phase on the INITIAL attempt only. A repair attempt must
+        // produce the spec from what was already gathered, not re-invoke the tools:
+        //   - the tool budget is largely spent by the first attempt, so a repair re-search usually
+        //     just hits the exhausted limit;
+        //   - each attempt is a fresh conversation, so re-offering tools on a repair is where an
+        //     off-topic call can appear — we saw a repair turn re-issue a web search that belonged
+        //     to a previously generated model (provider prompt-prefix cache bleed on the identical
+        //     system prefix). No tools on the repair, no such call; and
+        //   - withholding tools makes a stuck model emit JSON instead of wandering, which converges
+        //     faster.
+        boolean useTools = attemptIndex == 0 && webTool != null && executor != null;
+        return useTools
                 ? llm.completeWithTools(prompt, webTool.definitions(), executor, options, onProgress)
                 : llm.complete(prompt, options);
     }
