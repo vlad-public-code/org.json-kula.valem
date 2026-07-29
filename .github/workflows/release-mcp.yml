@@ -44,7 +44,7 @@ jobs:
         run: >
           mvn -pl valem-mcp -am package
           -Dtracked-json.version=1.0.0-SNAPSHOT
-          -Djsonata-jvm-compiler.version=1.0.3-SNAPSHOT
+          -Djsonata-jvm-compiler.version=1.0.4-SNAPSHOT
 
       - name: Attach jars to the release
         env:
