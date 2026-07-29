@@ -151,6 +151,38 @@ class ViewEvaluatorTest {
         assertThat(first(view).text()).isEqualTo("42");
     }
 
+    // ── bare-field-reference fallback (the "$"-gate forgiveness) ─────────────────
+
+    @Test
+    void text_bare_field_reference_is_resolved_without_a_dollar() {
+        // "name" has no $ but names a field — resolve it rather than showing the word "name".
+        EvaluatedView view = evaluate(staticText("c1", TextNode.valueOf("name")));
+        assertThat(first(view).text()).isEqualTo("Alice");
+    }
+
+    @Test
+    void text_bare_word_that_names_no_field_stays_literal() {
+        EvaluatedView view = evaluate(staticText("c1", TextNode.valueOf("Underweight")));
+        assertThat(first(view).text()).isEqualTo("Underweight");
+    }
+
+    @Test
+    void text_literal_with_operators_is_not_evaluated() {
+        // spaces + '-' → not a bare reference, so it is never parsed as "25 minus 29.9".
+        EvaluatedView view = evaluate(staticText("c1", TextNode.valueOf("25 - 29.9")));
+        assertThat(first(view).text()).isEqualTo("25 - 29.9");
+    }
+
+    @Test
+    void stattile_value_bare_field_reference_is_resolved() {
+        var tile = new org.json_kula.valem.view.model.StatTileSpec(
+                "s1", "statTile", "Score", null, null, TextNode.valueOf("score"),
+                null, null, null, null, null, null, null, null);
+        EvaluatedView view = evaluate(tile);
+        var evaluated = (org.json_kula.valem.view.engine.EvaluatedStatTile) view.components().getFirst();
+        assertThat(evaluated.value().asInt()).isEqualTo(42);
+    }
+
     // ── aggregate recursion ───────────────────────────────────────────────────
 
     @Test

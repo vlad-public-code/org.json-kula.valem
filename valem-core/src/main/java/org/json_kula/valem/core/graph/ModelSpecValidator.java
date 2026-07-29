@@ -88,6 +88,7 @@ public final class ModelSpecValidator {
         checkSpec(spec, findings);
         checkSchema(spec, findings);
         checkViewDefinition(spec, findings);
+        checkViewLint(spec, findings);
         checkDerivations(spec, cache, findings);
         checkMetaDerivations(spec, cache, findings);
         checkConstraints(spec, cache, findings);
@@ -339,6 +340,227 @@ public final class ModelSpecValidator {
         if (node == null) return null;
         com.fasterxml.jackson.databind.JsonNode v = node.get(field);
         return v != null && v.isTextual() && !v.asText().isBlank() ? v.asText() : null;
+    }
+
+    // ── View lint (WARNING-level; also the generation loop's soft view gate) ──────
+
+    /** Component fields that are shown to the user verbatim — never evaluated, never a path. */
+    private static final Set<String> VIEW_PLAIN_TEXT_FIELDS = Set.of(
+            "label", "placeholder", "helperText", "tooltip", "legend", "alt",
+            "addLabel", "removeLabel", "fromLabel", "toLabel");
+    /** Component fields carrying a JSONata display expression subject to the server "$" gate. */
+    private static final Set<String> VIEW_EXPRESSION_FIELDS = Set.of(
+            "text", "value", "caption", "delta", "trend");
+    /** Component fields carrying a "$.path" address into the model. */
+    private static final Set<String> VIEW_BIND_FIELDS = Set.of(
+            "bind", "bindFrom", "bindTo", "dependsOn");
+
+    /**
+     * Lints a {@code viewDefinition} for the two binding mistakes an LLM makes most often, both of
+     * which render wrong without any parse/validation error:
+     *
+     * <ol>
+     *   <li><b>Dangling bind</b> — a {@code bind}/{@code bindFrom}/… {@code $.path} that matches no
+     *       schema field, derivation, metaDerivation or defaultValues path (segment-aware, so
+     *       {@code $.bmi} does not spuriously match {@code $.bmiValue}); the component renders empty.</li>
+     *   <li><b>Literal-where-expression-meant</b> — a {@code text}/{@code value}/{@code caption}/…
+     *       string that a renderer shows verbatim: either wrapped in escaped quotes (the quote
+     *       characters reach the user) or a bare field reference with no {@code $}, which the
+     *       server-side {@code ViewEvaluator} does not evaluate (see the "$" gate).</li>
+     * </ol>
+     *
+     * All findings are WARNINGs — a view still renders — but the generation loop feeds them back as
+     * repair guidance ({@link #lintView(ModelSpec)}). Purely structural over the raw JSON, so no
+     * {@code valem-view} dependency.
+     */
+    private static void checkViewLint(ModelSpec spec, List<ValidationError> out) {
+        com.fasterxml.jackson.databind.JsonNode vd = spec.viewDefinition();
+        if (vd == null || !vd.isObject()) return;
+        com.fasterxml.jackson.databind.JsonNode views = vd.get("views");
+        if (views == null || !views.isArray()) return;
+
+        List<List<String>> known = knownDataPaths(spec);
+        boolean haveKnown = !known.isEmpty();
+
+        for (com.fasterxml.jackson.databind.JsonNode view : views) {
+            String vid = textField(view, "id");
+            lintComponents(view.get("components"),
+                    "viewDefinition.views." + (vid == null ? "?" : vid),
+                    known, haveKnown, out);
+        }
+    }
+
+    /** Public entry for the generation loop's soft view gate: the view-lint findings alone. */
+    public static List<ValidationError> lintView(ModelSpec spec) {
+        List<ValidationError> out = new ArrayList<>();
+        checkViewLint(spec, out);
+        return out;
+    }
+
+    private static void lintComponents(
+            com.fasterxml.jackson.databind.JsonNode components, String loc,
+            List<List<String>> known, boolean haveKnown, List<ValidationError> out) {
+        if (components == null || !components.isArray()) return;
+        for (com.fasterxml.jackson.databind.JsonNode c : components) {
+            String cid = textField(c, "id");
+            String where = loc + (cid != null ? "." + cid : "");
+            lintComponentFields(c, where, known, haveKnown, out);
+
+            // keyValueList / summaryList rows are absolute binds/exprs in their own right
+            com.fasterxml.jackson.databind.JsonNode items = c.get("items");
+            if (items != null && items.isArray()) {
+                int idx = 0;
+                for (com.fasterxml.jackson.databind.JsonNode item : items) {
+                    lintComponentFields(item, where + ".items[" + idx++ + "]", known, haveKnown, out);
+                }
+            }
+            lintComponents(c.get("components"), where, known, haveKnown, out);
+        }
+    }
+
+    private static void lintComponentFields(
+            com.fasterxml.jackson.databind.JsonNode c, String where,
+            List<List<String>> known, boolean haveKnown, List<ValidationError> out) {
+        // 1. dangling bind paths
+        if (haveKnown) {
+            for (String f : VIEW_BIND_FIELDS) {
+                String path = textField(c, f);
+                if (path != null && path.startsWith("$") && !bindKnown(segments(path), known)) {
+                    out.add(warn(where, f + " '" + path + "' matches no schema field, derivation or "
+                            + "defaultValues path — the component will render empty. Bind an existing "
+                            + "$.path (a writable field or a derivation)."));
+                }
+            }
+        }
+        // 2. over-quoted plain-text fields (rendered with the literal quote characters)
+        for (String f : VIEW_PLAIN_TEXT_FIELDS) {
+            String v = textField(c, f);
+            if (v != null && isQuoteWrapped(v)) {
+                out.add(warn(where, f + " is wrapped in quotes (" + v + ") — this is a PLAIN-TEXT "
+                        + "field shown verbatim, so the quote characters reach the user. Write it "
+                        + "plainly, e.g. \"" + f + "\": " + unquote(v) + "."));
+            }
+        }
+        // 3. display expressions that render literally
+        for (String f : VIEW_EXPRESSION_FIELDS) {
+            String v = textField(c, f);
+            if (v == null) continue;
+            if (isQuoteWrapped(v) && !v.contains("$")) {
+                out.add(warn(where, f + " (" + v + ") is a quoted literal with no '$' — it renders "
+                        + "with the quote characters. For fixed text write it plainly with no quotes; "
+                        + "to show a value use bind or a $-expression."));
+            } else if (!v.contains("$") && haveKnown && isFieldReference(v)
+                    && referencesKnownPath(v, known)) {
+                out.add(warn(where, f + " '" + v + "' looks like a field reference but has no '$', so "
+                        + "the server shows it as the literal text \"" + v + "\". Use \"bind\": "
+                        + "\"$." + v + "\" or a $-expression like \"$string(" + v + ")\"."));
+            }
+        }
+    }
+
+    /** All model data paths a view {@code bind} may legitimately address, as normalized segments. */
+    private static List<List<String>> knownDataPaths(ModelSpec spec) {
+        List<List<String>> known = new ArrayList<>();
+        collectSchemaPaths(spec.schema(), new ArrayList<>(), known);
+        for (DerivationSpec d : spec.derivations())     addSegments(d.path(), known);
+        for (MetaDerivationSpec m : spec.metaDerivations()) addSegments(m.path(), known);
+        for (DefaultValueSpec d : spec.defaultValues()) addSegments(d.path(), known);
+        return known;
+    }
+
+    private static void addSegments(String path, List<List<String>> out) {
+        List<String> s = segments(path);
+        if (s != null && !s.isEmpty()) out.add(s);
+    }
+
+    private static void collectSchemaPaths(
+            com.fasterxml.jackson.databind.JsonNode schema, List<String> prefix,
+            List<List<String>> out) {
+        if (schema == null || !schema.isObject()) return;
+        com.fasterxml.jackson.databind.JsonNode props = schema.get("properties");
+        if (props == null || !props.isObject()) return;
+        java.util.Iterator<Map.Entry<String, com.fasterxml.jackson.databind.JsonNode>> it = props.fields();
+        while (it.hasNext()) {
+            Map.Entry<String, com.fasterxml.jackson.databind.JsonNode> e = it.next();
+            com.fasterxml.jackson.databind.JsonNode child = e.getValue();
+            List<String> seg = new ArrayList<>(prefix);
+            seg.add(e.getKey());
+            out.add(seg);
+            if (child.has("properties")) {
+                collectSchemaPaths(child, seg, out);
+            } else if (child.has("items") || "array".equals(child.path("type").asText(""))) {
+                List<String> arr = new ArrayList<>(seg);
+                arr.add("[*]");
+                out.add(arr);
+                com.fasterxml.jackson.databind.JsonNode items = child.get("items");
+                if (items != null && items.isObject()) collectSchemaPaths(items, arr, out);
+            }
+        }
+    }
+
+    /** Splits a {@code $.a.b[0].c} address into segments with array indices normalized to {@code [*]}. */
+    private static List<String> segments(String path) {
+        if (path == null) return null;
+        String p = path.trim();
+        if (p.equals("$")) return List.of();
+        if (p.startsWith("$.")) p = p.substring(2);
+        else if (p.startsWith("$")) p = p.substring(1);
+        List<String> out = new ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        for (int i = 0; i < p.length(); i++) {
+            char ch = p.charAt(i);
+            if (ch == '.') {
+                if (cur.length() > 0) { out.add(cur.toString()); cur.setLength(0); }
+            } else if (ch == '[') {
+                if (cur.length() > 0) { out.add(cur.toString()); cur.setLength(0); }
+                int j = p.indexOf(']', i);
+                if (j < 0) j = p.length() - 1;
+                out.add("[*]");
+                i = j;
+            } else {
+                cur.append(ch);
+            }
+        }
+        if (cur.length() > 0) out.add(cur.toString());
+        return out;
+    }
+
+    /** A bind is valid when it equals, extends, or is extended by a known path (segment-aware). */
+    private static boolean bindKnown(List<String> bind, List<List<String>> known) {
+        if (bind == null || bind.isEmpty()) return true; // "$" — the whole document
+        for (List<String> k : known) {
+            if (isSegmentPrefix(bind, k) || isSegmentPrefix(k, bind)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isSegmentPrefix(List<String> a, List<String> b) {
+        if (a.size() > b.size()) return false;
+        for (int i = 0; i < a.size(); i++) {
+            if (!a.get(i).equals(b.get(i))) return false;
+        }
+        return true;
+    }
+
+    /** True when a bare (unqualified) reference exactly names a known top-level or nested data path. */
+    private static boolean referencesKnownPath(String ref, List<List<String>> known) {
+        List<String> segs = List.of(ref.split("\\."));
+        for (List<String> k : known) {
+            if (k.equals(segs)) return true;
+        }
+        return false;
+    }
+
+    private static boolean isFieldReference(String s) {
+        return s.matches("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*");
+    }
+
+    private static boolean isQuoteWrapped(String s) {
+        return s.length() >= 2 && s.charAt(0) == '"' && s.charAt(s.length() - 1) == '"';
+    }
+
+    private static String unquote(String s) {
+        return isQuoteWrapped(s) ? s.substring(1, s.length() - 1) : s;
     }
 
     private static void checkConstants(ModelSpec spec, List<ValidationError> out) {
@@ -649,6 +871,17 @@ public final class ModelSpecValidator {
             cache.get(expr);
         } catch (ExpressionCache.CompilationException ce) {
             out.add(error(location, "Invalid JSONata expression — " + ce.getMessage()));
+        } catch (RuntimeException re) {
+            // The JSONata compiler can throw unchecked rather than a CompilationException — e.g. a
+            // codegen crash on a malformed higher-order call like $map(items) with the function
+            // argument missing. validate() promises to never throw, and the generation loop relies
+            // on that to turn a bad LLM expression into a repairable error instead of aborting the
+            // whole run, so translate any escaped compiler exception into a validation error.
+            out.add(error(location, "Invalid JSONata expression — the compiler could not translate "
+                    + "it (check for a malformed function call, e.g. a higher-order function such as "
+                    + "$map/$filter/$sort/$reduce missing its function argument): "
+                    + re.getClass().getSimpleName()
+                    + (re.getMessage() != null ? " — " + re.getMessage() : "")));
         }
         warnOnDynamicNavigation(expr, location, out);
     }

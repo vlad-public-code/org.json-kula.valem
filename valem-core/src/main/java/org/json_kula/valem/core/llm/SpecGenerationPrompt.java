@@ -96,21 +96,57 @@ public final class SpecGenerationPrompt {
             {
               "id":          "<string>",     // required, unique within the view
               "type":        "<type>",       // required — see catalog below
-              "label":       "<string>",
-              "bind":        "<$.path>",     // JsonPath to the bound model field
+              "label":       "<plain text>", // PLAIN literal — shown verbatim, NEVER quote or JSONata
+              "bind":        "<$.path>",     // PATH to the bound model field (e.g. "$.bmi")
               "visible":     true|false|"<JSONata>"|null,  // null → auto from $.bind#relevant meta
               "enabled":     true|false|"<JSONata>"|null,  // null → !readOnly
               "readOnly":    true|false|"<JSONata>"|null,  // null → auto from $.bind#read_only meta
               "required":    true|false|"<JSONata>"|null,  // null → auto from $.bind#required meta
-              "placeholder": "<string>",
-              "helperText":  "<string>",
-              "tooltip":     "<string>",
+              "placeholder": "<plain text>", // PLAIN literal — never quote or JSONata
+              "helperText":  "<plain text>", // PLAIN literal — never quote or JSONata
+              "tooltip":     "<plain text>", // PLAIN literal — never quote or JSONata
               "onChange":    <EventHandler>,
               "onClick":     <EventHandler>
             }
 
             EventHandler:
             { "mutations": "<JSONata → {'$.path': value}>", "navigate": "<view-id>" }
+
+            *** FIELD VALUE KINDS — the #1 source of broken views. Every component field is ONE of
+            three kinds. Putting the wrong kind of value in a field is the most common mistake: ***
+
+            1. PLAIN-TEXT fields — shown to the user exactly as written, never evaluated:
+               label, placeholder, helperText, tooltip, legend, addLabel, removeLabel, fromLabel,
+               toLabel, alt, and every options[].label / menuItems[].label / tableColumns[].header /
+               keyValueList items[].label.
+               → Write the human text directly. Do NOT wrap it in quotes. Do NOT write JSONata here.
+                 RIGHT: "label": "Weight (kg)"
+                 WRONG: "label": "\\"Weight (kg)\\""   ← renders with the literal quote characters
+                 WRONG: "label": "weight & \\" kg\\""   ← JSONata is ignored here; shown verbatim
+
+            2. PATH (bind) fields — a "$.path" address the component READS its value from:
+               bind, bindFrom, bindTo, dependsOn, chartX, chartSeries[].field, tableColumns[].field,
+               keyValueList items[].bind.
+               → This is the PRIMARY way to show a stored or derived value. To display "$.bmi",
+                 use "bind": "$.bmi" — do not try to put the value in "text".
+                 RIGHT: { "type": "statTile", "label": "Your BMI", "bind": "$.bmi", "format": "number" }
+
+            3. EXPRESSION fields — a JSONata expression evaluated against the model:
+               text (label/badge/staticText/link), value (statTile), delta, caption, trend,
+               and the boolean dynamics visible / enabled / readOnly / required.
+               → CRITICAL SERVER RULE: an expression field is only evaluated when the string
+                 CONTAINS a "$". A string with no "$" is shown as literal text.
+                   "text": "bmiCategory"          → shows the literal word "bmiCategory" (BUG)
+                   "text": "$string(bmiCategory)" → shows the value of the bmiCategory field  ✓
+                 So, to reference a model field inside an expression field, wrap it in a "$" function
+                 (e.g. $string(field), $round(field,1)) OR — better — give the component a "bind"
+                 instead. To show a fixed literal in an expression field, write it plainly with NO
+                 quotes and NO "$" (it falls through to literal): "caption": "kg/m2".
+               → visible/enabled/readOnly/required are ALWAYS evaluated (no "$" needed), so
+                 "visible": "bmi != null" is correct as-is.
+
+            RULE OF THUMB: to show one stored/derived value, prefer "bind": "$.path". Reserve
+            expression fields (text/value) for values you compute inline, and always include a "$".
 
             COMPONENT CATALOG:
 
@@ -131,15 +167,17 @@ public final class SpecGenerationPrompt {
               radioField           radio group; same options fields as selectField
               multiSelectField     multi-select; same options fields as selectField
 
-            Data output:
-              label          bound value or expression; extra: text (string or JSONata), format ("currency"|"percent"|"number"|"integer"), currency (ISO code, when format is currency)
-              statTile       one headline derived number as a card; extra: format, currency, delta (JSONata text), trend ("up"|"down"|"flat"), caption, icon
-              keyValueList   read-only summary of labelled values; extra: items [{label, bind (or text), format, currency}]
-              staticText     non-reactive text block; extra: text (static string)
-              badge          status chip; extra: text, variant ("primary"|"secondary"|"success"|"warning"|"danger")
+            Data output (each row notes WHERE its value comes from — a PATH bind or an EXPRESSION):
+              label          shows one value; value from "bind" ($.path) — or "text" (JSONata, needs "$") when unbound; extra: format ("currency"|"percent"|"number"|"integer"), currency
+              statTile       one headline number as a card; value from "bind" ($.path) — or "value" (JSONata, needs "$") if computed inline; extra: format, currency, delta (JSONata), trend ("up"|"down"|"flat"), caption (plain or JSONata), icon
+              progressBar    numeric value as a bar; value from "bind" ($.path to a number); extra: min, max, showValue, format
+              gauge          same value as a 180-degree arc; value from "bind" ($.path); extra: min, max, showValue, format
+              keyValueList   read-only summary of labelled values; extra: items [{label (plain text), bind ($.path) OR text (JSONata, needs "$"), format, currency}]
+              staticText     non-reactive text block; "text" = the literal text (write it plainly, no quotes)
+              badge          status chip; "text" = value to show — badge has NO bind, so to show a field use "$string(field)"; extra: variant ("primary"|"secondary"|"success"|"warning"|"danger")
               separatorLine  horizontal rule; no extra fields
-              dataTable      array as table; extra: tableColumns [{field, header, format, width}], pageSize (int)
-              dataChart      chart; extra: chartType ("bar"|"line"|"area"|"pie"), chartX, chartSeries [{field, label, color}]
+              dataTable      array as table; "bind" = $.arrayPath; extra: tableColumns [{field, header, format, width}], pageSize (int)
+              dataChart      chart; "bind" = $.arrayPath; extra: chartType ("bar"|"line"|"area"|"pie"), chartX, chartSeries [{field, label, color}]
 
             Formatting numbers: on EVERY numeric output — label, statTile, keyValueList row and dataTable
             column — set "format": "currency" (with a "currency" ISO code), "percent" (appends a % sign;
@@ -147,17 +185,24 @@ public final class SpecGenerationPrompt {
             the one-to-three headline results a model computes as statTile cards grouped horizontally,
             not plain labels.
 
-            JSONata in view expressions — field reference syntax:
+            JSONata in view EXPRESSION fields (text/value/delta/caption + the boolean dynamics):
               Reference model fields by their unqualified name: age, totalTax, emissionsBand.
-              NEVER use a $ prefix for field names: $age and $totalTax are undefined variables.
-              $ is reserved for built-in functions ($string, $now, $sum, …) and lambda parameters.
-              WRONG: "text": "$age & \\" years\\""    ← $age is an undefined variable
-              RIGHT: "text": "age & \\" years\\""     ← age is the model field
+              Never use a $ prefix ON A FIELD NAME ($age is an undefined variable). $ is for
+              built-in functions ($string, $round, $now, $sum, …) and lambda parameters.
+              BUT REMEMBER the server rule above: a text/value/delta/caption string is only
+              evaluated when it CONTAINS a $. A bare "age" or "age & \\" yrs\\"" has no $ and is
+              shown verbatim. So reference a field through a $ function, or use bind:
+                RIGHT: "text": "$string(age) & \\" yrs\\""   ← contains $, evaluates
+                RIGHT: { "type": "label", "bind": "$.age" }  ← simplest: just bind the field
+                WRONG: "text": "age & \\" yrs\\""             ← no $, shown as the literal string
+              (visible/enabled/readOnly/required do NOT need a $ — they are always evaluated.)
 
-            Escaping in "text" expressions (label/badge/staticText):
-              When a JSONata expression contains a literal quote, use a single JSON-escaped quote:
-                "text": "$& \\" €/yr\\""     ← \" is a JSON-escaped quote inside the JSONata expression
-              Never backslash-escape the field name itself: "text\\":" is always a bug.
+            Fixed literal text in a text/value/caption field: write it plainly, NO surrounding
+            quotes — it has no $, so it falls through to literal:
+                RIGHT: "caption": "kg/m2"
+                WRONG: "caption": "\\"kg/m2\\""   ← the quote characters are shown to the user
+              Only add \\"...\\" quotes for a literal SEGMENT spliced into a real $-expression,
+              e.g. "text": "$string(bmi) & \\" kg/m2\\"".
 
             Containers:
               group       layout box; extra: layout ("vertical"|"horizontal"|"grid"), columns, components []
@@ -171,6 +216,25 @@ public final class SpecGenerationPrompt {
 
             Meta-cache inheritance: visible/readOnly/required null → evaluator reads metaDerivation values
             automatically, so metaDerivations alone can drive component visibility without view expressions.
+
+            GOLDEN EXAMPLE — a correct viewDefinition (note: plain labels with NO quotes; every
+            displayed value comes from a "bind" path; a fixed caption written plainly; a badge whose
+            dynamic text uses a "$" function so it evaluates server-side):
+            {
+              "defaultView": "main",
+              "views": [ {
+                "id": "main", "label": "BMI Calculator", "layout": "vertical",
+                "components": [
+                  { "id": "weight", "type": "numericField", "label": "Weight (kg)", "bind": "$.weight",
+                    "placeholder": "e.g. 70", "helperText": "Your weight in kilograms" },
+                  { "id": "height", "type": "numericField", "label": "Height (m)", "bind": "$.height" },
+                  { "id": "bmiTile", "type": "statTile", "label": "Your BMI", "bind": "$.bmi",
+                    "format": "number", "caption": "kg/m2" },
+                  { "id": "category", "type": "badge", "text": "$string(bmiCategory)",
+                    "variant": "$boolean(healthy) ? 'success' : 'warning'" }
+                ]
+              } ]
+            }
             """;
 
     /** System message describing the Valem spec format to the LLM. */
@@ -317,6 +381,15 @@ public final class SpecGenerationPrompt {
                 //     and reference that input instead of $now().
               ]
             }
+
+            Units and dimensional consistency (a frequent source of wrong-but-compiling math):
+            - Pick ONE canonical unit per quantity and state it in the schema field's "description"
+              AND its view "label" (e.g. height in metres, weight in kilograms). Never mix cm and m.
+            - Keep every formula dimensionally consistent with those units. If an input is in cm but a
+              formula needs m, convert explicitly (height/100) — do not assume the unit.
+            - Make at least one self-test pin a value a unit slip would break. E.g. for BMI, given
+              weight 70 (kg) and height 1.75 (m), expect bmi 22.86 — a value that comes out ~100x
+              wrong if height is treated as cm, so the test catches the mistake during generation.
 
             Path notation (JsonPath, RFC 9535):
             - All "path" values must start with "$." — e.g. "$.order.total", "$.items[*].price".
@@ -465,7 +538,8 @@ public final class SpecGenerationPrompt {
                 """ + idLine + """
 
                 Domain description:
-                """ + domainDescription + shapeExemplars(domainDescription) + (includeView ? """
+                """ + domainDescription + domainAnchoringHint(domainDescription)
+                + shapeExemplars(domainDescription) + (includeView ? """
 
                 Include a complete viewDefinition with a sensible UI layout for this domain.
                 """ : """
@@ -473,6 +547,27 @@ public final class SpecGenerationPrompt {
                 Output only the JSON spec, nothing else.
                 """);
         return new PromptParts(systemContext(includeView), user);
+    }
+
+    /**
+     * When the domain description is terse (a bare noun phrase like "Body Mass Index"), an LLM can
+     * latch onto an unrelated interpretation — we saw a three-word prompt drift into a payroll model.
+     * For a short description, anchor the model to the domain's standard, widely-accepted definition
+     * before it starts inventing. Returns {@code ""} for a description detailed enough to stand on
+     * its own, so ordinary requests are unaffected.
+     */
+    static String domainAnchoringHint(String domainDescription) {
+        if (domainDescription == null) return "";
+        int words = domainDescription.trim().isEmpty() ? 0 : domainDescription.trim().split("\\s+").length;
+        if (words > 8) return "";
+        return """
+
+
+                This description is brief. First establish the STANDARD, widely-accepted definition of
+                this domain — its usual inputs (each with its canonical unit), its outputs, the exact
+                formulas, and any standard categories/bands — from your own knowledge (use web_fetch to
+                confirm figures if available). Model THAT standard definition faithfully; do not
+                substitute a loosely-related domain.""";
     }
 
     /**

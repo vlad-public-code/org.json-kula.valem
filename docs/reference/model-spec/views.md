@@ -97,12 +97,51 @@ other fields are nullable and interpreted only for the component types that use 
 | `onOpen` | `EventHandler` | Fired when a sub-panel opens |
 | `onClose` | `EventHandler` | Fired when a sub-panel closes |
 
-### Dynamic fields
+### Field value kinds
 
-`visible`, `enabled`, `readOnly`, `required`, and `text` all accept either:
-- A JSON boolean (`true` / `false`) — used as-is
-- A JSONata string — evaluated against the merged model document
-- `null` / absent — falls back to meta cache inheritance (see below)
+Every component field is **one of three kinds**, and putting the wrong kind of value in a
+field is the most common way a generated view breaks. Know which kind a field is before you
+fill it in:
+
+| Kind | Fields | What to write |
+|---|---|---|
+| **Plain text** | `label`, `placeholder`, `helperText`, `tooltip`, `legend`, `alt`, `addLabel`/`removeLabel`, `fromLabel`/`toLabel`, and every `options[].label` / `menuItems[].label` / `tableColumns[].header` / `keyValueList` `items[].label` | The literal string, shown **verbatim**. Never wrap it in quotes; never write JSONata here — it is not evaluated. `"label": "Weight (kg)"`, **not** `"label": "\"Weight (kg)\""` (which shows the quote characters). |
+| **Path (`bind`)** | `bind`, `bindFrom`, `bindTo`, `dependsOn`, `chartX`, `chartSeries[].field`, `tableColumns[].field`, `keyValueList` `items[].bind` | A `$.path` address the component reads its value from. This is the **primary** way to show a stored or derived value: `"bind": "$.bmi"`. |
+| **Expression (JSONata)** | `text`, `value`, `delta`, `caption`, `trend`, and the boolean dynamics `visible` / `enabled` / `readOnly` / `required` | A JSONata expression evaluated against the merged document — **subject to the `$` rule below** for the value fields. |
+
+### Dynamic expression fields and the `$` rule
+
+The boolean dynamics and the display-value expression fields are evaluated differently, and the
+difference is easy to trip over:
+
+- **`visible`, `enabled`, `readOnly`, `required`** accept a JSON boolean, a JSONata string
+  (**always evaluated**, no `$` required — `"visible": "age < 20"` works), or `null`/absent
+  (falls back to meta-cache inheritance, see below).
+- **`text`, `value`, `delta`, `caption`, `trend`** accept a JSONata string or a literal, but the
+  server-side `ViewEvaluator` only evaluates the string as JSONata **when it contains a `$`**.
+  A string with no `$` is shown **verbatim**:
+
+  ```jsonc
+  "text": "bmiCategory"           // no $  → shows the literal word "bmiCategory"
+  "text": "$string(bmiCategory)"  // has $ → shows the value of the bmiCategory field
+  "caption": "kg/m2"              // no $  → shows the literal text "kg/m2" (correct for fixed text)
+  ```
+
+  To reference a model field from one of these fields, either **give the component a `bind`**
+  (simplest, and the value can then be `format`ted), or wrap the field in a `$` function
+  (`$string(field)`, `$round(field, 1)`). To show **fixed literal text**, write it plainly with
+  no surrounding quotes and no `$` — it falls through to literal. Add `\"...\"` quotes only for a
+  literal *segment* spliced into a real `$`-expression: `"text": "$string(bmi) & \" kg/m2\""`.
+
+> **Server vs. built-in UI.** The `$` rule is a *server-side* (`GET /models/{id}/view`, MCP,
+> console) behaviour. The bundled React renderer evaluates the raw spec client-side and will
+> resolve a bare `text: "bmiCategory"` too, so a spec written without `$` *appears* to work in
+> the built-in UI while rendering literally everywhere else. Write `bind` or a `$`-bearing
+> expression so the view renders identically through **every** renderer. See
+> [view-system.md](../view-system.md#npm-library-valem-view-react).
+
+**Rule of thumb:** to show one stored or derived value, prefer `"bind": "$.path"`. Reserve the
+`text`/`value` expression fields for values you compute inline, and always include a `$`.
 
 `className` is **dead** — no evaluator or renderer reads it. It is no longer modelled on the
 `ComponentSpec` hierarchy in Java or in the TypeScript mirror. A `className` in an existing spec

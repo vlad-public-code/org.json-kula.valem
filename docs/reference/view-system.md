@@ -386,7 +386,8 @@ list, so a new component record does not compile until it is handled — adding 
 fall through to the generic input branch unnoticed.
 
 Per-component evaluation steps:
-1. Resolve `visible` → null: check `metaCache["$.bind#relevant"]` (absent → true); bool/JSONata
+1. Resolve `visible` → null: check `metaCache["$.bind#relevant"]` (absent → true); bool, else any
+   textual string is evaluated as JSONata (no `$` required — see step 5's contrast)
 2. Resolve `readOnly` → null: check `metaCache["$.bind#read_only"]` (absent → false); bool/JSONata
 3. Resolve `required` → null: check `metaCache["$.bind#required"]` (absent → false); bool/JSONata.
    **There is no JSON-Schema-`required`-array fallback** — `ViewEvaluator` never receives the
@@ -394,7 +395,14 @@ Per-component evaluation steps:
    on the schema's `required` array (no explicit `#required` metaDerivation) renders
    `required=false` in the view.
 4. Resolve `enabled` → null: `!effectiveReadOnly`; bool/JSONata
-5. Resolve `text` → if String with `$` or operators: evaluate as JSONata; else literal
+5. Resolve `text`/`value`/`delta`/`caption`/`trend` (`resolveText`/`resolveNode`) → the string is
+   evaluated as JSONata **only if it contains a `$`**; otherwise it is kept as a literal. This is
+   the deliberate asymmetry with the boolean dynamics in steps 1–4, which evaluate *any* string:
+   the `$`-gate keeps display literals like `"Underweight"` or `"25 - 29.9"` from being parsed as
+   expressions. A bare field reference (`"myField"`) therefore renders **verbatim** server-side —
+   reference a field through a `$` function (`$string(myField)`) or via `bind`. (The built-in
+   React renderer has no such gate; see [`useJSONataLiteral`](#npm-library-valem-view-react).) Documented for
+   authors in [Field value kinds](model-spec/views.md#field-value-kinds).
 6. Look up `bind` path in `mergedDocument` → `value`
 7. Resolve `options` — static list passthrough only. `optionsExpr`/`optionsUrl`/`optionsPath`
    are **never read by the server** — they are declared on `ComponentSpec` but dead from the
