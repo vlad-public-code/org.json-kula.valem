@@ -291,18 +291,35 @@ public final class SpecGenerator {
                 // assertions, $now()-dependent fields) — they are not a reliable gate, so they must
                 // not consume the retry budget or block a structurally-valid spec.
                 List<TestCaseRunner.TestResult> verifiable = retainVerifiableFailures(failed, spec);
-                if (verifiable.isEmpty()) {
+
+                // Soft view gate: lint the viewDefinition for dangling binds and literal-where-
+                // expression-meant display fields — the two mistakes that render wrong with no
+                // parse/validation error. Same tier as embedded tests: repairable, tracked as
+                // best-effort, never a hard failure of an otherwise-valid spec.
+                List<ModelSpecValidator.ValidationError> viewFindings =
+                        ModelSpecValidator.lintView(spec);
+                int softIssues = verifiable.size() + viewFindings.size();
+                if (softIssues == 0) {
                     return new GenerationResult.Success(
                             markDerivedFieldsReadOnly(spec), attempts);
                 }
-                onProgress.accept(new LlmProgressEvent.TestFailed(attempts, verifiable.size()));
-                if (verifiable.size() < bestEffortFailCount) {
-                    bestEffortFailCount = verifiable.size();
+                if (softIssues < bestEffortFailCount) {
+                    bestEffortFailCount = softIssues;
                     bestEffortSpec = spec;
                 }
-                nextPrompt = SpecGenerationPrompt.testRepairPromptParts(
-                        modelId, repairedJson, verifiable, spec.derivations(), includeView);
-                currentErrorCount = verifiable.size();
+                if (!verifiable.isEmpty()) {
+                    onProgress.accept(new LlmProgressEvent.TestFailed(attempts, verifiable.size()));
+                    nextPrompt = SpecGenerationPrompt.testRepairPromptParts(
+                            modelId, repairedJson, verifiable, spec.derivations(), includeView);
+                } else {
+                    // Only view-lint issues remain — re-prompt with them as repair guidance.
+                    onProgress.accept(new LlmProgressEvent.ValidationFailed(attempts,
+                            viewFindings.stream().limit(5)
+                                    .map(e -> e.location() + ": " + e.message()).toList()));
+                    nextPrompt = SpecGenerationPrompt.repairPromptParts(
+                            modelId, repairedJson, annotateErrors(viewFindings), includeView);
+                }
+                currentErrorCount = softIssues;
             } else {
                 onProgress.accept(new LlmProgressEvent.ValidationFailed(attempts,
                         validation.errors().stream()

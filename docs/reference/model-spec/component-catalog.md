@@ -334,13 +334,21 @@ recompute immediately.
 
 ### Data output
 
+> **Where a display component gets its value.** Each type below reads its value from either a
+> `bind` (a `$.path`) or an **expression** field (`text` / `value` / `caption` / `delta`). The
+> expression fields obey the **`$` rule**: the server evaluates them as JSONata only when the
+> string contains a `$` — a bare `text: "myField"` is shown literally. Prefer `bind` for a stored
+> or derived value; use a `$`-bearing expression (`$string(field)`, `$round(field,1)`) when the
+> value is computed inline. See
+> [Field value kinds](views.md#field-value-kinds) for the full rule and the server-vs-UI note.
+
 #### `label`
 
 Displays a bound value or a dynamic text expression next to an optional label caption.
 
 | Extra field | Description |
 |---|---|
-| `text` | String literal or JSONata expression; overrides the bound value for display |
+| `text` | JSONata expression or literal; overrides the bound value for display. Subject to the **`$` rule** — evaluated only when it contains a `$` (see the note above); a bare field name is shown literally |
 | `format` | `"currency"`, `"percent"`, `"number"`, `"integer"` — formats a bound **numeric** value the same way `dataTable` columns, `keyValueList` rows and `statTile` do. Omit it and the value renders verbatim, so a label over an id, a year or free text is unaffected |
 | `currency` | ISO-4217 code, read only when `format` is `currency` |
 
@@ -355,7 +363,7 @@ Displays a bound value or a dynamic text expression next to an optional label ca
 ```json
 {
   "id": "greetingLabel", "type": "label",
-  "text": "'Hello, ' & name & '!'"
+  "text": "'Hello, ' & $string(name) & '!'"
 }
 ```
 
@@ -395,14 +403,13 @@ Status indicator chip.
 
 | Extra field | Description |
 |---|---|
-| `text` | String literal or JSONata expression for the badge label |
+| `text` | JSONata expression or literal for the badge label. A `badge` has no `bind`, so to show a field's value put it in `text` — subject to the **`$` rule**, so reference the field through a `$` function (`$string(field)`) rather than bare |
 | `variant` | `"primary"`, `"secondary"`, `"success"`, `"warning"`, `"danger"` |
 
 ```json
 {
   "id": "statusBadge", "type": "badge", "label": "Priority",
-  "bind": "$.priorityFlag",
-  "text":    "priorityFlag = true ? 'Needs follow-up' : 'Normal'",
+  "text":    "$boolean(priorityFlag) ? 'Needs follow-up' : 'Normal'",
   "variant": "danger"
 }
 ```
@@ -574,8 +581,8 @@ model most often ends on. Rows come from `items`, **not** from `bind`.
 | Field | Description |
 |---|---|
 | `label` | Row caption |
-| `bind` | Path to read the value from |
-| `text` | JSONata expression, for a row with no single path behind it |
+| `bind` | Path to read the value from (the usual choice) |
+| `text` | JSONata expression, for a row with no single path behind it. Subject to the **`$` rule** — needs a `$` to evaluate; a plain string is shown literally |
 | `format` | `"currency"`, `"percent"`, `"number"`, `"integer"` |
 | `currency` | ISO-4217 code. Per **row**, because a summary legitimately mixes them — a quoted price beside its converted equivalent. A `currency` format with no code falls back to the renderer's default |
 
@@ -600,11 +607,11 @@ One headline number with its supporting text.
 
 | Extra field | Description |
 |---|---|
-| `bind` | Path to the number, or … |
-| `value` | … a JSONata expression, when no single path holds it |
-| `delta` | Expression for the movement line |
-| `caption` | Expression for the sub-caption |
-| `trend` | `"up"`, `"down"`, `"flat"`, or an expression producing one |
+| `bind` | Path to the number (the usual choice), or … |
+| `value` | … a JSONata expression, when no single path holds it. Subject to the **`$` rule** — needs a `$` to evaluate (see the Data output note); a plain string is shown literally |
+| `delta` | Expression for the movement line (`$` rule applies) |
+| `caption` | Expression for the sub-caption (`$` rule applies); write fixed text plainly, e.g. `"per month"` |
+| `trend` | `"up"`, `"down"`, `"flat"`, or an expression producing one (`$` rule applies) |
 | `format` / `currency` | As `currencyField` |
 | `variant`, `icon`, `tooltip` | Presentation |
 

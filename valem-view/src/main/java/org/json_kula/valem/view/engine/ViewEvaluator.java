@@ -437,14 +437,34 @@ public final class ViewEvaluator {
 
     // ── Text resolver ─────────────────────────────────────────────────────────
 
+    /**
+     * A bare field reference — an identifier or dotted path (no {@code $}, no spaces, no operators,
+     * no quotes). These are the strings a text/value expression means as a field lookup but that the
+     * {@code $}-gate would otherwise treat as literal (e.g. {@code "bmiCategory"}). A literal like
+     * {@code "Underweight"} also matches, but it resolves to nothing and so falls back to itself.
+     */
+    private static final java.util.regex.Pattern BARE_FIELD_REF =
+            java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z0-9_]+)*");
+
+    /** Whether a display-expression string should be evaluated as JSONata rather than kept literal. */
+    private static boolean shouldEvaluate(String raw) {
+        return raw.contains("$") || BARE_FIELD_REF.matcher(raw).matches();
+    }
+
     private static String resolveText(JsonNode textSpec, ObjectNode mergedDocument,
                                       ExpressionCache exprCache, JsonataBindings bindings) {
         if (textSpec == null || textSpec.isNull()) return null;
         String raw = textSpec.asText();
-        if (textSpec.isTextual() && raw.contains("$")) {
+        if (textSpec.isTextual() && shouldEvaluate(raw)) {
             try {
                 JsonNode result = eval(exprCache, raw, mergedDocument, bindings);
-                return result != null ? result.asText(raw) : raw;
+                if (raw.contains("$")) {
+                    return result != null ? result.asText(raw) : raw;
+                }
+                // Bare field reference: substitute only when it actually resolved to a value,
+                // so a literal word ("Underweight") that names no field stays itself.
+                return result != null && !result.isMissingNode() && !result.isNull()
+                        ? result.asText(raw) : raw;
             } catch (Exception ignored) {
                 return raw;
             }
@@ -461,10 +481,16 @@ public final class ViewEvaluator {
     private static JsonNode resolveNode(JsonNode spec, ObjectNode mergedDocument,
                                         ExpressionCache exprCache, JsonataBindings bindings) {
         if (spec == null || spec.isNull()) return null;
-        if (!spec.isTextual() || !spec.asText().contains("$")) return spec;
+        if (!spec.isTextual()) return spec;
+        String raw = spec.asText();
+        if (!shouldEvaluate(raw)) return spec;
         try {
-            JsonNode result = eval(exprCache, spec.asText(), mergedDocument, bindings);
-            return result != null && !result.isMissingNode() ? result : spec;
+            JsonNode result = eval(exprCache, raw, mergedDocument, bindings);
+            if (raw.contains("$")) {
+                return result != null && !result.isMissingNode() ? result : spec;
+            }
+            // Bare field reference: substitute only when it resolved to a real value.
+            return result != null && !result.isMissingNode() && !result.isNull() ? result : spec;
         } catch (Exception ignored) {
             return spec;
         }
