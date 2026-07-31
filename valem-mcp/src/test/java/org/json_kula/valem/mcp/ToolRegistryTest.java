@@ -81,7 +81,46 @@ class ToolRegistryTest {
                 "get_audit", "verify_audit", "get_effective_schema", "snapshot", "restore",
                 "upload_blob", "download_blob",
                 "evolve_spec", "delete_model", "get_view",
-                "validate_spec", "eval_expression", "test_spec", "dry_run");
+                "get_domain_guidance", "validate_spec", "eval_expression", "test_spec", "dry_run");
+    }
+
+    @Test
+    void get_domain_guidance_returns_instructions_for_requested_topics() {
+        ObjectNode args = MAPPER.createObjectNode();
+        args.putArray("topics").add("regulated_charge");
+        ObjectNode result = registry.call("get_domain_guidance", args);
+        assertThat(result.path("isError").asBoolean()).isFalse();
+        assertThat(payload(result).path("guidance").asText()).contains("OFFICIAL, PUBLISHED CHARGE");
+    }
+
+    @Test
+    void get_domain_guidance_lists_topics_in_its_description() {
+        JsonNode tool = toolByName("get_domain_guidance");
+        assertThat(tool.path("description").asText())
+                .contains("regulated_charge").contains("amortization_schedule");
+        // topics arg is constrained to the catalog's ids
+        assertThat(tool.path("inputSchema").path("properties").path("topics").path("items").path("enum"))
+                .isNotEmpty();
+    }
+
+    @Test
+    void get_domain_guidance_honours_operator_topics_file_override() throws Exception {
+        java.nio.file.Path file = java.nio.file.Files.createTempFile("mcp-topics", ".json");
+        java.nio.file.Files.writeString(file, """
+            [ { "id": "widget_levy", "description": "A made-up levy", "instructions": "WIDGET LEVY RULES" } ]
+            """);
+        System.setProperty("valem.llm.domain-guidance.topics-file", file.toString());
+        try {
+            ModelService service = new ModelService(new ModelRegistry(), new InMemoryBlobStore());
+            ToolRegistry reg = new ToolRegistry(service, MAPPER);   // picks up the property at construction
+            ObjectNode args = MAPPER.createObjectNode();
+            args.putArray("topics").add("widget_levy");
+            assertThat(payload(reg.call("get_domain_guidance", args)).path("guidance").asText())
+                    .contains("WIDGET LEVY RULES");
+        } finally {
+            System.clearProperty("valem.llm.domain-guidance.topics-file");
+            java.nio.file.Files.deleteIfExists(file);
+        }
     }
 
     @Test

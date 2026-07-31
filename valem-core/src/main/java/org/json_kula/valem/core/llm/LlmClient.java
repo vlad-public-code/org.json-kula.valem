@@ -131,6 +131,14 @@ public interface LlmClient {
     @FunctionalInterface
     interface ToolExecutor {
         String execute(ToolCall call);
+
+        /**
+         * Replenishes any <em>per-attempt</em>-scoped call budget at the start of a new generation
+         * attempt. Session-scoped budgets (e.g. a network tool's total fetch cap) must NOT reset here;
+         * only local, side-effect-free tools (e.g. {@code eval_jsonata}) opt in, so that each repair
+         * attempt can re-test its expressions. Default: no-op.
+         */
+        default void resetPerAttemptBudget() {}
     }
 
     /** Unchecked exception thrown when an LLM call fails. */

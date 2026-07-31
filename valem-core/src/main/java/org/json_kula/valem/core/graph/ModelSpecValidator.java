@@ -171,9 +171,28 @@ public final class ModelSpecValidator {
      * ({@code #/$defs/<Name>}) are supported; everything else is rejected loudly so a spec
      * cannot silently lose validation behind an unresolved ref.
      */
+    // Spec sections that are TOP-LEVEL siblings of "schema" — never JSON Schema keywords. Finding any
+    // at the schema root means the model nested the spec body inside "schema" (a common LLM slip that
+    // otherwise yields a silently dead model: empty top-level derivations, so nothing compiles/runs).
+    private static final Set<String> MISPLACED_SPEC_SECTIONS = Set.of(
+            "derivations", "metaDerivations", "constraints", "defaultValues", "effects", "tests",
+            "constants", "viewDefinition");
+
     private static void checkSchema(ModelSpec spec, List<ValidationError> out) {
         com.fasterxml.jackson.databind.JsonNode schema = spec.schema();
         if (schema == null || !schema.isObject()) return;  // presence handled by checkSpec
+
+        // Reject spec sections misplaced INSIDE the schema (siblings of "type"/"properties"). Left
+        // undetected these produce a valid-looking but inert model, because the real top-level
+        // derivations/constants/tests are then empty. Flagging drives the retry loop to move them out.
+        for (String section : MISPLACED_SPEC_SECTIONS) {
+            if (schema.has(section)) {
+                out.add(error("schema." + section,
+                        "'" + section + "' is a TOP-LEVEL spec section and must NOT appear inside "
+                        + "\"schema\". Move it out to be a sibling of \"schema\" — the JSON schema holds "
+                        + "ONLY the data shape (type/properties/required/$defs)."));
+            }
+        }
 
         com.fasterxml.jackson.databind.JsonNode defs = schema.path("$defs");
         Set<String> defNames = new LinkedHashSet<>();

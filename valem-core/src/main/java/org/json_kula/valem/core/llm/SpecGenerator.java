@@ -208,12 +208,20 @@ public final class SpecGenerator {
         // budget; a second truncation falls back to the "smaller spec" prompt.
         int       truncationCount = 0;
         Integer   maxTokensOverride = null;
+        // Domain guidance the model pulled via get_domain_guidance on attempt 0. Tools run on the first
+        // attempt only, so we capture it and re-inject it into every repair prompt (see withGuidance).
+        String    resolvedGuidance = null;
 
         for (int i = 0; i < maxRetriesHard; i++) {
             attempts++;
+            // Replenish per-attempt tool budget (eval_jsonata) so a repair can re-test its fixes.
+            if (executor != null) executor.resetPerAttemptBudget();
+            // Carry the LLM-selected domain guidance forward into repairs (fresh conversations).
+            if (i > 0) prompt = withGuidance(prompt, resolvedGuidance);
             if (i > 0) onProgress.accept(new LlmProgressEvent.Retrying(attempts, maxRetriesHard));
             onProgress.accept(new LlmProgressEvent.LlmRequesting(attempts));
             rawResp = callLlm(prompt, executor, i, responseSchema, maxTokensOverride, onProgress);
+            if (executor instanceof ResolvedGuidanceProvider g) resolvedGuidance = g.resolvedGuidance();
             String cleanJson    = extractJson(rawResp);
             String repairedJson = repairConstraintPolicy(
                     fixExpressions(repairJson(collapseStringNewlines(cleanJson))), mapper);
@@ -444,12 +452,17 @@ public final class SpecGenerator {
         int bestEffortFailCount = Integer.MAX_VALUE;
         String lastError = "no valid SpecEvolution produced";
         int attempts = 0;
+        String resolvedGuidance = null;   // get_domain_guidance result, carried into repair attempts
 
         for (int i = 0; i < maxRetriesHard; i++) {
             attempts++;
+            // Replenish per-attempt tool budget (eval_jsonata) so a repair can re-test its fixes.
+            if (executor != null) executor.resetPerAttemptBudget();
+            if (i > 0) prompt = withGuidance(prompt, resolvedGuidance);
             if (i > 0) onProgress.accept(new LlmProgressEvent.Retrying(attempts, maxRetriesHard));
             onProgress.accept(new LlmProgressEvent.LlmRequesting(attempts));
             String rawResp      = callLlm(prompt, executor, i, responseSchema, null, onProgress);
+            if (executor instanceof ResolvedGuidanceProvider g) resolvedGuidance = g.resolvedGuidance();
             String repairedJson = repairConstraintPolicy(
                     fixExpressions(repairJson(collapseStringNewlines(extractJson(rawResp)))), mapper);
             SpecEvolution evolution = parseEvolution(repairedJson);
@@ -585,6 +598,23 @@ public final class SpecGenerator {
      * {@code responseSchema} is non-null and structured output is enabled, it is sent as the provider
      * {@code response_format} so the output shape is provider-enforced.
      */
+    /**
+     * Re-injects the domain guidance the model pulled via {@code get_domain_guidance} on attempt 0
+     * into a repair prompt. Tools run on the first attempt only and each repair is a fresh
+     * conversation, so without this the LLM-selected guidance would be lost after attempt 0. It goes in
+     * the session-stable middle tier (cacheable, identical across the retry loop). No-op when there is
+     * no guidance.
+     */
+    private static SpecGenerationPrompt.PromptParts withGuidance(
+            SpecGenerationPrompt.PromptParts parts, String guidance) {
+        if (guidance == null || guidance.isBlank()) return parts;
+        String block = "Guidance for this domain (you selected these topics earlier via "
+                + "get_domain_guidance — keep following them):\n" + guidance.strip();
+        String sc = parts.sessionContext();
+        String merged = (sc == null || sc.isBlank()) ? block : block + "\n\n" + sc;
+        return new SpecGenerationPrompt.PromptParts(parts.system(), merged, parts.user());
+    }
+
     private String callLlm(SpecGenerationPrompt.PromptParts prompt, LlmClient.ToolExecutor executor,
                            int attemptIndex, JsonNode responseSchema, Integer maxTokensOverride,
                            Consumer<LlmProgressEvent> onProgress) {
@@ -598,20 +628,23 @@ public final class SpecGenerator {
         JsonNode schema    = structuredOutput ? responseSchema : null;
         LlmClient.CompletionOptions options =
                 new LlmClient.CompletionOptions(temperature, schema, maxTokensOverride);
-        // Web tools power the research phase on the INITIAL attempt only. A repair attempt must
-        // produce the spec from what was already gathered, not re-invoke the tools:
-        //   - the tool budget is largely spent by the first attempt, so a repair re-search usually
-        //     just hits the exhausted limit;
-        //   - each attempt is a fresh conversation, so re-offering tools on a repair is where an
-        //     off-topic call can appear — we saw a repair turn re-issue a web search that belonged
-        //     to a previously generated model (provider prompt-prefix cache bleed on the identical
-        //     system prefix). No tools on the repair, no such call; and
-        //   - withholding tools makes a stuck model emit JSON instead of wandering, which converges
-        //     faster.
-        boolean useTools = attemptIndex == 0 && webTool != null && executor != null;
-        return useTools
-                ? llm.completeWithTools(prompt, webTool.definitions(), executor, options, onProgress)
-                : llm.complete(prompt, options);
+        // Tool policy differs between the initial attempt and repairs:
+        //   - Attempt 0 offers ALL tools (the research phase): web_search/web_fetch to gather figures
+        //     plus eval_jsonata to test expressions.
+        //   - A repair attempt offers ONLY the local, side-effect-free tools (repairDefinitions() —
+        //     eval_jsonata), so the model can RE-TEST its corrected expressions in place. The NETWORK
+        //     tools stay attempt-0-only on purpose: their budget is session-scoped and largely spent up
+        //     front, and re-offering them on a repair is where an off-topic call can leak in (provider
+        //     prompt-prefix cache bleed on the identical system prefix). eval is local, so no such risk,
+        //     and testing a fix converges faster than emitting a blind guess.
+        if (webTool == null || executor == null) {
+            return llm.complete(prompt, options);
+        }
+        List<LlmClient.ToolDefinition> tools =
+                attemptIndex == 0 ? webTool.definitions() : webTool.repairDefinitions();
+        return tools.isEmpty()
+                ? llm.complete(prompt, options)
+                : llm.completeWithTools(prompt, tools, executor, options, onProgress);
     }
 
     /**

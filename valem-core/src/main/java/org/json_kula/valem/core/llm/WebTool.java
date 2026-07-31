@@ -18,6 +18,15 @@ public interface WebTool {
     List<LlmClient.ToolDefinition> definitions();
 
     /**
+     * The subset of {@link #definitions()} safe to offer on a REPAIR attempt (not just the first) —
+     * local, side-effect-free tools like {@code eval_jsonata} that let the model re-test a corrected
+     * expression. Network tools ({@code web_fetch}/{@code web_search}) are deliberately excluded: their
+     * budget is session-scoped and largely spent up front, and re-offering them on a repair is where an
+     * off-topic call can leak in (provider prompt-prefix cache bleed). Default: none.
+     */
+    default List<LlmClient.ToolDefinition> repairDefinitions() { return List.of(); }
+
+    /**
      * Creates a fresh executor for one generation session.
      * The executor enforces per-session call limits internally and routes by tool name.
      */

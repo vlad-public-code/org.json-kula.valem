@@ -6,7 +6,6 @@ import org.json_kula.valem.core.model.DerivationSpec;
 
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -243,9 +242,30 @@ public final class SpecGenerationPrompt {
             for JSON data models. Your task is to produce valid Valem model specifications \
             in JSON format.
 
-            If a web_fetch tool is available, use it to look up authoritative domain info (official \
-            tax tables, rate schedules, formulas) before writing expressions — prefer primary \
-            sources; fetch 2-3 pages, then generate.
+            If a get_domain_guidance tool is available, CALL IT FIRST, before writing anything. Read \
+            the domain description — in ANY language — decide which of the tool's listed topics it \
+            matches (the topic ids are fixed English keys; map the meaning, not the words), and call it \
+            with that set of topic ids. It returns vetted, copy-this instructions for the hard shapes \
+            those topics cover; follow them. Call it whenever a topic plausibly applies (you may pass \
+            several); skip it only when none do. This is how you get shape-specific guidance now — do \
+            not rely on keywords in the prompt.
+
+            If a web_search tool is available, SEARCH FIRST to find the authoritative page's real URL — \
+            never guess or hand-construct URLs (fabricated paths 404 and silently burn your fetch \
+            budget). Then, if a web_fetch tool is available, fetch the 2-3 most authoritative results \
+            (prefer primary sources: the government / tax-authority site or the statute) and read the \
+            numbers before writing expressions.
+            DOMAIN-DATA HONESTY (critical): official rate tables are often published only as images, \
+            PDFs, or interactive calculators, so web_fetch may return prose WITHOUT the actual numbers. \
+            Do NOT invent precise-looking figures to fill the gap. If you cannot confirm a rate or \
+            bracket from a source: (a) get the STRUCTURE right first — the correct components and \
+            formula shape matter more than exact constants; and (b) use clearly-rounded placeholder \
+            values and never present a guessed number as if it were authoritative. A structurally- \
+            faithful calculator with honest, editable placeholders beats a confident-looking one built \
+            on fabricated rules. To flag a placeholder, note it in the DERIVATION's or FIELD's \
+            "description" — do NOT wrap the constant itself in a {"value": ..., "description": ...} \
+            object: a constant must stay a RAW value (a bare number/string/array), because $const.<name> \
+            returns the constant as-is, so a wrapper makes every "$const.<name>" a broken object reference.
             If an eval_jsonata tool is available, TEST any non-trivial expression before finalizing: \
             pass the candidate expr and a small sample input; it returns the value or the exact \
             compiler error, so you fix syntax and logic in place rather than guessing.
@@ -539,7 +559,7 @@ public final class SpecGenerationPrompt {
 
                 Domain description:
                 """ + domainDescription + domainAnchoringHint(domainDescription)
-                + shapeExemplars(domainDescription) + (includeView ? """
+                + (includeView ? """
 
                 Include a complete viewDefinition with a sensible UI layout for this domain.
                 """ : """
@@ -570,141 +590,6 @@ public final class SpecGenerationPrompt {
                 substitute a loosely-related domain.""";
     }
 
-    /**
-     * Returns a focused, copy-this few-shot exemplar when the domain description matches a "hard
-     * shape" the LLM reliably fumbles. Today that is the <b>computed array / schedule</b> shape
-     * (amortization tables, per-period breakdowns), whose long {@code $reduce} expressions are where
-     * paren-balance and binding mistakes cluster. Injecting a vetted, paren-balanced exemplar right
-     * next to the request raises first-attempt accuracy. Returns {@code ""} for ordinary domains.
-     */
-    static String shapeExemplars(String domainDescription) {
-        if (domainDescription == null) return "";
-        String d = domainDescription.toLowerCase();
-        StringBuilder out = new StringBuilder();
-        if (wantsSchedule(d))       out.append(SCHEDULE_EXEMPLAR);
-        if (wantsGroupBy(d))        out.append(GROUP_BY_EXEMPLAR);
-        if (wantsDateMath(d))       out.append(DATE_MATH_EXEMPLAR);
-        if (wantsClassification(d)) out.append(CLASSIFICATION_EXEMPLAR);
-        if (wantsCurrency(d))       out.append(CURRENCY_EXEMPLAR);
-        if (wantsStatus(d))         out.append(STATUS_EXEMPLAR);
-        if (wantsRank(d))           out.append(RANK_EXEMPLAR);
-        return out.toString();
-    }
-
-    // Word-boundary keyword matchers per exemplar group. Bare String.contains fired on substrings —
-    // "rank" on Frankfurt/franking, "tier" on frontier, "tally" on totally — and a bare "breakdown"
-    // dragged the schedule exemplar into group-by domains ("cost breakdown by category"). Each group is
-    // one precompiled alternation; keep this table next to the *_EXEMPLAR strings it selects. A comment
-    // marks each non-obvious inclusion.
-    private static final Pattern SCHEDULE_KEYS = Pattern.compile(
-            "\\b(schedule|amorti[sz]\\w*|insta(l|ll)ment|repayment|time\\s*series|payment\\s+plan"
-          + "|per[-\\s]month|per[-\\s]period|each\\s+(month|period)|every\\s+(month|period)"
-          + "|month[-\\s]by[-\\s]month"
-          // "breakdown" ONLY when qualified as a per-period one (not a generic cost/category breakdown)
-          + "|(monthly|per[-\\s]period|month[-\\s]by[-\\s]month|payment)\\s+breakdown)\\b");
-
-    private static final Pattern GROUP_BY_KEYS = Pattern.compile(
-            "\\b(group(ed)?[-\\s]?by|grouped|aggregat(e|ion)|sum\\s+by|count\\s+by"
-          + "|per\\s+category|by\\s+category|subtotal|tally|by\\s+group)\\b");
-
-    private static final Pattern DATE_MATH_KEYS = Pattern.compile(
-            "\\b(days\\s+(between|until|since)|date\\s+difference|difference\\s+between\\s+dates"
-          + "|duration|elapsed|(months|years|time)\\s+between|how\\s+many\\s+days|number\\s+of\\s+days"
-          + "|age\\s+in\\s+(years|days))\\b");
-
-    private static final Pattern CLASSIFICATION_KEYS = Pattern.compile(
-            "\\b(classif(y|ication)|risk\\s+level|priority\\s+level|rating\\s+band|tax\\s+bracket"
-          + "|tiers?|status\\s+based\\s+on|category\\s+based\\s+on|grade\\s+based\\s+on|assign\\s+a\\s+grade)\\b");
-
-    private static final Pattern CURRENCY_KEYS = Pattern.compile(
-            "\\b(exchange\\s+rate|currency\\s+conversion|convert\\s+currency|conversion\\s+rate|forex"
-          + "|fx\\s+rate|usd\\s+to|eur\\s+to|gbp\\s+to)\\b");
-
-    private static final Pattern STATUS_KEYS = Pattern.compile(
-            "\\b(state\\s+machine|status\\s+transition|state\\s+transition|allowed\\s+transition"
-          + "|next\\s+state|next\\s+status|workflow|lifecycle|approval\\s+process|status\\s+changes)\\b");
-
-    private static final Pattern RANK_KEYS = Pattern.compile(
-            "\\b(percentile|rank(s|ed|ing)?|leaderboard|quartile|top[-\\s]n|nth\\s+highest|median)\\b");
-
-    private static boolean wantsSchedule(String d)       { return SCHEDULE_KEYS.matcher(d).find(); }
-    private static boolean wantsGroupBy(String d)        { return GROUP_BY_KEYS.matcher(d).find(); }
-    private static boolean wantsDateMath(String d)       { return DATE_MATH_KEYS.matcher(d).find(); }
-    private static boolean wantsClassification(String d) { return CLASSIFICATION_KEYS.matcher(d).find(); }
-    private static boolean wantsCurrency(String d)       { return CURRENCY_KEYS.matcher(d).find(); }
-    private static boolean wantsStatus(String d)         { return STATUS_KEYS.matcher(d).find(); }
-    private static boolean wantsRank(String d)           { return RANK_KEYS.matcher(d).find(); }
-
-    private static final String SCHEDULE_EXEMPLAR = """
-
-
-            This domain needs a COMPUTED ARRAY (one row per period). Use this exact,
-            paren-balanced pattern: a SINGLE $reduce(...) that references already-derived fields
-            directly. Do NOT wrap it in an outer ( ...; $reduce(...) ) sequence — that extra
-            closing ) is the #1 thing models drop. Count every ( ) { } [ ] and close them all.
-              {
-                "path": "$.schedule",
-                "expr": "$reduce([1..loan.termMonths], function($acc, $m) {$interest := $round($acc[-1].balance * (loan.annualRate / 1200), 2); $principal := $round(loan.monthlyPayment - $interest, 2); $append($acc, {\\"month\\": $m, \\"payment\\": loan.monthlyPayment, \\"principal\\": $principal, \\"interest\\": $interest, \\"balance\\": $round($acc[-1].balance - $principal, 2)})}, [{\\"balance\\": loan.amount}])"
-              }
-            Adapt the field names to THIS domain, but keep the structure and bracket balance.""";
-
-    private static final String GROUP_BY_EXEMPLAR = """
-
-
-            This domain needs GROUP-BY / AGGREGATION. Do NOT loop manually — use JSONata aggregate
-            built-ins ($sum, $count, $average, $max, $min) and the {key: agg} group operator:
-              total over an array:   "$sum(items.amount)"
-              count:                 "$count(items)"
-              grouped totals (object keyed by category → summed amount):
-                                     "items{category: $sum(amount)}"
-            Each derivation returns a single value or one grouped object; keep names matching the schema.""";
-
-    private static final String DATE_MATH_EXEMPLAR = """
-
-
-            This domain needs DATE ARITHMETIC. Parse ISO date strings to epoch millis with
-            $toMillis(...), subtract, then convert. NEVER chain $toMillis()~>$fromMillis() before
-            arithmetic (that turns it back into a string and breaks the math):
-              days between two dates: "($toMillis(endDate) - $toMillis(startDate)) / 86400000"
-              age in whole years:     "$floor(($toMillis($now()) - $toMillis(birthDate)) / 31557600000)"
-            86400000 ms = 1 day; 31557600000 ms ≈ 1 year. Keep field names matching the schema.""";
-
-    private static final String CLASSIFICATION_EXEMPLAR = """
-
-
-            This domain DERIVES a label / tier / status from data. Compute it as a derivation with a
-            nested ternary chain — do NOT make it a writable enum the user must keep in sync:
-              { "path": "$.riskLevel",
-                "expr": "(score >= 80 ? \\"low\\" : score >= 50 ? \\"medium\\" : \\"high\\")" }
-            Put the most selective condition first; the final branch is the default. String literals
-            in JSONata use double quotes, so escape them as \\" inside the JSON expr value.""";
-
-    private static final String CURRENCY_EXEMPLAR = """
-
-
-            This domain needs CURRENCY / FX CONVERSION. Convert by multiplying by the rate and
-            rounding to the target precision; keep the amount and rate as writable inputs:
-              { "path": "$.convertedAmount", "expr": "$round(amount * exchangeRate, 2)" }
-            Currency formatting (symbols, thousands separators) is a VIEW concern, not a derivation.""";
-
-    private static final String STATUS_EXEMPLAR = """
-
-
-            This domain has a STATUS / STATE field. Model it as a WRITABLE enum (schema
-            "enum": [...]) and DERIVE flags/labels from the CURRENT status:
-              { "path": "$.isEditable", "expr": "(status = \\"draft\\" or status = \\"pending\\")" }
-            IMPORTANT: you CANNOT validate transitions (e.g. "only draft → submitted"). A JSONata
-            expression sees only the CURRENT value, never the previous one, so transition rules cannot
-            be expressed in derivations or constraints — enforce them in the calling application.""";
-
-    private static final String RANK_EXEMPLAR = """
-
-
-            This domain needs RANK / PERCENTILE over an array. Use counting, not sorting:
-              rank (1 = highest):   "$count(scores[$ > currentScore]) + 1"
-              percentile of v:      "$round($count(values[$ <= v]) / $count(values) * 100, 1)"
-              max / min:            "$max(scores)"  /  "$min(scores)"
-            $count(array[predicate]) counts the elements matching the predicate.""";
 
     /** Calls {@link #initialPrompt(String, String, boolean)} without view context. */
     public static String initialPrompt(String modelId, String domainDescription) {
@@ -947,7 +832,7 @@ public final class SpecGenerationPrompt {
                 Apply the following changes to the current spec (shown above) and output a \
                 SpecEvolution JSON object (not a full spec — only the diff fields that change):
 
-                """ + evolutionRequest + shapeExemplars(evolutionRequest) + (includeView ? """
+                """ + evolutionRequest + (includeView ? """
 
                 Update or replace the viewDefinition as needed to reflect the changes.
                 """ : "") + """
@@ -1023,7 +908,7 @@ public final class SpecGenerationPrompt {
 
                 Re-apply this change request against the current (unchanged) spec, fixing the problem above:
 
-                """ + evolutionRequest + shapeExemplars(evolutionRequest) + """
+                """ + evolutionRequest + """
 
                 A SpecEvolution has these optional fields:
                 """ + evolutionFields(includeView) + """

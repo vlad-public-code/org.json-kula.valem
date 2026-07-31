@@ -3,6 +3,7 @@ package org.json_kula.valem.api.llm;
 import org.json_kula.valem.core.llm.LlmClient.ToolCall;
 import org.json_kula.valem.core.llm.LlmClient.ToolDefinition;
 import org.json_kula.valem.core.llm.LlmClient.ToolExecutor;
+import org.json_kula.valem.core.llm.ResolvedGuidanceProvider;
 import org.json_kula.valem.core.llm.WebTool;
 
 import java.util.ArrayList;
@@ -32,6 +33,11 @@ public final class CompositeWebTool implements WebTool {
     }
 
     @Override
+    public List<ToolDefinition> repairDefinitions() {
+        return tools.stream().flatMap(t -> t.repairDefinitions().stream()).toList();
+    }
+
+    @Override
     public ToolExecutor newExecutor() {
         Map<String, ToolExecutor> byName = new LinkedHashMap<>();
         List<ToolExecutor> all = new ArrayList<>();
@@ -44,8 +50,8 @@ public final class CompositeWebTool implements WebTool {
         return new RoutingExecutor(byName, all);
     }
 
-    /** Routes calls by tool name and aggregates facts from any fact-collecting sub-executors. */
-    static final class RoutingExecutor implements ToolExecutor, FactProvider {
+    /** Routes calls by tool name and aggregates facts / resolved guidance from sub-executors. */
+    static final class RoutingExecutor implements ToolExecutor, FactProvider, ResolvedGuidanceProvider {
 
         private final Map<String, ToolExecutor> byName;
         private final List<ToolExecutor>        all;
@@ -61,6 +67,23 @@ public final class CompositeWebTool implements WebTool {
             if (executor == null)
                 return "[Unknown tool: " + call.name() + "]";
             return executor.execute(call);
+        }
+
+        /** Fan out to every sub-executor; only per-attempt-scoped ones (eval) actually reset. */
+        @Override
+        public void resetPerAttemptBudget() {
+            all.forEach(ToolExecutor::resetPerAttemptBudget);
+        }
+
+        /** Concatenate resolved guidance from any guidance-collecting sub-executor. */
+        @Override
+        public String resolvedGuidance() {
+            return all.stream()
+                    .filter(ResolvedGuidanceProvider.class::isInstance)
+                    .map(e -> ((ResolvedGuidanceProvider) e).resolvedGuidance())
+                    .filter(s -> s != null && !s.isBlank())
+                    .reduce((a, b) -> a + b)
+                    .orElse("");
         }
 
         @Override

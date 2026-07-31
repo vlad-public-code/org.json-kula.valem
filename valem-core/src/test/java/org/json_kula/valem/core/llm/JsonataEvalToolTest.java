@@ -80,6 +80,24 @@ class JsonataEvalToolTest {
         assertThat(ex2.execute(call("3 + 3", null))).isEqualTo("result: 6"); // fresh budget
     }
 
+    @Test
+    void reset_per_attempt_budget_replenishes_the_eval_quota() {
+        // Per-attempt budget: exhaust it, reset (a new generation attempt begins), test again.
+        ToolExecutor ex = new JsonataEvalTool(1).newExecutor();
+        assertThat(ex.execute(call("1 + 1", null))).isEqualTo("result: 2");
+        assertThat(ex.execute(call("2 + 2", null))).contains("limit reached");
+        ex.resetPerAttemptBudget();
+        assertThat(ex.execute(call("3 + 3", null))).isEqualTo("result: 6"); // budget refilled
+    }
+
+    @Test
+    void eval_tool_is_offered_on_repair_attempts() {
+        // eval_jsonata is local/side-effect-free, so it is exposed via repairDefinitions() (unlike the
+        // network tools) — this is what lets a repair attempt re-test its corrected expressions.
+        assertThat(tool.repairDefinitions()).hasSize(1);
+        assertThat(tool.repairDefinitions().get(0).name()).isEqualTo(JsonataEvalTool.TOOL_NAME);
+    }
+
     private static ToolCall call(String expr, com.fasterxml.jackson.databind.JsonNode input) {
         ObjectNode args = JsonNodeFactory.instance.objectNode();
         args.put("expr", expr);
