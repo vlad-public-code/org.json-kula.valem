@@ -35,6 +35,16 @@ public final class ValemTypes {
             String targetPath, String expression, List<String> inputPaths,
             JsonNode result, Boolean constraintPassed, String errorMessage) {}
 
+    /** Mirror of core {@code ModelGraph} — the dependency-graph projection served at {@code /models/{id}/graph}. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ModelGraph(
+            String modelId, List<Node> nodes, List<Edge> edges, List<List<String>> levels) {
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public record Node(String key, String kind, String label, String expression) {}
+        @JsonIgnoreProperties(ignoreUnknown = true)
+        public record Edge(String from, String to) {}
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record MutationResponse(
             boolean success,

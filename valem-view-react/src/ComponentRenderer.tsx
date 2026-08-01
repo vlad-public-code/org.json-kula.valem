@@ -1,8 +1,10 @@
-import type { ReactElement } from 'react';
-import type { ComponentSpec, KnownComponentSpec, ModelState } from './types';
+import type { CSSProperties, ReactElement } from 'react';
+import type { ComponentSpec, KnownComponentSpec, ModelState, ProvenanceInfo } from './types';
 import { isKnownComponent } from './types';
 import { useJSONataBoolean, useJSONataText } from './hooks/useJSONata';
 import { useViewContext } from './ViewContext';
+import { ProvenancePopover } from './ProvenancePopover';
+import { canonicalPath } from './provenance';
 
 // Field components
 import { TextField } from './fields/TextField';
@@ -78,7 +80,7 @@ export interface ComponentRendererProps {
  * `SliderSpec`, not a union of every component's fields.
  */
 export function ComponentRenderer({ component: c, state }: ComponentRendererProps) {
-  const { fieldErrors, meta, readOnly: viewReadOnly } = useViewContext();
+  const { fieldErrors, meta, readOnly: viewReadOnly, provenance } = useViewContext();
 
   // Fall back to backend meta cache when spec doesn't set readOnly/visible explicitly
   const metaReadOnly = c.bind ? (meta[`${c.bind}#readOnly`] === true) : false;
@@ -108,18 +110,77 @@ export function ComponentRenderer({ component: c, state }: ComponentRendererProp
       </div>
     );
 
-  if (!fieldError) return inner;
+  // ── Provenance overlay (opt-in) ──────────────────────────────────────────
+  // Active only when a ProvenanceSource was supplied (sandbox interact view). A leaf participates
+  // when it is bound, OR (F7) when it renders an inline `text`/`value` JSONata expression that isn't
+  // bound to a single node. `provInfo` is non-null when there's something to explain.
+  const rawValue = 'value' in c ? (c as { value?: unknown }).value : undefined;
+  const inlineExpr = !c.bind
+    ? ([rawText, rawValue].find(v => typeof v === 'string' && v.includes('$')) as string | undefined)
+    : undefined;
 
-  // `data-bind` is set only on this error wrapper, which is the only time anything needs to find a
-  // component by its bound path: it is what `validationSummary`'s jump-to-field resolves against.
-  // Putting it on every component instead would mean an extra DOM node inside every flex and grid
-  // container, changing layouts that are otherwise none of the renderer's business.
+  const provActive = !!provenance && (!!c.bind || !!inlineExpr);
+  const leafId = c.bind ?? (inlineExpr ? `#${c.id}` : null);
+
+  const inlineLabel = ('label' in c && typeof c.label === 'string' ? c.label : undefined) ?? 'this value';
+  let provInfo: ProvenanceInfo | null = null;
+  if (provenance && c.bind)          provInfo = provenance.source.explain(c.bind);
+  else if (provenance && inlineExpr) provInfo = provenance.source.explainExpression?.(inlineExpr, inlineLabel, text) ?? null;
+
+  // Nothing to add → return the bare component (no wrapper, no layout change — embeds/default path).
+  if (!fieldError && !provActive) return inner;
+
+  const key         = c.bind ? canonicalPath(c.bind) : null;
+  const highlighted = !!key && provenance!.highlightedPaths.has(key);   // F2: input of the hovered node
+  const selected    = !!key && provenance?.selectedPath === key;         // F11: cross-highlight selection
+  const pulsing     = !!key && !!provenance?.pulsingPaths.has(key);      // F12: live recompute flash
+  const showPopover = !!provInfo && provenance?.hoveredLeafId === leafId;
+
+  // Hover/focus affordance only where there's something to explain, so plain inputs stay inert.
+  const hoverHandlers = provInfo && leafId
+    ? {
+        onMouseEnter:   () => provenance!.onHover(leafId, provInfo!.inputs.map(i => i.path)),
+        onMouseLeave:   () => provenance!.onHover(null, []),
+        onFocusCapture: () => provenance!.onHover(leafId, provInfo!.inputs.map(i => i.path)),
+        onBlurCapture:  () => provenance!.onHover(null, []),
+        // Clicking an explainable leaf selects it, syncing the graph panel (F11).
+        onClick:        () => provenance!.onSelect(key ?? leafId),
+      }
+    : {};
+
+  // Outline (not border/box) so highlights never shift layout; background flash for the live pulse.
+  const wrapperStyle: CSSProperties | undefined = provActive
+    ? {
+        position: 'relative',
+        borderRadius: 4,
+        transition: 'background-color 0.6s ease-out',
+        ...(pulsing ? { backgroundColor: 'var(--signal-soft, #d6f5e6)' } : {}),
+        ...(provInfo ? { cursor: 'help' } : {}),
+        ...(selected
+          ? { outline: '2px solid var(--accent, #4f46e5)', outlineOffset: 2, backgroundColor: 'var(--accent-soft, rgba(79,70,229,0.10))' }
+          : highlighted
+            ? { outline: '2px solid var(--accent, #4f46e5)', outlineOffset: 2 }
+            : {}),
+      }
+    : undefined;
+
+  // `data-bind` is what `validationSummary`'s jump-to-field resolves against; it stays on this wrapper.
   return (
-    <div data-bind={c.bind}>
+    <div
+      data-bind={c.bind}
+      data-testid={provInfo ? 'provenance-target' : undefined}
+      data-selected={selected ? '1' : undefined}
+      data-pulsing={pulsing ? '1' : undefined}
+      style={wrapperStyle}
+      {...hoverHandlers}
+    >
       {inner}
-      <span style={{ display: 'block', color: '#dc2626', fontSize: 11, marginTop: 2 }}>
-        {fieldError}
-      </span>
+      {fieldError && (
+        <span style={{ display: 'block', color: '#dc2626', fontSize: 11, marginTop: 2 }}>
+          {fieldError}
+        </span>
+      )}
+      {showPopover && provInfo && <ProvenancePopover info={provInfo} />}
     </div>
   );
 }

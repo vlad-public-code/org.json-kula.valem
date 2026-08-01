@@ -2,6 +2,7 @@ import { render } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { vi } from 'vitest';
 import { ViewContext } from '../ViewContext';
+import type { ProvenanceRuntime } from '../ViewContext';
 import type { ComponentSpec, ModelState, MutationMap } from '../types';
 import { ComponentRenderer } from '../ComponentRenderer';
 
@@ -12,6 +13,7 @@ export interface Harness {
   formErrors?: string[];
   activeViewId?: string;
   readOnly?: boolean;
+  provenance?: ProvenanceRuntime | null;
 }
 
 /**
@@ -39,6 +41,7 @@ export function renderComponent(component: ComponentSpec, harness: Harness = {})
         fieldErrors: harness.fieldErrors ?? {},
         formErrors: harness.formErrors ?? [],
         readOnly: harness.readOnly ?? false,
+        provenance: harness.provenance ?? null,
       }}
     >
       <ComponentRenderer component={component} state={state} />

@@ -38,7 +38,11 @@ export type {
   ModelState,
   MetaCache,
   MutationMap,
+  ProvenanceInput,
+  ProvenanceInfo,
+  ProvenanceSource,
 } from './types';
+export { canonicalPath, formatProvenanceValue } from './provenance';
 
 // ComponentSpec union — the per-type variants, for narrowing and custom renderers
 export type {

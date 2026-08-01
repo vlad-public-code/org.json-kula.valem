@@ -126,6 +126,19 @@ public final class RemoteModelOperations implements ModelOperations,
     }
 
     @Override
+    public org.json_kula.valem.core.graph.ModelGraph graph(String id) {
+        ValemTypes.ModelGraph g = call(() -> client.graph(id));
+        List<org.json_kula.valem.core.graph.ModelGraph.Node> nodes = g.nodes().stream()
+                .map(n -> new org.json_kula.valem.core.graph.ModelGraph.Node(
+                        n.key(), n.kind(), n.label(), n.expression()))
+                .toList();
+        List<org.json_kula.valem.core.graph.ModelGraph.Edge> edges = g.edges().stream()
+                .map(e -> new org.json_kula.valem.core.graph.ModelGraph.Edge(e.from(), e.to()))
+                .toList();
+        return new org.json_kula.valem.core.graph.ModelGraph(g.modelId(), nodes, edges, g.levels());
+    }
+
+    @Override
     public JsonNode getAudit(String id, String pathPrefix, Instant from, Instant to, int limit) {
         ValemTypes.AuditQuery query = new ValemTypes.AuditQuery(
                 blankToNull(pathPrefix), from, to, limit > 0 ? limit : null);

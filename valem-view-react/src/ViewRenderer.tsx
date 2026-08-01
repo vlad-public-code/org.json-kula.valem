@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
-import type { ViewDefinition, ModelState, MetaCache, MutationMap } from './types';
+import { useState, useCallback, useMemo } from 'react';
+import type { ViewDefinition, ModelState, MetaCache, MutationMap, ProvenanceSource } from './types';
 import { ViewContext } from './ViewContext';
+import { canonicalPath } from './provenance';
 import { LayoutContainer } from './aggregates/LayoutContainer';
 import { useJSONataBoolean, useJSONataText } from './hooks/useJSONata';
 
@@ -24,7 +25,22 @@ export interface ViewRendererProps {
    * snapshot. Used by read-only embeds; defaults to false so the sandbox app is unaffected.
    */
   readOnly?: boolean;
+  /**
+   * Optional "Why is this number?" lens. When supplied, hovering/focusing a bound leaf that
+   * resolves to a derived node shows its expression + inputs and highlights those inputs in place.
+   * Omitted everywhere except the sandbox interact view, so embeds and the default path are
+   * unchanged (and incur no extra DOM).
+   */
+  provenance?: ProvenanceSource;
+  /** Cross-highlight (F11): the currently-selected path — its leaf is highlighted persistently. */
+  provenanceSelectedPath?: string | null;
+  /** Cross-highlight (F11): called when a leaf is clicked/focused, so the graph panel can sync. */
+  onProvenanceSelect?: (path: string | null) => void;
+  /** Live pulse (F12): paths from the latest ChangeEvent (mutated + derived-updated) to flash briefly. */
+  provenancePulsingPaths?: Set<string>;
 }
+
+const EMPTY_PATHS: Set<string> = new Set();
 
 /**
  * Root renderer component. Evaluates all dynamic expressions from the ViewDefinition
@@ -41,7 +57,30 @@ export function ViewRenderer({
   violations = {},
   formErrors = [],
   readOnly = false,
+  provenance,
+  provenanceSelectedPath = null,
+  onProvenanceSelect,
+  provenancePulsingPaths,
 }: ViewRendererProps) {
+  // Hover is ephemeral and owned here; a leaf reports its id + the input paths to highlight.
+  const [hover, setHover] = useState<{ id: string; paths: Set<string> } | null>(null);
+  const onHover = useCallback((leafId: string | null, inputPaths: string[]) => {
+    setHover(leafId ? { id: leafId, paths: new Set(inputPaths.map(canonicalPath)) } : null);
+  }, []);
+  const noop = useCallback(() => {}, []);
+
+  const provenanceRuntime = useMemo(() => {
+    if (!provenance) return null;
+    return {
+      source: provenance,
+      hoveredLeafId: hover?.id ?? null,
+      onHover,
+      highlightedPaths: hover?.paths ?? EMPTY_PATHS,
+      selectedPath: provenanceSelectedPath ? canonicalPath(provenanceSelectedPath) : null,
+      onSelect: onProvenanceSelect ?? noop,
+      pulsingPaths: provenancePulsingPaths ?? EMPTY_PATHS,
+    };
+  }, [provenance, hover, onHover, provenanceSelectedPath, onProvenanceSelect, provenancePulsingPaths, noop]);
   const [internalViewId, setInternalViewId] = useState<string>(
     externalViewId ?? viewDef.defaultView ?? viewDef.views[0]?.id ?? '',
   );
@@ -69,6 +108,7 @@ export function ViewRenderer({
         modelId, state, meta, onMutate: effectiveOnMutate,
         onNavigate: handleNavigate, activeViewId,
         fieldErrors: violations, formErrors, readOnly,
+        provenance: provenanceRuntime,
       }}
     >
       {/*

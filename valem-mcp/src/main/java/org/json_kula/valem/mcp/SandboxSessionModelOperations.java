@@ -269,6 +269,11 @@ final class SandboxSessionModelOperations implements ModelOperations, BrowserPai
     }
 
     @Override
+    public org.json_kula.valem.core.graph.ModelGraph graph(String id) {
+        return requireDelegate().graph(toServer(id));
+    }
+
+    @Override
     public JsonNode getAudit(String id, String pathPrefix, Instant from, Instant to, int limit) {
         JsonNode audit = requireDelegate().getAudit(toServer(id), pathPrefix, from, to, limit);
         // Translate each record's namespaced modelId back to the plain id the agent used.

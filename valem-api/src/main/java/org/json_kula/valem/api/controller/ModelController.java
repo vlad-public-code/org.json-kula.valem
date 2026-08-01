@@ -21,6 +21,7 @@ import org.json_kula.valem.core.model.ModelSpec;
 import org.json_kula.valem.core.state.Snapshot;
 import org.json_kula.valem.service.ModelService;
 import org.json_kula.valem.service.ModelInfo;
+import org.json_kula.valem.core.graph.ModelGraph;
 import org.json_kula.valem.core.graph.SpecEvolution;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.MediaType;
@@ -325,6 +326,16 @@ public class ModelController {
             @PathVariable("id") String id,
             @PathVariable("path") String path) {
         return ResponseEntity.ok(service.explain(id, path));
+    }
+
+    /**
+     * Structural dependency-graph projection for the "Why is this number?" provenance surface —
+     * nodes (base/derived/meta/constraint/effect), dependency edges, topological levels, and each
+     * node's source expression. Read-only; a pure function of the compiled spec.
+     */
+    @GetMapping("/{id}/graph")
+    public ResponseEntity<ModelGraph> graph(@PathVariable("id") String id) {
+        return ResponseEntity.ok(service.graph(id));
     }
 
     /**

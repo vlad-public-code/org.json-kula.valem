@@ -685,3 +685,42 @@ export interface EvaluatedView {
 export type ModelState = Record<string, unknown>;
 export type MetaCache = Record<string, unknown>;
 export type MutationMap = Record<string, unknown>;
+
+// ── Provenance ("Why is this number?") ───────────────────────────────────────
+// Optional, host-supplied. When a ProvenanceSource is passed to ViewRenderer, hovering/focusing a
+// bound leaf whose path resolves to a derived node reveals the expression that computed it and the
+// input cells that fed it — and those inputs highlight in place. Off (zero layout change) otherwise.
+
+/** One input feeding a derived value. */
+export interface ProvenanceInput {
+  path: string;         // the input's bound path (matches a leaf's `bind`)
+  label: string;
+  value: unknown;       // its current value, for display beside the name
+}
+
+/** Provenance of a single derived/meta/constraint node — what the popover renders. */
+export interface ProvenanceInfo {
+  path: string;
+  kind: string;                 // DERIVED | META | CONSTRAINT | EFFECT
+  label: string;
+  expression: string | null;
+  value: unknown;
+  /** Direct inputs (the expression's immediate reads). */
+  inputs: ProvenanceInput[];
+  /**
+   * Transitive base (editable) inputs this value ultimately traces back to (F3). Present only when
+   * they differ from {@link inputs} — i.e. when some direct input is itself derived. These are the
+   * knobs a user can actually turn to move this number.
+   */
+  baseInputs?: ProvenanceInput[];
+}
+
+/**
+ * Host-supplied lens. {@link explain} resolves a leaf's bound path to its provenance; the optional
+ * {@link explainExpression} does the same for an inline `text`/`value` JSONata expression that isn't
+ * bound to a single node (F7). Both return null when there is nothing to explain.
+ */
+export interface ProvenanceSource {
+  explain(bindPath: string): ProvenanceInfo | null;
+  explainExpression?(expression: string, label: string, value: unknown): ProvenanceInfo | null;
+}

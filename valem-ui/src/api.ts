@@ -1,4 +1,4 @@
-import type { ModelInfo, MutationResponse, DerivationTrace, Snapshot, SpecEvolution, LlmInteraction } from './types';
+import type { ModelInfo, MutationResponse, DerivationTrace, Snapshot, SpecEvolution, LlmInteraction, ModelGraph } from './types';
 import type { EvaluatedView } from 'valem-view-react';
 
 // ── LLM progress streaming ────────────────────────────────────────────────────
@@ -166,6 +166,8 @@ export const api = {
 
   explain: (id: string, path: string) =>
     request<DerivationTrace[]>('GET', `/models/${id}/explain/${encodeURIComponent(path)}`),
+
+  graph: (id: string) => request<ModelGraph>('GET', `/models/${id}/graph`),
 
   snapshot: (id: string) => request<Snapshot>('POST', `/models/${id}/snapshot`),
 

@@ -49,6 +49,28 @@ export interface DerivationTrace {
   timestamp: string;
 }
 
+// ── Dependency-graph projection ("Why is this number?") ──────────────────────
+export type GraphNodeKind = 'BASE' | 'DERIVED' | 'META' | 'CONSTRAINT' | 'EFFECT';
+
+export interface GraphNode {
+  key: string;                 // canonical `$.`-prefixed key, or `$constraint:`/`$effect:` synthetic
+  kind: GraphNodeKind;
+  label: string;
+  expression: string | null;   // null for BASE fields
+}
+
+export interface GraphEdge {
+  from: string;                // dependency feeds…
+  to: string;                  // …dependent (recomputes when `from` changes)
+}
+
+export interface ModelGraph {
+  modelId: string;
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  levels: string[][];          // node keys grouped by topological depth (shallowest first)
+}
+
 export interface ChangeEvent {
   /** Frame discriminator — "mutation" (default when absent, older servers) or "spec-evolved". */
   kind?: 'mutation' | 'spec-evolved';

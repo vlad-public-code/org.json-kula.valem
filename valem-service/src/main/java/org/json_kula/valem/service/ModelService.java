@@ -14,6 +14,8 @@ import org.json_kula.valem.core.engine.ExpressionCache;
 import org.json_kula.valem.core.engine.ModelRuntime;
 import org.json_kula.valem.core.engine.SchemaStateChecker;
 import org.json_kula.valem.core.graph.CompiledModel;
+import org.json_kula.valem.core.graph.GraphProjection;
+import org.json_kula.valem.core.graph.ModelGraph;
 import org.json_kula.valem.core.graph.ModelSpecCompiler;
 import org.json_kula.valem.core.graph.ModelSpecValidator;
 import org.json_kula.valem.core.graph.SpecEvolution;
@@ -580,6 +582,22 @@ public class ModelService implements ModelOperations, ChangeSubscribable {
     /** @throws ModelNotFoundException if the model does not exist */
     public ObjectNode getEffectiveSchema(String id, String path) {
         return requireRuntime(id).effectiveSchema(path);
+    }
+
+    /**
+     * Structural dependency-graph projection for the "Why is this number?" surface — a read-only
+     * lens over the compiled model (nodes, edges, levels, per-node expressions). Pure function of the
+     * spec; recomputed on demand.
+     *
+     * @throws ModelNotFoundException if the model does not exist
+     */
+    public ModelGraph graph(String id) {
+        ModelRuntime rt = requireRuntime(id);
+        // Read-only over the immutable CompiledModel; no runtime state is touched, but hold the lock
+        // for parity with the other runtime-reaching reads in this class.
+        synchronized (rt) {
+            return GraphProjection.project(rt.model(), id);
+        }
     }
 
     /** @throws ModelNotFoundException if the model does not exist */

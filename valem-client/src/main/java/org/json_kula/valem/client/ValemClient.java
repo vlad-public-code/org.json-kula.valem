@@ -114,6 +114,11 @@ public final class ValemClient implements AutoCloseable {
         return get("/models/" + enc(id) + "/spec", JsonNode.class);
     }
 
+    /** Structural dependency-graph projection (nodes/edges/levels/expressions) for the "Why is this number?" surface. */
+    public ValemTypes.ModelGraph graph(String id) {
+        return get("/models/" + enc(id) + "/graph", ValemTypes.ModelGraph.class);
+    }
+
     public void deleteModel(String id) {
         send("DELETE", "/models/" + enc(id), null, null, Void.class);
     }
