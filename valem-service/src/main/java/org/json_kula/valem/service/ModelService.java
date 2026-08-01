@@ -836,7 +836,11 @@ public class ModelService implements ModelOperations, ChangeSubscribable {
 
     /** @throws ModelNotFoundException if the model does not exist */
     public void deleteModel(String id) {
-        if (!registry.remove(id)) throw new ModelNotFoundException(id);
+        ModelRuntime removed = registry.removeAndGet(id);
+        if (removed == null) throw new ModelNotFoundException(id);
+        // Release the runtime's per-instance compiled-expression references so their classes become
+        // reclaimable (a no-op for a server model that borrows the shared server-lifetime cache).
+        removed.dispose();
         mutationQueues.invalidate(id);
     }
 

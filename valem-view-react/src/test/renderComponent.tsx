@@ -11,6 +11,7 @@ export interface Harness {
   fieldErrors?: Record<string, string>;
   formErrors?: string[];
   activeViewId?: string;
+  readOnly?: boolean;
 }
 
 /**
@@ -37,6 +38,7 @@ export function renderComponent(component: ComponentSpec, harness: Harness = {})
         activeViewId: harness.activeViewId ?? 'main',
         fieldErrors: harness.fieldErrors ?? {},
         formErrors: harness.formErrors ?? [],
+        readOnly: harness.readOnly ?? false,
       }}
     >
       <ComponentRenderer component={component} state={state} />

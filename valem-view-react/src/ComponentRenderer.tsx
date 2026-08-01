@@ -78,7 +78,7 @@ export interface ComponentRendererProps {
  * `SliderSpec`, not a union of every component's fields.
  */
 export function ComponentRenderer({ component: c, state }: ComponentRendererProps) {
-  const { fieldErrors, meta } = useViewContext();
+  const { fieldErrors, meta, readOnly: viewReadOnly } = useViewContext();
 
   // Fall back to backend meta cache when spec doesn't set readOnly/visible explicitly
   const metaReadOnly = c.bind ? (meta[`${c.bind}#readOnly`] === true) : false;
@@ -87,8 +87,11 @@ export function ComponentRenderer({ component: c, state }: ComponentRendererProp
   const rawText = 'text' in c ? c.text : undefined;
 
   const visible  = useJSONataBoolean(c.visible,  state, metaVisible);
-  const readOnly = useJSONataBoolean(c.readOnly,  state, metaReadOnly);
-  const enabled  = useJSONataBoolean(c.enabled,   state, !readOnly);
+  // A view-level read-only (a read-only embed) wins over the per-component/meta resolution: no
+  // spec expression can re-enable a field the embed author locked down.
+  const ownReadOnly = useJSONataBoolean(c.readOnly, state, metaReadOnly);
+  const readOnly = viewReadOnly || ownReadOnly;
+  const enabled  = useJSONataBoolean(c.enabled,   state, !readOnly) && !viewReadOnly;
   const required = useJSONataBoolean(c.required,  state, false);
   const text     = useJSONataText(typeof rawText === 'string' ? rawText : undefined, state);
 

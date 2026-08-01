@@ -7,6 +7,14 @@ import type { ConstraintViolationItem, ConstraintViolationBody, SchemaViolationB
 
 interface Props {
   modelId: string;
+  /** Render the view as a non-editable computed snapshot (used by read-only embeds). */
+  readOnly?: boolean;
+  /** View id to open first, instead of the spec's default view (used by embeds' `view=` option). */
+  initialView?: string;
+  /** Fired whenever the local model state changes (after load, mutation, or a live WS update). */
+  onStateChange?: (state: Record<string, unknown>) => void;
+  /** Fired with the raw constraint violations after every mutation attempt (empty when all pass). */
+  onConstraintFlag?: (violations: ConstraintViolationItem[]) => void;
 }
 
 interface SpecConstraint {
@@ -44,18 +52,27 @@ function mapViolations(
   return { fieldErrors, formErrors };
 }
 
-export default function ViewPanel({ modelId }: Props) {
+export default function ViewPanel({ modelId, readOnly = false, initialView, onStateChange, onConstraintFlag }: Props) {
   const [viewDef, setViewDef] = useState<ViewDefinition | null>(null);
   const [state, setState] = useState<Record<string, unknown>>({});
   const [meta, setMeta] = useState<Record<string, unknown>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formErrors, setFormErrors] = useState<string[]>([]);
-  const [activeViewId, setActiveViewId] = useState<string | undefined>(undefined);
+  const [activeViewId, setActiveViewId] = useState<string | undefined>(initialView);
   const constraintPathMapRef = useRef<Record<string, string[]>>({});
   const wsRef = useRef<WebSocket | null>(null);
   // Counts mutations whose WS broadcast we should ignore (we already applied viewDelta locally)
   const pendingOwnMutationRef = useRef(0);
+  // Keep the observer callbacks in refs so firing them never depends on the parent passing a stable
+  // function identity — the state-change effect below can then depend on `state` alone.
+  const onStateChangeRef = useRef(onStateChange);
+  onStateChangeRef.current = onStateChange;
+  const onConstraintFlagRef = useRef(onConstraintFlag);
+  onConstraintFlagRef.current = onConstraintFlag;
+
+  // Surface every state change to an embedding host (onChange callback / postMessage bridge).
+  useEffect(() => { onStateChangeRef.current?.(state); }, [state]);
 
   const loadSpec = useCallback(async () => {
     try {
@@ -222,6 +239,7 @@ export default function ViewPanel({ modelId }: Props) {
     const effectiveViewId = activeViewId ?? viewDef?.defaultView ?? viewDef?.views[0]?.id;
     try {
       const result = await api.mutate(modelId, mutations, effectiveViewId);
+      onConstraintFlagRef.current?.(result.flaggedConstraints ?? []);
       if (result.flaggedConstraints?.length) {
         const { fieldErrors: fe, formErrors: fme } = mapViolations(
           result.flaggedConstraints,
@@ -244,6 +262,7 @@ export default function ViewPanel({ modelId }: Props) {
         try {
           const body = JSON.parse(e.body) as ConstraintViolationBody;
           if (body.violations?.length) {
+            onConstraintFlagRef.current?.(body.violations);
             const { fieldErrors: fe, formErrors: fme } = mapViolations(
               body.violations,
               constraintPathMapRef.current,
@@ -311,6 +330,7 @@ export default function ViewPanel({ modelId }: Props) {
         activeViewId={activeViewId}
         violations={fieldErrors}
         formErrors={formErrors}
+        readOnly={readOnly}
       />
     </div>
   );

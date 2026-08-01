@@ -38,6 +38,7 @@ public final class ModelRuntime {
     private final CompiledModel model;
     private final ModelState    state;
     private final ExpressionCache          cache;
+    private final boolean                  ownsCache;
     private final DerivationEvaluator      derivationEval;
     private final MetaDerivationEvaluator  metaEval;
     private final ConstraintEvaluator      constraintEval;
@@ -70,7 +71,7 @@ public final class ModelRuntime {
      * its cache independently — later compiles on either side do not affect the other.
      */
     public ModelRuntime(CompiledModel model, ModelState state, ExpressionCache seedCache) {
-        this(model, state, seededCopyOf(seedCache), null);
+        this(model, state, seededCopyOf(seedCache), true);
     }
 
     /**
@@ -84,8 +85,10 @@ public final class ModelRuntime {
      */
     public static ModelRuntime withSharedCache(CompiledModel model, ModelState state,
                                                ExpressionCache sharedCache) {
+        // Owns the cache only when it had to create its own; a caller-supplied shared cache is
+        // borrowed and must never be cleared on this runtime's disposal.
         return new ModelRuntime(model, state,
-                sharedCache != null ? sharedCache : new ExpressionCache(), null);
+                sharedCache != null ? sharedCache : new ExpressionCache(), sharedCache == null);
     }
 
     /** Builds a fresh cache seeded (copied) from {@code seedCache}; {@code null} yields an empty one. */
@@ -95,16 +98,28 @@ public final class ModelRuntime {
         return copy;
     }
 
-    /** Core constructor: the runtime uses {@code cache} as-is. */
-    private ModelRuntime(CompiledModel model, ModelState state, ExpressionCache cache, Void marker) {
+    /** Core constructor: the runtime uses {@code cache} as-is. {@code ownsCache} governs disposal. */
+    private ModelRuntime(CompiledModel model, ModelState state, ExpressionCache cache, boolean ownsCache) {
         this.model            = model;
         this.state            = state;
         this.cache            = cache;
+        this.ownsCache        = ownsCache;
         this.derivationEval   = new DerivationEvaluator(cache);
         this.metaEval         = new MetaDerivationEvaluator(cache);
         this.constraintEval   = new ConstraintEvaluator(cache);
         this.effectDispatcher = new EffectDispatcher(cache);
         this.defaultApplier   = new DefaultValueApplier(cache);
+    }
+
+    /**
+     * Releases this runtime's resources when it is removed from service. If the runtime <b>owns</b> its
+     * expression cache (it was not built on a shared, server-lifetime cache), its per-instance
+     * compiled-expression references are dropped so those classes can be reclaimed once the
+     * process-wide shared cache also evicts them. A borrowed shared cache is left untouched — other
+     * runtimes still use it. Idempotent; the runtime must not be used afterwards.
+     */
+    public void dispose() {
+        if (ownsCache) cache.clear();
     }
 
     /** Registers an {@link EffectDispatcher.EffectSink} to receive emitted effect requests. */
@@ -220,7 +235,10 @@ public final class ModelRuntime {
 
         state.beginTransaction();
         try {
-            List<String> defaulted = defaultApplier.apply(model, state, rootContainer);
+            // Expression-based defaultValues rules run first and take precedence; JSON Schema
+            // `default` keywords then fill any field still absent (fill-absent, never overwriting).
+            List<String> defaulted = new ArrayList<>(defaultApplier.apply(model, state, rootContainer));
+            defaulted.addAll(SchemaDefaultApplier.apply(model, state));
             if (defaulted.isEmpty()) {
                 // Nothing seeded — close the transaction without recording history.
                 state.commit();

@@ -14,6 +14,10 @@ Valem is a multi-module Maven project. You can embed the pure-Java engine direct
 own Spring app, or talk to a running server from Java or TypeScript.
 {: .fs-5 .fw-300 }
 
+{: .note }
+> Looking to drop a **live, interactive model widget** into a web page or React app instead of
+> embedding the engine? See [Embed a live model]({% link usage-scenarios/embed-a-live-model.md %}).
+
 1. TOC
 {:toc}
 

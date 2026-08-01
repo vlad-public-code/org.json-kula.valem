@@ -19,6 +19,11 @@ export interface ViewRendererProps {
    * constraints that have no field to sit beside — the ones that motivate the component.
    */
   formErrors?: string[];
+  /**
+   * Render every input disabled and swallow mutations — the view becomes a read-only computed
+   * snapshot. Used by read-only embeds; defaults to false so the sandbox app is unaffected.
+   */
+  readOnly?: boolean;
 }
 
 /**
@@ -35,6 +40,7 @@ export function ViewRenderer({
   activeViewId: externalViewId,
   violations = {},
   formErrors = [],
+  readOnly = false,
 }: ViewRendererProps) {
   const [internalViewId, setInternalViewId] = useState<string>(
     externalViewId ?? viewDef.defaultView ?? viewDef.views[0]?.id ?? '',
@@ -52,12 +58,17 @@ export function ViewRenderer({
   const view = viewDef.views.find(v => v.id === activeViewId) ?? viewDef.views[0];
   if (!view) return null;
 
+  // A read-only view still lets its inputs render (disabled — see ComponentRenderer), but no edit
+  // must ever reach the server. Guard onMutate here as well as at each field so an action component
+  // that calls onMutate directly (a button, a stepper) can't slip a mutation through either.
+  const effectiveOnMutate = readOnly ? async () => {} : onMutate;
+
   return (
     <ViewContext.Provider
       value={{
-        modelId, state, meta, onMutate,
+        modelId, state, meta, onMutate: effectiveOnMutate,
         onNavigate: handleNavigate, activeViewId,
-        fieldErrors: violations, formErrors,
+        fieldErrors: violations, formErrors, readOnly,
       }}
     >
       {/*

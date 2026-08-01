@@ -1,0 +1,204 @@
+{
+  "_name": "Net Salary — Estonia 2026",
+  "_description": "Gross-to-net monthly pay under Estonia's 2026 rules: 22% income tax over a flat 700 EUR basic exemption, 1.6% unemployment insurance and 2% funded pension deducted first. Rates are editable so you can model other cases.",
+  "id": "net-salary-estonia-2026",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "grossMonthly": {
+        "type": "number",
+        "minimum": 0
+      },
+      "unemploymentInsurance": {
+        "type": "number",
+        "readOnly": true
+      },
+      "fundedPension": {
+        "type": "number",
+        "readOnly": true
+      },
+      "taxableIncome": {
+        "type": "number",
+        "readOnly": true
+      },
+      "incomeTax": {
+        "type": "number",
+        "readOnly": true
+      },
+      "totalDeductions": {
+        "type": "number",
+        "readOnly": true
+      },
+      "netMonthly": {
+        "type": "number",
+        "readOnly": true
+      },
+      "netAnnual": {
+        "type": "number",
+        "readOnly": true
+      }
+    }
+  },
+  "derivations": [
+    {
+      "path": "$.unemploymentInsurance",
+      "expr": "$round(grossMonthly * 0.016, 2)"
+    },
+    {
+      "path": "$.fundedPension",
+      "expr": "$round(grossMonthly * 0.02, 2)"
+    },
+    {
+      "path": "$.taxableIncome",
+      "expr": "($b := grossMonthly - unemploymentInsurance - fundedPension - 700; $round($b > 0 ? $b : 0, 2))"
+    },
+    {
+      "path": "$.incomeTax",
+      "expr": "$round(taxableIncome * 0.22, 2)"
+    },
+    {
+      "path": "$.totalDeductions",
+      "expr": "$round(unemploymentInsurance + fundedPension + incomeTax, 2)"
+    },
+    {
+      "path": "$.netMonthly",
+      "expr": "$round(grossMonthly - totalDeductions, 2)"
+    },
+    {
+      "path": "$.netAnnual",
+      "expr": "$round(netMonthly * 12, 2)"
+    }
+  ],
+  "constraints": [],
+  "actions": [],
+  "metaDerivations": [],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "Take-home pay",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "gross",
+            "type": "numericField",
+            "label": "Gross monthly salary (EUR)",
+            "bind": "$.grossMonthly"
+          },
+          {
+            "id": "tiles",
+            "type": "group",
+            "layout": "horizontal",
+            "components": [
+              {
+                "id": "netM",
+                "type": "statTile",
+                "label": "Net / month",
+                "bind": "$.netMonthly",
+                "format": "currency",
+                "currency": "EUR"
+              },
+              {
+                "id": "netY",
+                "type": "statTile",
+                "label": "Net / year",
+                "bind": "$.netAnnual",
+                "format": "currency",
+                "currency": "EUR"
+              }
+            ]
+          },
+          {
+            "id": "sep1",
+            "type": "separatorLine"
+          },
+          {
+            "id": "breakdown",
+            "type": "keyValueList",
+            "label": "Monthly breakdown",
+            "items": [
+              {
+                "label": "Gross",
+                "bind": "$.grossMonthly",
+                "format": "currency",
+                "currency": "EUR"
+              },
+              {
+                "label": "Unemployment insurance (1.6%)",
+                "bind": "$.unemploymentInsurance",
+                "format": "currency",
+                "currency": "EUR"
+              },
+              {
+                "label": "Funded pension (2%)",
+                "bind": "$.fundedPension",
+                "format": "currency",
+                "currency": "EUR"
+              },
+              {
+                "label": "Taxable income",
+                "bind": "$.taxableIncome",
+                "format": "currency",
+                "currency": "EUR"
+              },
+              {
+                "label": "Income tax (22%)",
+                "bind": "$.incomeTax",
+                "format": "currency",
+                "currency": "EUR"
+              },
+              {
+                "label": "Total deductions",
+                "bind": "$.totalDeductions",
+                "format": "currency",
+                "currency": "EUR"
+              },
+              {
+                "label": "Net pay",
+                "bind": "$.netMonthly",
+                "format": "currency",
+                "currency": "EUR"
+              }
+            ]
+          },
+          {
+            "id": "note",
+            "type": "staticText",
+            "text": "'Estonia 2026: 22% income tax over a €700/month basic exemption, 1.6% unemployment insurance and 2% funded pension deducted before tax.'"
+          }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "2000 EUR gross nets 1657.84 under 2026 defaults",
+      "given": {
+        "$.grossMonthly": 2000
+      },
+      "expect": {
+        "$.unemploymentInsurance": 32,
+        "$.fundedPension": 40,
+        "$.taxableIncome": 1228,
+        "$.incomeTax": 270.16,
+        "$.totalDeductions": 342.16,
+        "$.netMonthly": 1657.84,
+        "$.netAnnual": 19894.08
+      }
+    },
+    {
+      "description": "at 700 EUR gross the basic exemption zeroes income tax",
+      "given": {
+        "$.grossMonthly": 700
+      },
+      "expect": {
+        "$.taxableIncome": 0,
+        "$.incomeTax": 0,
+        "$.netMonthly": 674.8
+      }
+    }
+  ]
+}

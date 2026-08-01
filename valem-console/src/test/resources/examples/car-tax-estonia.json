@@ -1,0 +1,223 @@
+{
+  "_name": "Estonian Car Tax",
+  "_description": "Estimates Estonia's annual motor-vehicle tax and the one-time registration tax for a passenger car from its CO2 emissions and mass. Illustrative 2025-style rates; reactive breakdown.",
+  "id": "car-tax-estonia",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "co2": {
+        "type": "number",
+        "minimum": 0
+      },
+      "mass": {
+        "type": "number",
+        "minimum": 0
+      },
+      "co2Over": {
+        "type": "number",
+        "readOnly": true
+      },
+      "massOver": {
+        "type": "number",
+        "readOnly": true
+      },
+      "annualCo2": {
+        "type": "number",
+        "readOnly": true
+      },
+      "annualWeight": {
+        "type": "number",
+        "readOnly": true
+      },
+      "annualTax": {
+        "type": "number",
+        "readOnly": true
+      },
+      "regCo2": {
+        "type": "number",
+        "readOnly": true
+      },
+      "registrationTax": {
+        "type": "number",
+        "readOnly": true
+      },
+      "firstYearTotal": {
+        "type": "number",
+        "readOnly": true
+      }
+    }
+  },
+  "derivations": [
+    {
+      "path": "$.co2Over",
+      "expr": "($x := co2 - 117; $round($x > 0 ? $x : 0, 2))"
+    },
+    {
+      "path": "$.massOver",
+      "expr": "($x := mass - 2000; $round($x > 0 ? $x : 0, 2))"
+    },
+    {
+      "path": "$.annualCo2",
+      "expr": "$round(3 * co2Over, 2)"
+    },
+    {
+      "path": "$.annualWeight",
+      "expr": "$round(0.2 * massOver, 2)"
+    },
+    {
+      "path": "$.annualTax",
+      "expr": "$round(50 + annualCo2 + annualWeight, 2)"
+    },
+    {
+      "path": "$.regCo2",
+      "expr": "$round(5 * co2Over, 2)"
+    },
+    {
+      "path": "$.registrationTax",
+      "expr": "$round(300 + regCo2, 2)"
+    },
+    {
+      "path": "$.firstYearTotal",
+      "expr": "$round(annualTax + registrationTax, 2)"
+    }
+  ],
+  "constraints": [],
+  "actions": [],
+  "metaDerivations": [],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "Car tax",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "co2",
+            "type": "numericField",
+            "label": "CO₂ emissions (g/km, WLTP)",
+            "bind": "$.co2"
+          },
+          {
+            "id": "mass",
+            "type": "numericField",
+            "label": "Gross mass (kg)",
+            "bind": "$.mass"
+          },
+          {
+            "id": "tiles",
+            "type": "group",
+            "layout": "horizontal",
+            "components": [
+              {
+                "id": "annualTile",
+                "type": "statTile",
+                "label": "Annual tax",
+                "bind": "$.annualTax",
+                "format": "currency",
+                "currency": "EUR"
+              },
+              {
+                "id": "regTile",
+                "type": "statTile",
+                "label": "Registration (one-time)",
+                "bind": "$.registrationTax",
+                "format": "currency",
+                "currency": "EUR"
+              },
+              {
+                "id": "totalTile",
+                "type": "statTile",
+                "label": "First-year total",
+                "bind": "$.firstYearTotal",
+                "format": "currency",
+                "currency": "EUR"
+              }
+            ]
+          },
+          {
+            "id": "sep1",
+            "type": "separatorLine"
+          },
+          {
+            "id": "breakdown",
+            "type": "keyValueList",
+            "label": "Breakdown",
+            "items": [
+              {
+                "label": "CO₂ over 117 g/km",
+                "bind": "$.co2Over"
+              },
+              {
+                "label": "Annual CO₂ component",
+                "bind": "$.annualCo2",
+                "format": "currency",
+                "currency": "EUR"
+              },
+              {
+                "label": "Annual weight component",
+                "bind": "$.annualWeight",
+                "format": "currency",
+                "currency": "EUR"
+              },
+              {
+                "label": "Annual tax",
+                "bind": "$.annualTax",
+                "format": "currency",
+                "currency": "EUR"
+              },
+              {
+                "label": "Registration CO₂ component",
+                "bind": "$.regCo2",
+                "format": "currency",
+                "currency": "EUR"
+              },
+              {
+                "label": "Registration tax",
+                "bind": "$.registrationTax",
+                "format": "currency",
+                "currency": "EUR"
+              }
+            ]
+          },
+          {
+            "id": "note",
+            "type": "staticText",
+            "text": "'Illustrative estimate. Annual = €50 base + €3 per g/km CO₂ over 117 + €0.20 per kg over 2000. Registration = €300 base + €5 per g/km CO₂ over 117.'"
+          }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "150 g/km, 1800 kg",
+      "given": {
+        "$.co2": 150,
+        "$.mass": 1800
+      },
+      "expect": {
+        "$.co2Over": 33,
+        "$.annualTax": 149,
+        "$.registrationTax": 465,
+        "$.firstYearTotal": 614
+      }
+    },
+    {
+      "description": "95 g/km (below CO2 threshold), 2500 kg heavy",
+      "given": {
+        "$.co2": 95,
+        "$.mass": 2500
+      },
+      "expect": {
+        "$.co2Over": 0,
+        "$.annualWeight": 100,
+        "$.annualTax": 150,
+        "$.registrationTax": 300,
+        "$.firstYearTotal": 450
+      }
+    }
+  ]
+}

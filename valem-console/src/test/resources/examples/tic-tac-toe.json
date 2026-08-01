@@ -1,0 +1,244 @@
+{
+  "_name": "Tic-Tac-Toe",
+  "_description": "A two-player game as a reactive model: the current player, the winner across all eight lines, and the move count are derived from a nine-cell board array — click a cell to play and everything updates live.",
+  "id": "tic-tac-toe",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "board": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "default": [
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ]
+      },
+      "moveCount": {
+        "type": "number",
+        "readOnly": true
+      },
+      "currentPlayer": {
+        "type": "string",
+        "readOnly": true
+      },
+      "winner": {
+        "type": "string",
+        "readOnly": true
+      }
+    }
+  },
+  "derivations": [
+    {
+      "path": "$.moveCount",
+      "expr": "$count(board[$ != \"\"])"
+    },
+    {
+      "path": "$.currentPlayer",
+      "expr": "$count(board[$ = \"X\"]) <= $count(board[$ = \"O\"]) ? \"X\" : \"O\""
+    },
+    {
+      "path": "$.winner",
+      "expr": "($w := [(board[0] != \"\" and board[0] = board[1] and board[1] = board[2]) ? board[0] : \"\",(board[3] != \"\" and board[3] = board[4] and board[4] = board[5]) ? board[3] : \"\",(board[6] != \"\" and board[6] = board[7] and board[7] = board[8]) ? board[6] : \"\",(board[0] != \"\" and board[0] = board[3] and board[3] = board[6]) ? board[0] : \"\",(board[1] != \"\" and board[1] = board[4] and board[4] = board[7]) ? board[1] : \"\",(board[2] != \"\" and board[2] = board[5] and board[5] = board[8]) ? board[2] : \"\",(board[0] != \"\" and board[0] = board[4] and board[4] = board[8]) ? board[0] : \"\",(board[2] != \"\" and board[2] = board[4] and board[4] = board[6]) ? board[2] : \"\"]; $won := $w[$ != \"\"]; $count($won) > 0 ? $won[0] : \"\")"
+    }
+  ],
+  "constraints": [],
+  "actions": [],
+  "metaDerivations": [],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "Play",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "status",
+            "type": "staticText",
+            "text": "$.winner != \"\" ? (\"✅ \" & $.winner & \" wins!\") : ($.moveCount = 9 ? \"Draw — board full\" : ($.currentPlayer & \" to move\"))"
+          },
+          {
+            "id": "grid",
+            "type": "group",
+            "layout": "grid",
+            "columns": 3,
+            "components": [
+              {
+                "id": "btn0",
+                "type": "button",
+                "variant": "secondary",
+                "text": "$.board[0] ? $.board[0] : \" \"",
+                "enabled": "$.winner = \"\" and $.board[0] = \"\"",
+                "onClick": {
+                  "mutations": "{ \"$.board[0]\": currentPlayer }"
+                }
+              },
+              {
+                "id": "btn1",
+                "type": "button",
+                "variant": "secondary",
+                "text": "$.board[1] ? $.board[1] : \" \"",
+                "enabled": "$.winner = \"\" and $.board[1] = \"\"",
+                "onClick": {
+                  "mutations": "{ \"$.board[1]\": currentPlayer }"
+                }
+              },
+              {
+                "id": "btn2",
+                "type": "button",
+                "variant": "secondary",
+                "text": "$.board[2] ? $.board[2] : \" \"",
+                "enabled": "$.winner = \"\" and $.board[2] = \"\"",
+                "onClick": {
+                  "mutations": "{ \"$.board[2]\": currentPlayer }"
+                }
+              },
+              {
+                "id": "btn3",
+                "type": "button",
+                "variant": "secondary",
+                "text": "$.board[3] ? $.board[3] : \" \"",
+                "enabled": "$.winner = \"\" and $.board[3] = \"\"",
+                "onClick": {
+                  "mutations": "{ \"$.board[3]\": currentPlayer }"
+                }
+              },
+              {
+                "id": "btn4",
+                "type": "button",
+                "variant": "secondary",
+                "text": "$.board[4] ? $.board[4] : \" \"",
+                "enabled": "$.winner = \"\" and $.board[4] = \"\"",
+                "onClick": {
+                  "mutations": "{ \"$.board[4]\": currentPlayer }"
+                }
+              },
+              {
+                "id": "btn5",
+                "type": "button",
+                "variant": "secondary",
+                "text": "$.board[5] ? $.board[5] : \" \"",
+                "enabled": "$.winner = \"\" and $.board[5] = \"\"",
+                "onClick": {
+                  "mutations": "{ \"$.board[5]\": currentPlayer }"
+                }
+              },
+              {
+                "id": "btn6",
+                "type": "button",
+                "variant": "secondary",
+                "text": "$.board[6] ? $.board[6] : \" \"",
+                "enabled": "$.winner = \"\" and $.board[6] = \"\"",
+                "onClick": {
+                  "mutations": "{ \"$.board[6]\": currentPlayer }"
+                }
+              },
+              {
+                "id": "btn7",
+                "type": "button",
+                "variant": "secondary",
+                "text": "$.board[7] ? $.board[7] : \" \"",
+                "enabled": "$.winner = \"\" and $.board[7] = \"\"",
+                "onClick": {
+                  "mutations": "{ \"$.board[7]\": currentPlayer }"
+                }
+              },
+              {
+                "id": "btn8",
+                "type": "button",
+                "variant": "secondary",
+                "text": "$.board[8] ? $.board[8] : \" \"",
+                "enabled": "$.winner = \"\" and $.board[8] = \"\"",
+                "onClick": {
+                  "mutations": "{ \"$.board[8]\": currentPlayer }"
+                }
+              }
+            ]
+          },
+          {
+            "id": "sep",
+            "type": "separatorLine"
+          },
+          {
+            "id": "reset",
+            "type": "button",
+            "label": "New game",
+            "variant": "primary",
+            "onClick": {
+              "mutations": "{ \"$.board\": [\"\",\"\",\"\",\"\",\"\",\"\",\"\",\"\",\"\"] }"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "X wins the top row via index mutations",
+      "given": {
+        "$.board[0]": "X",
+        "$.board[1]": "X",
+        "$.board[2]": "X",
+        "$.board[3]": "O",
+        "$.board[4]": "O"
+      },
+      "expect": {
+        "$.winner": "X",
+        "$.moveCount": 5
+      }
+    },
+    {
+      "description": "O wins the anti-diagonal",
+      "given": {
+        "$.board[2]": "O",
+        "$.board[4]": "O",
+        "$.board[6]": "O",
+        "$.board[0]": "X",
+        "$.board[1]": "X"
+      },
+      "expect": {
+        "$.winner": "O"
+      }
+    },
+    {
+      "description": "after X's first move it is O's turn",
+      "given": {
+        "$.board[0]": "X"
+      },
+      "expect": {
+        "$.currentPlayer": "O",
+        "$.winner": "",
+        "$.moveCount": 1
+      }
+    },
+    {
+      "description": "full board with no line is a draw",
+      "given": {
+        "$.board[0]": "X",
+        "$.board[1]": "O",
+        "$.board[2]": "X",
+        "$.board[3]": "X",
+        "$.board[4]": "O",
+        "$.board[5]": "O",
+        "$.board[6]": "O",
+        "$.board[7]": "X",
+        "$.board[8]": "X"
+      },
+      "expect": {
+        "$.winner": "",
+        "$.moveCount": 9
+      }
+    }
+  ]
+}
