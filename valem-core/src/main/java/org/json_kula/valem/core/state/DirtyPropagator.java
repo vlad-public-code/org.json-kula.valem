@@ -46,6 +46,16 @@ public final class DirtyPropagator {
             // Direct match in the graph
             dirty.addAll(transitive(graph, path, transitiveMemo));
 
+            // Ancestor match: a write to a descendant path (e.g. "$.arr[0]") also changes its ancestor
+            // containers (e.g. "$.arr"), so any node depending on an ancestor must re-evaluate. Without
+            // this, an aggregate derivation whose dependency is the bare array — $count(arr[$ != ""])
+            // extracts to "$.arr", not "$.arr[*]" — goes stale after an element-index mutation while a
+            // whole-array write correctly refreshes it. The isPrefixOf loop below covers the opposite
+            // (ancestor→descendant) direction; this is the missing descendant→ancestor one.
+            for (String ancestor : ancestorContainers(path)) {
+                dirty.addAll(transitive(graph, ancestor, transitiveMemo));
+            }
+
             // Wildcard-pattern match: only the precomputed wildcard nodes can match, so we no longer
             // scan every concrete node. e.g. mutated "$.items[0].price" matches "$.items[*].price".
             for (String node : graph.wildcardNodes()) {
@@ -70,6 +80,25 @@ public final class DirtyPropagator {
     private static Set<String> transitive(DependencyGraph graph, String key,
                                           Map<String, Set<String>> memo) {
         return memo.computeIfAbsent(key, graph::transitivelyDependentOn);
+    }
+
+    /**
+     * Returns the ancestor container paths of a concrete mutated path, nearest-first, excluding the
+     * document root.
+     *
+     * <pre>
+     *   ancestorContainers("$.arr[0]")  → ["$.arr"]
+     *   ancestorContainers("$.a.b.c")   → ["$.a.b", "$.a"]
+     *   ancestorContainers("$.total")   → []            (top-level field has no container but root)
+     * </pre>
+     */
+    static java.util.List<String> ancestorContainers(String path) {
+        java.util.List<String> segments = PathConverter.toSegments(path);
+        java.util.List<String> ancestors = new java.util.ArrayList<>();
+        for (int len = segments.size() - 1; len >= 1; len--) {
+            ancestors.add(PathConverter.toCanonicalAddress(String.join(".", segments.subList(0, len))));
+        }
+        return ancestors;
     }
 
     /**

@@ -54,7 +54,8 @@ valem:
     api-key: ${VALEM_LLM_API_KEY:}   # empty = LLM features disabled (not required for ollama)
     model: ${VALEM_LLM_MODEL:}   # blank = provider-appropriate default (anthropic→claude-sonnet-4-6, openai→gpt-4o, …); set to override
     max-tokens: 8192
-    max-retries: 3
+    max-retries: 6             # base validation-repair attempts (each repair can re-test via eval_jsonata)
+    max-retries-hard: 10       # ceiling for a converging hard spec (extra attempts only while errors keep dropping)
     generation-temperature: 0.0  # sampling temperature for the initial attempt (low = deterministic, structured)
     structured-output:
       enabled: true              # send the ModelSpec/SpecEvolution JSON Schema as response_format (OpenAI-compatible providers)

@@ -38,6 +38,11 @@ public class ModelRegistry {
         return runtimes.remove(id) != null;
     }
 
+    /** Removes and returns the runtime for {@code id}, or {@code null} if none — so the caller can dispose it. */
+    public ModelRuntime removeAndGet(String id) {
+        return runtimes.remove(id);
+    }
+
     public boolean contains(String id) {
         return runtimes.containsKey(id);
     }

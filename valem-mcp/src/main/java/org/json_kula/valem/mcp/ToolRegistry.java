@@ -14,6 +14,7 @@ import org.json_kula.valem.core.engine.SchemaViolationException;
 import org.json_kula.valem.core.engine.TestCaseRunner;
 import org.json_kula.valem.core.graph.ModelSpecValidator;
 import org.json_kula.valem.core.graph.SpecEvolution;
+import org.json_kula.valem.core.llm.DomainGuidanceCatalog;
 import org.json_kula.valem.core.llm.SpecGenerationSchema;
 import org.json_kula.valem.core.model.BlobRef;
 import org.json_kula.valem.core.model.ModelSpec;
@@ -57,6 +58,8 @@ import java.util.Map;
  */
 class ToolRegistry {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ToolRegistry.class);
+
     /** Executes one tool's logic against the service; may throw, which becomes an {@code isError} result. */
     @FunctionalInterface
     private interface Handler {
@@ -77,11 +80,56 @@ class ToolRegistry {
     private final ModelOperations service;
     private final ObjectMapper  mapper;
     private final Map<String, Tool> tools = new LinkedHashMap<>();
+    // Same domain-guidance topics the server-side generator uses, so an agent authoring a spec through
+    // MCP gets the identical shape guidance. Builtin topics; language-agnostic (the agent picks by id).
+    private final DomainGuidanceCatalog guidanceCatalog;
 
     ToolRegistry(ModelOperations service, ObjectMapper mapper) {
         this.service = service;
         this.mapper  = mapper;
+        this.guidanceCatalog = loadGuidanceCatalog(mapper);
         register();
+    }
+
+    /**
+     * Builtin guidance topics, optionally extended/overridden by an operator's JSON file — parity with
+     * the server ({@code valem.llm.domain-guidance.topics-file}). The path is read from that system
+     * property or the {@code VALEM_DOMAIN_GUIDANCE_TOPICS_FILE} env var; merge is by id. A missing or
+     * unreadable file falls back to the builtin topics.
+     */
+    private static DomainGuidanceCatalog loadGuidanceCatalog(ObjectMapper mapper) {
+        DomainGuidanceCatalog catalog = DomainGuidanceCatalog.builtin(mapper);
+        String file = System.getProperty("valem.llm.domain-guidance.topics-file");
+        if (file == null || file.isBlank()) file = System.getenv("VALEM_DOMAIN_GUIDANCE_TOPICS_FILE");
+        if (file == null || file.isBlank()) return catalog;
+        try {
+            return catalog.withOverridesJson(
+                    java.nio.file.Files.readString(java.nio.file.Path.of(file.trim())), mapper);
+        } catch (Exception e) {
+            log.warn("MCP: could not read domain-guidance topics file '{}': {} — using builtin topics.",
+                    file, e.getMessage());
+            return catalog;
+        }
+    }
+
+    /** Resolves the requested guidance topic ids to their concatenated instructions (echoes topics). */
+    private ObjectNode domainGuidance(JsonNode args) {
+        List<String> requested = new ArrayList<>();
+        JsonNode topics = args == null ? null : args.get("topics");
+        if (topics != null && topics.isArray()) {
+            topics.forEach(t -> { if (t.isTextual() && !t.asText().isBlank()) requested.add(t.asText()); });
+        } else if (topics != null && topics.isTextual() && !topics.asText().isBlank()) {
+            requested.add(topics.asText());
+        }
+        String guidance = guidanceCatalog.instructionsFor(requested);
+        ObjectNode out = mapper.createObjectNode();
+        ArrayNode echoed = out.putArray("topics");
+        requested.forEach(echoed::add);
+        out.put("guidance", guidance.isBlank()
+                ? "(none of " + requested + " is a known topic; valid: "
+                        + String.join(", ", guidanceCatalog.ids()) + ")"
+                : guidance);
+        return out;
     }
 
     /** Upper bound on postfix attempts, so a persistent non-duplicate failure still surfaces promptly. */
@@ -498,6 +546,31 @@ class ToolRegistry {
                     args.hasNonNull("viewId") ? args.get("viewId").asText() : null));
 
         // ── Authoring / verification tools (the agent generates; Valem verifies) ──
+
+        add("get_domain_guidance", "Get domain guidance",
+            "Get vetted instructions for the hard modelling shapes this domain involves (progressive "
+            + "tax/fee charges, per-period schedules, classification, date math, group-by, …). Read the "
+            + "model description in ANY language, pick the matching topic ids, and call this BEFORE "
+            + "authoring the spec — then follow what it returns. Available topics:\n"
+            + guidanceCatalog.menu(),
+            objectSchema(schema -> {
+                ObjectNode props = schema.putObject("properties");
+                ObjectNode topics = props.putObject("topics");
+                topics.put("type", "array");
+                topics.put("description", "Ids of the guidance topics that apply (usually 0-2).");
+                ObjectNode items = topics.putObject("items");
+                items.put("type", "string");
+                ArrayNode en = items.putArray("enum");
+                guidanceCatalog.ids().forEach(en::add);
+                schema.putArray("required").add("topics");
+            }),
+            objectSchema(schema -> {
+                ObjectNode props = schema.putObject("properties");
+                props.putObject("topics").put("type", "array");
+                stringProp(props, "guidance", "Concatenated instructions for the requested topics.");
+            }),
+            annotations(true, false, true),
+            this::domainGuidance);
 
         add("validate_spec", "Validate spec",
             "Validate a ModelSpec WITHOUT creating it: returns a 'valid' flag plus structured findings "

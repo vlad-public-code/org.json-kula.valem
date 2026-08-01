@@ -78,6 +78,44 @@
   --shadow-lg: 0 16px 40px -12px rgba(20, 22, 45, 0.22);
 }
 
+/*
+ * Dark palette — opt-in via a `data-theme="dark"` attribute on the root element. Only the embed
+ * widget sets it (see the sandbox's embed bootstrap); the sandbox app never does, so its light look
+ * is untouched. Overrides only the surface/ink/hairline/soft-status tokens — the accent/signal HUES
+ * are kept, just paired with darker soft backgrounds so badges and banners stay legible.
+ */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --main-bg: #0e0e14;
+  --panel-bg: #16161f;
+  --surface-2: #1c1c26;
+  --surface-inset: #12121a;
+
+  --text: #e8e8f0;
+  --text-muted: #a0a1b2;
+  --text-light: #7c7d90;
+
+  --border: #26262f;
+  --border-strong: #34343f;
+
+  --accent-soft: #221f3d;
+  --blue-light: #221f3d;
+  --green-light: #0f2a20;
+  --signal-soft: #0f2a20;
+  --red-light: #2e1416;
+  --orange-light: #2a1d0c;
+  --purple-light: #201a33;
+
+  --code-bg: #12121a;
+  --success-bg: var(--green-light);
+  --error-bg: var(--red-light);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 20px -6px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 16px 40px -12px rgba(0, 0, 0, 0.7);
+}
+
 body {
   font-family: var(--font-sans);
   font-size: 14px;

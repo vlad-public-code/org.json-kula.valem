@@ -14,6 +14,8 @@ import org.json_kula.valem.api.llm.SearchBackend;
 import org.json_kula.valem.api.llm.TavilySearchBackend;
 import org.json_kula.valem.api.llm.WebFetchTool;
 import org.json_kula.valem.api.llm.WebSearchTool;
+import org.json_kula.valem.core.llm.DomainGuidanceCatalog;
+import org.json_kula.valem.core.llm.DomainGuidanceTool;
 import org.json_kula.valem.core.llm.JsonataEvalTool;
 import org.json_kula.valem.core.llm.LlmClient;
 import org.json_kula.valem.core.llm.SpecGenerator;
@@ -167,7 +169,8 @@ public class LlmConfig {
      */
     @Bean
     @ConditionalOnExpression(
-            "${valem.llm.web-fetch.enabled:true} or ${valem.llm.eval-tool.enabled:true}")
+            "${valem.llm.web-fetch.enabled:true} or ${valem.llm.eval-tool.enabled:true}"
+            + " or ${valem.llm.domain-guidance.enabled:true}")
     WebTool llmTools(
             @Value("${valem.llm.web-fetch.enabled:true}") boolean fetchEnabled,
             @Value("${valem.llm.web-fetch.max-calls:5}") int maxFetchCalls,
@@ -179,10 +182,21 @@ public class LlmConfig {
             @Value("${valem.llm.web-search.max-results:5}") int maxSearchResults,
             @Value("${valem.llm.eval-tool.enabled:true}") boolean evalEnabled,
             @Value("${valem.llm.eval-tool.max-calls:25}") int maxEvalCalls,
+            @Value("${valem.llm.domain-guidance.enabled:true}") boolean guidanceEnabled,
+            @Value("${valem.llm.domain-guidance.topics-file:}") String guidanceTopicsFile,
             ObjectMapper mapper) {
 
         List<WebTool> tools = new ArrayList<>();
         StringBuilder enabled = new StringBuilder();
+        // Domain-guidance tool: the model asks for topic-specific guidance in any language (replaces
+        // the old English-keyword regex dispatch). Listed first so the model is nudged to call it up
+        // front. Topics = builtin JSON resource, optionally extended/overridden by an operator file
+        // (valem.llm.domain-guidance.topics-file) merged by id.
+        if (guidanceEnabled) {
+            DomainGuidanceCatalog catalog = domainGuidanceCatalog(guidanceTopicsFile, mapper);
+            tools.add(new DomainGuidanceTool(catalog));
+            enabled.append("get_domain_guidance (").append(catalog.size()).append(" topics) + ");
+        }
         if (fetchEnabled) {
             if (searchEnabled) {
                 SearchBackend backend = switch (searchProvider.toLowerCase()) {
@@ -212,12 +226,30 @@ public class LlmConfig {
         return tools.size() == 1 ? tools.get(0) : new CompositeWebTool(tools);
     }
 
+    /**
+     * The builtin domain-guidance catalog, optionally extended/overridden by the JSON at
+     * {@code topicsFile} (an external file path; blank = none). Operator topics merge by id: a matching
+     * id replaces the builtin one, a new id is added. A missing/unreadable file is ignored.
+     */
+    private static DomainGuidanceCatalog domainGuidanceCatalog(String topicsFile, ObjectMapper mapper) {
+        DomainGuidanceCatalog catalog = DomainGuidanceCatalog.builtin(mapper);
+        if (topicsFile == null || topicsFile.isBlank()) return catalog;
+        try {
+            String json = java.nio.file.Files.readString(java.nio.file.Path.of(topicsFile.trim()));
+            return catalog.withOverridesJson(json, mapper);
+        } catch (Exception e) {
+            log.warn("Could not read domain-guidance topics file '{}': {} — using builtin topics only.",
+                    topicsFile, e.getMessage());
+            return catalog;
+        }
+    }
+
     @Bean
     SpecGenerator specGenerator(
             LlmClient llmClient,
             ObjectMapper mapper,
-            @Value("${valem.llm.max-retries:3}") int maxRetries,
-            @Value("${valem.llm.max-retries-hard:6}") int maxRetriesHard,
+            @Value("${valem.llm.max-retries:6}") int maxRetries,
+            @Value("${valem.llm.max-retries-hard:10}") int maxRetriesHard,
             @Value("${valem.llm.repair-temperature:0.2}") double repairTemperature,
             @Value("${valem.llm.repair-temperature-step:0.15}") double repairTemperatureStep,
             @Value("${valem.llm.repair-temperature-max:0.8}") double repairTemperatureMax,

@@ -751,14 +751,15 @@ class SpecGeneratorTest {
     // ── Evolution parity with generate(): hints, exemplars, self-test verification ──
 
     @Test
-    void evolution_prompt_lists_derived_paths_and_injects_shape_exemplar() {
+    void evolution_prompt_lists_derived_paths() {
         String p = SpecGenerationPrompt.evolutionPrompt(
                 "m", "{}", "add an amortization schedule", false,
                 java.util.List.of("$.total", "$.order.tax"));
         assertThat(p)
                 .contains("already DERIVED")
-                .contains("$.total, $.order.tax")
-                .contains("one row per period"); // the schedule shape exemplar
+                .contains("$.total, $.order.tax");
+        // Shape guidance is no longer injected by keyword regex — the model pulls it via the
+        // get_domain_guidance tool instead (see DomainGuidanceToolTest).
     }
 
     @Test
@@ -994,20 +995,6 @@ class SpecGeneratorTest {
                 .contains("area = width x height");
     }
 
-    // ── Shape-based few-shot exemplars ──────────────────────────────────────────
-
-    @Test
-    void shape_exemplar_injected_for_schedule_domains() {
-        assertThat(SpecGenerationPrompt.shapeExemplars("A loan with an amortization schedule"))
-                .contains("one row per period").contains("$reduce(");
-        assertThat(SpecGenerationPrompt.initialPrompt("m", "show a monthly payment breakdown table"))
-                .contains("one row per period");
-        // "each month" enumeration phrasing (the CarLoan IT wording) must trigger it too.
-        assertThat(SpecGenerationPrompt.shapeExemplars(
-                "car loan calculator with details on each month and total period"))
-                .contains("one row per period");
-    }
-
     // ── Embedded-test feedback hints ────────────────────────────────────────────
 
     @Test
@@ -1030,72 +1017,6 @@ class SpecGeneratorTest {
         var f = new org.json_kula.valem.core.engine.TestCaseRunner.FieldFailure(
                 "$.x", MAPPER.valueToTree(100.0), MAPPER.valueToTree(50.0), "msg");
         assertThat(SpecGenerationPrompt.testFailureHint(f)).contains("precedence");
-    }
-
-    @Test
-    void shape_exemplar_for_group_by_domains() {
-        assertThat(SpecGenerationPrompt.shapeExemplars("sum expenses grouped by category"))
-                .contains("GROUP-BY").contains("items{category: $sum(amount)}");
-    }
-
-    @Test
-    void shape_exemplar_for_date_arithmetic_domains() {
-        assertThat(SpecGenerationPrompt.shapeExemplars("compute the number of days between two dates"))
-                .contains("DATE ARITHMETIC").contains("$toMillis");
-    }
-
-    @Test
-    void shape_exemplar_for_classification_domains() {
-        assertThat(SpecGenerationPrompt.shapeExemplars("classify customers into a risk level"))
-                .contains("DERIVES a label").contains("nested ternary");
-    }
-
-    @Test
-    void shape_exemplar_for_currency_fx_domains() {
-        assertThat(SpecGenerationPrompt.shapeExemplars("convert amounts using an exchange rate"))
-                .contains("CURRENCY / FX CONVERSION").contains("$round(amount * exchangeRate, 2)");
-    }
-
-    @Test
-    void shape_exemplar_for_status_state_domains() {
-        assertThat(SpecGenerationPrompt.shapeExemplars("an order status with an approval workflow"))
-                .contains("STATUS / STATE").contains("CANNOT validate transitions");
-    }
-
-    @Test
-    void shape_exemplar_for_rank_percentile_domains() {
-        assertThat(SpecGenerationPrompt.shapeExemplars("compute each student's percentile and rank"))
-                .contains("RANK / PERCENTILE").contains("$count(");
-    }
-
-    @Test
-    void shape_exemplar_absent_for_ordinary_domains() {
-        assertThat(SpecGenerationPrompt.shapeExemplars("A simple sales tax calculator")).isEmpty();
-        assertThat(SpecGenerationPrompt.initialPrompt("m", "a simple counter"))
-                .doesNotContain("one row per period");
-    }
-
-    @Test
-    void shape_exemplar_word_boundaries_avoid_substring_false_positives() {
-        // "rank" must not fire on Frankfurt/franking; "tier" not on frontier; "tally" not on totally.
-        assertThat(SpecGenerationPrompt.shapeExemplars("weather forecast for Frankfurt")).isEmpty();
-        assertThat(SpecGenerationPrompt.shapeExemplars("explore the final frontier")).isEmpty();
-        assertThat(SpecGenerationPrompt.shapeExemplars("a totally normal calculator")).isEmpty();
-        // a generic (non-per-period) breakdown must go to group-by, NOT the schedule exemplar.
-        assertThat(SpecGenerationPrompt.shapeExemplars("cost breakdown by category"))
-                .doesNotContain("one row per period");
-    }
-
-    @Test
-    void shape_exemplar_word_boundaries_keep_true_positives() {
-        assertThat(SpecGenerationPrompt.shapeExemplars("leaderboard rank of each player"))
-                .contains("RANK / PERCENTILE");
-        assertThat(SpecGenerationPrompt.shapeExemplars("assign a pricing tier"))
-                .contains("DERIVES a label");
-        assertThat(SpecGenerationPrompt.shapeExemplars("tally votes by candidate"))
-                .contains("GROUP-BY");
-        assertThat(SpecGenerationPrompt.shapeExemplars("show a monthly payment breakdown table"))
-                .contains("one row per period");
     }
 
     @Test

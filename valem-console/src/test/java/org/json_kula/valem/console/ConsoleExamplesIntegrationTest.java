@@ -119,6 +119,51 @@ class ConsoleExamplesIntegrationTest {
         }
     }
 
+    // ── tic-tac-toe ───────────────────────────────────────────────────────────
+
+    @Test
+    void tic_tac_toe_spec_test_cases() throws Exception {
+        ModelSpec spec = loadSpec("tic-tac-toe.json");
+        assertThat(spec.tests()).isNotEmpty();
+
+        for (TestCase tc : spec.tests()) {
+            Context ctx = fresh(spec);
+            applyGiven(ctx, tc.given());
+            ObjectNode state = ctx.service().getState(ctx.id(), null);
+            assertExpect(tc.description(), state, tc.expect());
+        }
+    }
+
+    // ── net-salary-estonia-2026 ─────────────────────────────────────────────────
+
+    @Test
+    void net_salary_estonia_2026_spec_test_cases() throws Exception {
+        ModelSpec spec = loadSpec("net-salary-estonia-2026.json");
+        assertThat(spec.tests()).isNotEmpty();
+
+        for (TestCase tc : spec.tests()) {
+            Context ctx = fresh(spec);
+            applyGiven(ctx, tc.given());
+            ObjectNode state = ctx.service().getState(ctx.id(), null);
+            assertExpect(tc.description(), state, tc.expect());
+        }
+    }
+
+    // ── car-tax-estonia ─────────────────────────────────────────────────────────
+
+    @Test
+    void car_tax_estonia_spec_test_cases() throws Exception {
+        ModelSpec spec = loadSpec("car-tax-estonia.json");
+        assertThat(spec.tests()).isNotEmpty();
+
+        for (TestCase tc : spec.tests()) {
+            Context ctx = fresh(spec);
+            applyGiven(ctx, tc.given());
+            ObjectNode state = ctx.service().getState(ctx.id(), null);
+            assertExpect(tc.description(), state, tc.expect());
+        }
+    }
+
     // ── helpers ────────────────────────────────────────────────────────────────
 
     private record Context(ModelService service, String id) {}

@@ -91,6 +91,7 @@ core even in remote mode.
 
 | Tool | Backed by | Purpose |
 |---|---|---|
+| `get_domain_guidance` | `DomainGuidanceCatalog` | Read the model description in **any language**, pass the matching topic ids (a fixed menu enumerated in the tool's schema — amortization schedules, progressive tax/fee charges, classification, date math, percentages, unit conversion, compound growth, weighted averages, eligibility, proration, …) → vetted "hard shape" instructions to follow. Call it **before** authoring. Topics are extensible via `valem.llm.domain-guidance.topics-file` / `VALEM_DOMAIN_GUIDANCE_TOPICS_FILE` (see [configuration](../deployment/configuration.md)). |
 | `validate_spec` | `ModelSpecValidator` | Validate a spec **without creating it** → `{valid, errors[], warnings[]}` (each finding has a `location` + `message`). Draft → validate → fix → repeat. |
 | `eval_expression` | the runtime's JSONata compiler | Evaluate one JSONata expression against a sample input → the computed value or the exact compile/eval error. Verify a derivation/constraint expression before committing it. |
 | `test_spec` | `TestCaseRunner` | Run a spec's embedded tests (or ad-hoc `given`→`expect` cases, keyed by canonical JSON Path) in a throwaway runtime → pass/fail + per-field failures. Certify domain behavior before promotion. |

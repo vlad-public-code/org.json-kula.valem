@@ -17,7 +17,7 @@ function renderLayout(layout: string, components = panels) {
     <ViewContext.Provider
       value={{
         modelId: 'm', state: {}, meta: {}, onMutate, onNavigate: vi.fn(),
-        activeViewId: 'main', fieldErrors: {}, formErrors: [],
+        activeViewId: 'main', fieldErrors: {}, formErrors: [], readOnly: false,
       }}
     >
       <LayoutContainer components={components} layout={layout} state={{}} />

@@ -127,6 +127,56 @@ class DirtyPropagatorTest {
         assertThat(dirty).contains("$.total");
     }
 
+    // ── ancestor (descendant→ancestor) propagation ─────────────────────────────
+
+    @Test
+    void element_index_mutation_dirties_bare_array_dependent() {
+        // A $count(arr[$ != ""])-style derivation extracts a dependency on the BARE array "$.arr".
+        // Mutating an element "$.arr[0]" must still dirty it (the bug this fixes: it did not).
+        DependencyGraph g = DependencyGraph.builder()
+                .addNode("$.arr", DependencyGraph.NodeKind.BASE)
+                .addEdge("$.arr", "$.count")
+                .build();
+
+        Set<String> dirty = DirtyPropagator.propagate(g, Set.of("$.arr[0]"));
+        assertThat(dirty).contains("$.count");
+    }
+
+    @Test
+    void nested_field_mutation_dirties_ancestor_dependents() {
+        // Mutating "$.a.b.c" changes containers "$.a.b" and "$.a"; dependents on either recompute.
+        DependencyGraph g = DependencyGraph.builder()
+                .addNode("$.a",   DependencyGraph.NodeKind.BASE)
+                .addNode("$.a.b", DependencyGraph.NodeKind.BASE)
+                .addEdge("$.a",   "$.dependsOnA")
+                .addEdge("$.a.b", "$.dependsOnAB")
+                .build();
+
+        Set<String> dirty = DirtyPropagator.propagate(g, Set.of("$.a.b.c"));
+        assertThat(dirty).contains("$.dependsOnA", "$.dependsOnAB");
+    }
+
+    @Test
+    void ancestorContainers_enumerates_containers_nearest_first() {
+        assertThat(DirtyPropagator.ancestorContainers("$.arr[0]")).containsExactly("$.arr");
+        assertThat(DirtyPropagator.ancestorContainers("$.a.b.c")).containsExactly("$.a.b", "$.a");
+        assertThat(DirtyPropagator.ancestorContainers("$.items[2].qty"))
+                .containsExactly("$.items[2]", "$.items");
+        assertThat(DirtyPropagator.ancestorContainers("$.total")).isEmpty();
+    }
+
+    @Test
+    void ancestor_rule_does_not_dirty_unrelated_siblings() {
+        // Mutating "$.a.b" must not touch a dependent of a sibling container "$.x".
+        DependencyGraph g = DependencyGraph.builder()
+                .addNode("$.x", DependencyGraph.NodeKind.BASE)
+                .addEdge("$.x", "$.dependsOnX")
+                .build();
+
+        Set<String> dirty = DirtyPropagator.propagate(g, Set.of("$.a.b"));
+        assertThat(dirty).doesNotContain("$.dependsOnX");
+    }
+
     @Test
     void parent_path_mutation_dirtied_transitively() {
         // $.items → dirtied $.items[*].price → dirtied $.lineTotal → dirtied $.total

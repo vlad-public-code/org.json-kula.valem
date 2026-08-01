@@ -16,13 +16,19 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * End-to-end verification (real LLM) of the tool-withholding fix: web tools power the research phase
- * on the INITIAL attempt only, and are withheld on every repair. Repairs re-invoking the tools is
- * what let an off-topic web search (belonging to a previously generated model) surface on a repair
- * turn via provider prompt-prefix cache bleed.
+ * End-to-end verification (real LLM) of the tool-withholding contract: the NETWORK tools (web_search,
+ * web_fetch) and get_domain_guidance power the research phase on the INITIAL attempt only, and are
+ * withheld on every repair. Repairs re-invoking the network tools is what let an off-topic web search
+ * (belonging to a previously generated model) surface on a repair turn via provider prompt-prefix
+ * cache bleed.
+ *
+ * <p>The local, side-effect-free {@code eval_jsonata} tool is the deliberate exception: it IS offered
+ * on repairs (via {@code WebTool.repairDefinitions()}) so a repair can re-test its corrected
+ * expressions — it makes no network call, so it carries no cache-bleed risk. This test therefore
+ * asserts only that NON-eval tool calls stay on the first attempt.
  *
  * <p>Drives a domain that reliably needs more than one attempt and asserts, from the progress-event
- * stream, that no {@code ToolCalling} event occurs on any attempt after the first.
+ * stream, that no non-eval {@code ToolCalling} event occurs on any attempt after the first.
  *
  * <p>Skipped when the LLM is not configured (set the Mistral key + provider=mistral).
  */
@@ -40,35 +46,40 @@ class ToolWithholdingIT {
     SpecGenerator specGenerator;
 
     @Test
-    void web_tools_are_only_used_on_the_first_attempt() {
+    void network_tools_are_only_used_on_the_first_attempt() {
         Assumptions.assumeTrue(specGenerator != null,
                 "Skipping: LLM not configured (set the Mistral key + provider=mistral)");
 
-        // Record the attempt number in scope when each web-tool call fires.
+        // Record the attempt in scope when each tool call fires, keeping the tool name so we can
+        // distinguish the network tools (attempt-0-only) from local eval_jsonata (allowed on repairs).
         int[] currentAttempt = {0};
-        List<Integer> toolCallAttempts = new ArrayList<>();
+        List<Integer> nonEvalToolCallAttempts = new ArrayList<>();
 
         GenerationResult result = specGenerator.generate("mortgage-payment", DOMAIN, true, ev -> {
             if (ev instanceof LlmProgressEvent.LlmRequesting r) {
                 currentAttempt[0] = r.attempt();
             } else if (ev instanceof LlmProgressEvent.ToolCalling t) {
-                toolCallAttempts.add(currentAttempt[0]);
                 log.info("tool '{}' called on attempt {}", t.tool(), currentAttempt[0]);
+                if (!"eval_jsonata".equals(t.tool())) {
+                    nonEvalToolCallAttempts.add(currentAttempt[0]);
+                }
             }
         });
 
         int attemptsUsed = result instanceof GenerationResult.Success s ? s.attemptsUsed()
                 : ((GenerationResult.Failure) result).attemptsUsed();
-        log.info("Result: {}, attemptsUsed: {}, tool calls per attempt: {}",
-                result.getClass().getSimpleName(), attemptsUsed, toolCallAttempts);
+        log.info("Result: {}, attemptsUsed: {}, non-eval tool calls per attempt: {}",
+                result.getClass().getSimpleName(), attemptsUsed, nonEvalToolCallAttempts);
         if (attemptsUsed == 1) {
             log.warn("Only one attempt was needed — the repair path (and thus tool-withholding on "
                     + "repair) was not exercised this run; the assertion holds vacuously.");
         }
 
-        // The fix's contract: every web-tool call happened on the first attempt; none on a repair.
-        assertThat(toolCallAttempts)
-                .as("no web-tool call may occur on a repair attempt (attempt > 1); saw %s", toolCallAttempts)
+        // The contract: every NON-eval tool call (web_search/web_fetch/get_domain_guidance) happened on
+        // the first attempt; only local eval_jsonata may fire on a repair.
+        assertThat(nonEvalToolCallAttempts)
+                .as("no network tool call may occur on a repair attempt (attempt > 1); saw %s",
+                        nonEvalToolCallAttempts)
                 .allMatch(a -> a == 1);
     }
 }

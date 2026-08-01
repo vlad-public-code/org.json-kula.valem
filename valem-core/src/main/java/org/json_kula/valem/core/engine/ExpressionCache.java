@@ -4,6 +4,7 @@ import org.json_kula.jsonata_jvm.JsonataCompilationException;
 import org.json_kula.jsonata_jvm.JsonataExpression;
 import org.json_kula.jsonata_jvm.JsonataExpressionFactory;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -43,8 +44,26 @@ public final class ExpressionCache {
 
     private final JsonataExpressionFactory factory = new JsonataExpressionFactory();
 
-    // Access-ordered LRU: the eldest (least-recently-used) entry is evicted past the size bound.
-    // Wrapped with synchronizedMap so computeIfAbsent/putAll are atomic across threads.
+    /**
+     * Process-wide compiled-expression cache shared by <b>every</b> {@link ExpressionCache} instance
+     * (audit MEM-2 / the javac-per-fork leak). Each JSONata expression compiles to a distinct Java
+     * class that occupies metaspace for as long as it is reachable; a per-runtime cache recompiled the
+     * same expression — a fresh class + classloader — once per model, so a long-lived JVM (a server,
+     * or a single test fork creating many models) accumulated classes without bound. Compiled
+     * expressions are immutable and stateless (bindings are passed per-evaluate), so one instance is
+     * safely reused across all runtimes: keying compilation on the shared map means each distinct
+     * expression compiles <b>once per JVM</b>, and the metaspace footprint is bounded by this LRU.
+     */
+    private static final Map<String, JsonataExpression> SHARED = Collections.synchronizedMap(
+            new LinkedHashMap<>(256, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<String, JsonataExpression> eldest) {
+                    return size() > DEFAULT_MAX_SIZE;
+                }
+            });
+
+    // Per-instance access-ordered LRU. It preserves the per-runtime API (cold start, size, isCompiled)
+    // and holds only references to instances the shared cache already owns — so it adds no metaspace.
     private final Map<String, JsonataExpression> cache = Collections.synchronizedMap(
             new LinkedHashMap<>(256, 0.75f, true) {
                 @Override
@@ -52,6 +71,18 @@ public final class ExpressionCache {
                     return size() > DEFAULT_MAX_SIZE;
                 }
             });
+
+    /**
+     * Returns the process-wide compiled instance for {@code expr}, compiling only if no instance
+     * (in this cache or any other) exists yet. The first writer wins, so all callers share one object.
+     */
+    private JsonataExpression canonical(String expr) {
+        JsonataExpression shared = SHARED.get(expr);
+        if (shared != null) return shared;
+        JsonataExpression compiled = compile(expr);          // outside any lock
+        JsonataExpression existing = SHARED.putIfAbsent(expr, compiled);
+        return existing != null ? existing : compiled;       // a raced duplicate is discarded
+    }
 
     /**
      * Returns the compiled expression for {@code expr}, compiling it on first access.
@@ -67,15 +98,12 @@ public final class ExpressionCache {
     public JsonataExpression get(String expr) {
         JsonataExpression cached = cache.get(expr);
         if (cached != null) return cached;
-        JsonataExpression compiled = compile(expr);
-        // synchronizedMap uses the wrapper (== cache) as its mutex, so this block is atomic w.r.t. the
-        // map's own get/put and never runs a compile while held.
-        synchronized (cache) {
-            JsonataExpression raced = cache.get(expr);
-            if (raced != null) return raced;
-            cache.put(expr, compiled);
-            return compiled;
-        }
+        // Miss on the per-instance map: get the process-wide canonical instance (compiling only if no
+        // runtime has compiled this expression yet), then record it locally so this cache's own
+        // cold-start / size / isCompiled semantics still reflect what it has actually used.
+        JsonataExpression canonical = canonical(expr);
+        cache.put(expr, canonical);
+        return canonical;
     }
 
     private JsonataExpression compile(String expr) {
@@ -100,19 +128,29 @@ public final class ExpressionCache {
      */
     public void warm(Collection<String> expressions) {
         if (expressions == null || expressions.isEmpty()) return;
-        List<String> uncached = expressions.stream()
+        List<String> candidates = expressions.stream()
                 .filter(Objects::nonNull)
                 .filter(e -> !e.isBlank())
                 .distinct()
                 .filter(e -> !cache.containsKey(e))
                 .toList();
-        if (uncached.isEmpty()) return;
+        if (candidates.isEmpty()) return;
+
+        // Anything another runtime already compiled is pulled from the shared cache (no javac); only
+        // the genuinely-never-seen expressions are batch-compiled once and shared.
+        List<String> toCompile = new ArrayList<>();
+        for (String e : candidates) {
+            JsonataExpression shared = SHARED.get(e);
+            if (shared != null) cache.putIfAbsent(e, shared);
+            else toCompile.add(e);
+        }
+        if (toCompile.isEmpty()) return;
         try {
-            List<JsonataExpression> compiled = factory.compileAll(uncached);
-            synchronized (cache) {
-                for (int i = 0; i < uncached.size(); i++) {
-                    cache.putIfAbsent(uncached.get(i), compiled.get(i));
-                }
+            List<JsonataExpression> compiled = factory.compileAll(toCompile);
+            for (int i = 0; i < toCompile.size(); i++) {
+                String e = toCompile.get(i);
+                JsonataExpression existing = SHARED.putIfAbsent(e, compiled.get(i));
+                cache.putIfAbsent(e, existing != null ? existing : compiled.get(i));
             }
         } catch (JsonataCompilationException e) {
             // Best-effort: leave the expressions for lazy per-expression compilation via get(),
@@ -142,5 +180,15 @@ public final class ExpressionCache {
     /** Current number of cached compiled expressions (for observability gauges). */
     public int size() {
         return cache.size();
+    }
+
+    /**
+     * Drops this cache's per-instance compiled-expression references. The process-wide shared cache is
+     * untouched, so a shared expression keeps its single class; but a class that the shared cache has
+     * already LRU-evicted can now be reclaimed once no other runtime pins it. Called when a model that
+     * <b>owns</b> this cache is disposed. Safe to call more than once.
+     */
+    public void clear() {
+        cache.clear();
     }
 }

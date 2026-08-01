@@ -44,6 +44,12 @@ public class JsonataEvalTool implements WebTool {
         return List.of(definition());
     }
 
+    /** eval_jsonata is local and side-effect-free, so it is offered on repair attempts too. */
+    @Override
+    public List<ToolDefinition> repairDefinitions() {
+        return List.of(definition());
+    }
+
     ToolDefinition definition() {
         ObjectNode schema = JsonNodeFactory.instance.objectNode();
         schema.put("type", "object");
@@ -77,11 +83,22 @@ public class JsonataEvalTool implements WebTool {
         return new EvalExecutor();
     }
 
-    /** Per-session executor enforcing an eval-call budget, with a per-session compile cache. */
+    /**
+     * Executor enforcing a PER-ATTEMPT eval-call budget (replenished each generation attempt via
+     * {@link #resetPerAttemptBudget()}), with a compile cache kept warm across attempts. Per-attempt
+     * (not per-session) so a repair attempt can re-test its corrected expressions — testing is local
+     * and cheap, unlike the network tools whose budgets stay session-scoped.
+     */
     final class EvalExecutor implements ToolExecutor {
 
         private final ExpressionCache cache     = new ExpressionCache();
         private final AtomicInteger   remaining = new AtomicInteger(maxCallsPerSession);
+
+        /** Refill the eval budget for a new attempt; the compile cache is intentionally preserved. */
+        @Override
+        public void resetPerAttemptBudget() {
+            remaining.set(maxCallsPerSession);
+        }
 
         @Override
         public String execute(ToolCall call) {
@@ -96,8 +113,8 @@ public class JsonataEvalTool implements WebTool {
 
             int left = remaining.getAndDecrement();
             if (left <= 0) {
-                log.warn("JsonataEvalTool: per-session eval limit ({}) exhausted", maxCallsPerSession);
-                return "[eval_jsonata limit reached for this generation session]";
+                log.warn("JsonataEvalTool: per-attempt eval limit ({}) exhausted", maxCallsPerSession);
+                return "[eval_jsonata limit reached for this attempt]";
             }
             log.info("JsonataEvalTool: evaluating expr ({} evals remaining)", left - 1);
             return evaluate(cache, expr, input);
