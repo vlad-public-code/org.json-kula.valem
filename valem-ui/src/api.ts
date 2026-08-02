@@ -1,4 +1,4 @@
-import type { ModelInfo, MutationResponse, DerivationTrace, Snapshot, SpecEvolution, LlmInteraction, ModelGraph } from './types';
+import type { ModelInfo, MutationResponse, DerivationTrace, Snapshot, SpecEvolution, LlmInteraction, ModelGraph, VerificationReport } from './types';
 import type { EvaluatedView } from 'valem-view-react';
 
 // ── LLM progress streaming ────────────────────────────────────────────────────
@@ -14,7 +14,7 @@ export type LlmProgressEventData =
   | { type: 'retrying'; attempt: number; maxAttempts: number };
 
 export type GenerateStreamDone =
-  | { valid: true; spec: unknown }
+  | { valid: true; spec: unknown; verification?: VerificationReport }
   | { valid: false; errors: { location: string; message: string }[]; rawResponse: string };
 
 export type EvolveAiStreamDone =
@@ -169,6 +169,8 @@ export const api = {
 
   graph: (id: string) => request<ModelGraph>('GET', `/models/${id}/graph`),
 
+  verification: (id: string) => request<VerificationReport>('GET', `/models/${id}/verification`),
+
   snapshot: (id: string) => request<Snapshot>('POST', `/models/${id}/snapshot`),
 
   restore: (id: string, snap: Snapshot) =>
@@ -183,13 +185,13 @@ export const api = {
     request<{ prompt: string }>('POST', '/models/generate/preview', { modelId, domainDescription, includeView: buildUI }),
 
   generateFromPrompt: (modelId: string, prompt: string) =>
-    request<{ valid: boolean; spec?: unknown; errors?: unknown[]; rawResponse?: string }>(
+    request<{ valid: boolean; spec?: unknown; errors?: unknown[]; rawResponse?: string; verification?: VerificationReport }>(
       'POST', '/models/generate', { modelId, prompt }),
 
   // Generate from a plain description; the server builds the prompt and never returns it (keeps the
   // raw prompt out of the browser — it appears only in the LLM interaction log). Used by the sandbox.
   generateFromDescription: (modelId: string, domainDescription: string, buildUI = true) =>
-    request<{ valid: boolean; spec?: unknown; errors?: unknown[]; rawResponse?: string }>(
+    request<{ valid: boolean; spec?: unknown; errors?: unknown[]; rawResponse?: string; verification?: VerificationReport }>(
       'POST', '/models/generate', { modelId, domainDescription, includeView: buildUI }),
 
   previewEvolutionPrompt: (modelId: string, currentSpec: unknown, evolutionRequest: string, updateUI = false) =>

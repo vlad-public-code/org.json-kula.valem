@@ -21,6 +21,7 @@ import org.json_kula.valem.core.model.ModelSpec;
 import org.json_kula.valem.core.state.Snapshot;
 import org.json_kula.valem.service.ModelService;
 import org.json_kula.valem.service.ModelInfo;
+import org.json_kula.valem.core.engine.VerificationReport;
 import org.json_kula.valem.core.graph.ModelGraph;
 import org.json_kula.valem.core.graph.SpecEvolution;
 import org.springframework.core.io.InputStreamResource;
@@ -336,6 +337,18 @@ public class ModelController {
     @GetMapping("/{id}/graph")
     public ResponseEntity<ModelGraph> graph(@PathVariable("id") String id) {
         return ResponseEntity.ok(service.graph(id));
+    }
+
+    /**
+     * Trust-layer verification report for the model — the counts + per-case outcomes behind the "built
+     * &amp; checked against N cases" badge (docs/sandbox/trust-layer.md). Runs the spec's embedded
+     * self-tests in a throw-away runtime; read-only, a pure function of the spec, cached per version.
+     * The report attests to the model's internal consistency for example inputs, not to the factual
+     * correctness of any real-world figure it cites.
+     */
+    @GetMapping("/{id}/verification")
+    public ResponseEntity<VerificationReport> verification(@PathVariable("id") String id) {
+        return ResponseEntity.ok(service.verify(id));
     }
 
     /**

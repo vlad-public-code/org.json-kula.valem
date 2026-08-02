@@ -7,7 +7,10 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.json_kula.valem.core.blob.InMemoryBlobStore;
 import org.json_kula.valem.core.engine.ConstraintEvaluator;
 import org.json_kula.valem.core.engine.ModelRuntime;
+import org.json_kula.valem.core.engine.SpecVerifier;
 import org.json_kula.valem.core.engine.TestCaseRunner;
+import org.json_kula.valem.core.engine.VerificationClassifier;
+import org.json_kula.valem.core.engine.VerificationReport;
 import org.json_kula.valem.core.graph.CompiledModel;
 import org.json_kula.valem.core.graph.ModelSpecCompiler;
 import org.json_kula.valem.core.graph.ModelSpecValidator;
@@ -22,7 +25,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 /**
  * Drives the LLM-based spec generation / repair feedback loop.
@@ -138,7 +140,15 @@ public final class SpecGenerator {
     /** The outcome of a generation attempt. */
     public sealed interface GenerationResult permits GenerationResult.Success, GenerationResult.Failure {
 
-        record Success(ModelSpec spec, int attemptsUsed) implements GenerationResult {}
+        /**
+         * @param verification the trust-layer verification report for {@code spec} — the counts +
+         *                     per-case outcomes behind the "built &amp; checked against N cases" badge,
+         *                     computed from the same self-test run that gated generation. Never null on
+         *                     a success (may be a {@code neutral} report when the spec carries no
+         *                     verifiable cases).
+         */
+        record Success(ModelSpec spec, int attemptsUsed, VerificationReport verification)
+                implements GenerationResult {}
 
         record Failure(
                 String lastRawResponse,
@@ -203,6 +213,7 @@ public final class SpecGenerator {
         // a self-verification aid, not a hard gate: if the budget runs out with tests still failing we
         // return this rather than failing generation outright — a valid spec beats no spec.
         ModelSpec bestEffortSpec = null;
+        VerificationReport bestEffortReport = null;
         int       bestEffortFailCount = Integer.MAX_VALUE;
         // Adaptive truncation recovery: the first truncation retries the SAME prompt with a raised token
         // budget; a second truncation falls back to the "smaller spec" prompt.
@@ -293,8 +304,11 @@ public final class SpecGenerator {
                 }
 
                 onProgress.accept(new LlmProgressEvent.TestRunning(attempts));
-                List<TestCaseRunner.TestResult> failed = TestCaseRunner.run(spec, spec.tests())
-                        .stream().filter(TestCaseRunner.TestResult::failed).toList();
+                // Keep the full result list: it gates generation (below) AND becomes the trust-layer
+                // verification report on the winning attempt (no second test run needed).
+                List<TestCaseRunner.TestResult> allResults = TestCaseRunner.run(spec, spec.tests());
+                List<TestCaseRunner.TestResult> failed = allResults.stream()
+                        .filter(TestCaseRunner.TestResult::failed).toList();
                 // Drop failures the model cannot hand-compute deterministically (whole-array/object
                 // assertions, $now()-dependent fields) — they are not a reliable gate, so they must
                 // not consume the retry budget or block a structurally-valid spec.
@@ -308,12 +322,16 @@ public final class SpecGenerator {
                         ModelSpecValidator.lintView(spec);
                 int softIssues = verifiable.size() + viewFindings.size();
                 if (softIssues == 0) {
+                    ModelSpec finalSpec = markDerivedFieldsReadOnly(spec);
                     return new GenerationResult.Success(
-                            markDerivedFieldsReadOnly(spec), attempts);
+                            finalSpec, attempts, SpecVerifier.report(finalSpec, allResults));
                 }
                 if (softIssues < bestEffortFailCount) {
                     bestEffortFailCount = softIssues;
                     bestEffortSpec = spec;
+                    // Capture the report for THIS attempt's results, since the best-effort return below
+                    // may be reached after later attempts overwrote allResults.
+                    bestEffortReport = SpecVerifier.report(spec, allResults);
                 }
                 if (!verifiable.isEmpty()) {
                     onProgress.accept(new LlmProgressEvent.TestFailed(attempts, verifiable.size()));
@@ -349,7 +367,7 @@ public final class SpecGenerator {
         // but should not block generation when the model cannot make them all pass.
         if (bestEffortSpec != null) {
             return new GenerationResult.Success(
-                    markDerivedFieldsReadOnly(bestEffortSpec), attempts);
+                    markDerivedFieldsReadOnly(bestEffortSpec), attempts, bestEffortReport);
         }
         // Final attempt failed on structural/parse errors — return failure with the last error list.
         return new GenerationResult.Failure(rawResp, lastErrors, attempts);
@@ -563,28 +581,16 @@ public final class SpecGenerator {
      */
     static List<TestCaseRunner.TestResult> retainVerifiableFailures(
             List<TestCaseRunner.TestResult> failed, ModelSpec spec) {
-        Map<String, String> exprByPath = spec.derivations().stream()
-                .collect(Collectors.toMap(DerivationSpec::path, DerivationSpec::expr, (a, b) -> a));
+        Map<String, String> exprByPath = VerificationClassifier.exprByPath(spec);
         List<TestCaseRunner.TestResult> out = new ArrayList<>();
         for (TestCaseRunner.TestResult t : failed) {
             List<TestCaseRunner.FieldFailure> verifiable = t.failures().stream()
-                    .filter(f -> isVerifiableFailure(f, exprByPath))
+                    .filter(f -> VerificationClassifier.isVerifiableFailure(f, exprByPath))
                     .toList();
             if (!verifiable.isEmpty())
                 out.add(new TestCaseRunner.TestResult(t.description(), false, verifiable));
         }
         return out;
-    }
-
-    private static boolean isVerifiableFailure(TestCaseRunner.FieldFailure f,
-                                               Map<String, String> exprByPath) {
-        JsonNode expected = f.expected();
-        if (expected != null && (expected.isArray() || expected.isObject()))
-            return false;   // a whole array/object cannot be hand-computed reliably
-        String expr = exprByPath.get(f.path());
-        if (expr != null && (expr.contains("$now(") || expr.contains("$millis(")))
-            return false;   // time-dependent → non-deterministic expectation
-        return true;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

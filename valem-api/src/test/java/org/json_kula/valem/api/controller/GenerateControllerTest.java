@@ -60,6 +60,29 @@ class GenerateControllerTest {
     }
 
     @Test
+    void generate_attaches_a_trust_layer_verification_report() throws Exception {
+        // A spec with a derivation and a passing self-test: the blocking generate must attach the
+        // trust-layer report so the badge shows without a second fetch (parity with the stream path).
+        when(llmClient.complete(anyString())).thenReturn("""
+                {"id":"checked","schema":{},
+                 "derivations":[{"path":"$.total","expr":"subtotal + tax"}],
+                 "tests":[{"description":"80+20","given":{"$.subtotal":80,"$.tax":20},
+                           "expect":{"$.total":100}}]}
+                """);
+
+        mvc.perform(post("/models/generate")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"modelId":"checked","prompt":"Generate a spec"}
+                        """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.valid", is(true)))
+                .andExpect(jsonPath("$.verification.state", is("green")))
+                .andExpect(jsonPath("$.verification.checkedCount", is(1)))
+                .andExpect(jsonPath("$.verification.passedCount", is(1)));
+    }
+
+    @Test
     void generate_strips_markdown_fences_from_llm_response() throws Exception {
         when(llmClient.complete(anyString())).thenReturn("""
                 ```json

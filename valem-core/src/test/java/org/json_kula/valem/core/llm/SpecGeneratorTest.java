@@ -549,6 +549,29 @@ class SpecGeneratorTest {
         assertThat(success.attemptsUsed()).isEqualTo(1);
     }
 
+    @Test
+    void generate_attaches_a_verification_report_from_the_embedded_tests() {
+        // The trust-layer badge's data (docs/sandbox/trust-layer.md): a passing embedded test yields a
+        // green report on the Success result, computed from the same self-test run that gates generation.
+        LlmClient stub = prompt -> """
+                { "id": "order", "schema": {},
+                  "derivations": [ { "path": "$.total", "expr": "sub + tax" } ],
+                  "tests": [ { "description": "80+20", "given": { "$.sub": 80, "$.tax": 20 },
+                               "expect": { "$.total": 100 } } ]
+                }
+                """;
+
+        var result = new SpecGenerator(stub, MAPPER).generate("order", "An order model");
+
+        assertThat(result).isInstanceOf(GenerationResult.Success.class);
+        var report = ((GenerationResult.Success) result).verification();
+        assertThat(report).isNotNull();
+        assertThat(report.state()).isEqualTo(
+                org.json_kula.valem.core.engine.VerificationReport.State.GREEN);
+        assertThat(report.checkedCount()).isEqualTo(1);
+        assertThat(report.passedCount()).isEqualTo(1);
+    }
+
     // ── Retry on validation failure ────────────────────────────────────────────
 
     @Test

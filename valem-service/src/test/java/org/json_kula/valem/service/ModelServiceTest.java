@@ -550,6 +550,43 @@ class ModelServiceTest {
                 .hasMessageContaining("no-such-view");
     }
 
+    // ── verify (trust layer) ────────────────────────────────────────────────────
+
+    @Test
+    void verify_returns_a_green_report_when_the_embedded_test_passes() throws Exception {
+        service.createModel(spec("""
+                { "id": "verify-svc", "schema": {},
+                  "derivations": [ { "path": "$.total", "expr": "subtotal + tax" } ],
+                  "tests": [ { "description": "80+20", "given": { "$.subtotal": 80, "$.tax": 20 },
+                               "expect": { "$.total": 100 } } ] }
+                """));
+
+        var report = service.verify("verify-svc");
+        assertThat(report.state()).isEqualTo(
+                org.json_kula.valem.core.engine.VerificationReport.State.GREEN);
+        assertThat(report.checkedCount()).isEqualTo(1);
+        assertThat(report.passedCount()).isEqualTo(1);
+    }
+
+    @Test
+    void verify_is_cached_per_spec_version() throws Exception {
+        service.createModel(spec("""
+                { "id": "verify-cache", "schema": {},
+                  "derivations": [ { "path": "$.total", "expr": "subtotal + tax" } ],
+                  "tests": [ { "description": "t", "given": { "$.subtotal": 1, "$.tax": 1 },
+                               "expect": { "$.total": 2 } } ] }
+                """));
+
+        // Same spec version → the report is served from cache (same instance, no recompile).
+        assertThat(service.verify("verify-cache")).isSameAs(service.verify("verify-cache"));
+    }
+
+    @Test
+    void verify_throws_ModelNotFoundException_on_unknown_id() {
+        assertThatThrownBy(() -> service.verify("no-such-model"))
+                .isInstanceOf(ModelNotFoundException.class);
+    }
+
     // ── helpers ────────────────────────────────────────────────────────────────
 
     private static org.json_kula.valem.core.model.ModelSpec spec(String json) throws Exception {

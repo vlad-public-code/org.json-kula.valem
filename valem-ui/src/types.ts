@@ -71,6 +71,30 @@ export interface ModelGraph {
   levels: string[][];          // node keys grouped by topological depth (shallowest first)
 }
 
+// ── Trust layer: auto-verify report (docs/sandbox/trust-layer.md) ──────────────
+// `green` = all verifiable cases passed · `amber` = some failed · `neutral` = nothing auto-checkable.
+export type VerificationState = 'green' | 'amber' | 'neutral';
+
+export interface VerificationCase {
+  description: string;
+  verifiable: boolean;                       // counts toward the badge denominator
+  passed: boolean | null;                    // null when the case is not verifiable
+  given: Record<string, unknown>;            // the mutation inputs applied
+  expect: Record<string, unknown>;           // asserted expected values
+  actual: Record<string, unknown>;           // observed values for failed assertions (empty when passed)
+  reason: string | null;                     // why an un-verifiable case is excluded; null otherwise
+}
+
+export interface VerificationReport {
+  modelId: string;
+  specVersion: string;
+  state: VerificationState;
+  checkedCount: number;                      // verifiable (auto-checkable) cases — the honest denominator
+  passedCount: number;
+  unverifiableCount: number;                 // cases excluded because nothing in them is auto-checkable
+  cases: VerificationCase[];
+}
+
 export interface ChangeEvent {
   /** Frame discriminator — "mutation" (default when absent, older servers) or "spec-evolved". */
   kind?: 'mutation' | 'spec-evolved';

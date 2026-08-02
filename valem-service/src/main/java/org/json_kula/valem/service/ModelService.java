@@ -12,6 +12,8 @@ import org.json_kula.valem.core.engine.ConstraintEvaluator;
 import org.json_kula.valem.core.engine.DerivationTrace;
 import org.json_kula.valem.core.engine.ExpressionCache;
 import org.json_kula.valem.core.engine.ModelRuntime;
+import org.json_kula.valem.core.engine.SpecVerifier;
+import org.json_kula.valem.core.engine.VerificationReport;
 import org.json_kula.valem.core.engine.SchemaStateChecker;
 import org.json_kula.valem.core.graph.CompiledModel;
 import org.json_kula.valem.core.graph.GraphProjection;
@@ -87,6 +89,18 @@ public class ModelService implements ModelOperations, ChangeSubscribable {
     private static final long QUEUE_IDLE_TTL_H = 1;
 
     private final Cache<String, Semaphore> mutationQueues = Caffeine.newBuilder()
+            .maximumSize(QUEUE_MAX_MODELS)
+            .expireAfterAccess(QUEUE_IDLE_TTL_H, TimeUnit.HOURS)
+            .build();
+
+    /**
+     * Trust-layer verification reports, keyed by {@code modelId@specVersion}. The report is a pure
+     * function of the spec, so a version-scoped cache is always correct — an {@code evolveSpec} bumps
+     * the version and lands on a fresh key, so a stale report is never served. Running the self-tests
+     * compiles the spec (expensive javac round-trip, even with the shared expression cache), so this
+     * makes repeat badge views free. Never persisted; rebuilt from spec after eviction/redeploy.
+     */
+    private final Cache<String, VerificationReport> verificationReports = Caffeine.newBuilder()
             .maximumSize(QUEUE_MAX_MODELS)
             .expireAfterAccess(QUEUE_IDLE_TTL_H, TimeUnit.HOURS)
             .build();
@@ -598,6 +612,29 @@ public class ModelService implements ModelOperations, ChangeSubscribable {
         synchronized (rt) {
             return GraphProjection.project(rt.model(), id);
         }
+    }
+
+    /**
+     * Trust-layer verification report for a model — the counts + per-case outcomes behind the "built
+     * &amp; checked against N cases" badge (docs/sandbox/trust-layer.md). Runs the spec's embedded
+     * self-tests in a throw-away runtime ({@link SpecVerifier}); read-only, a pure function of the
+     * spec, cached per spec version. Never mutates the live model, its state, or effect dispatch.
+     *
+     * <p>The report claims only that the model's own logic is self-consistent and held for the example
+     * inputs — never that any real-world figure it cites is factually correct.
+     *
+     * @throws ModelNotFoundException if the model does not exist
+     */
+    public VerificationReport verify(String id) {
+        ModelRuntime rt = requireRuntime(id);
+        ModelSpec spec;
+        synchronized (rt) {
+            spec = rt.model().spec();
+        }
+        // Cache key is version-scoped, so an evolveSpec never serves a stale report (fresh key).
+        // The self-tests reuse the shared, warmed expression cache to avoid recompiling expressions.
+        return verificationReports.get(id + "@" + spec.version(),
+                k -> SpecVerifier.verify(spec, expressionCache));
     }
 
     /** @throws ModelNotFoundException if the model does not exist */

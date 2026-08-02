@@ -90,6 +90,26 @@ describe('in-view provenance overlay', () => {
     expect(pop).toHaveTextContent('ultimately from'); // F3 base-inputs section
     expect(pop).toHaveTextContent('price');
     expect(pop).toHaveTextContent('discount');
+    expect(pop.getAttribute('data-placement')).toBe('above'); // default: fits above the leaf
+    expect(pop.style.bottom).toBe('calc(100% + 6px)');
+  });
+
+  it('flips the popover below the leaf when the above placement would be clipped by the header', () => {
+    // Simulate a leaf near the top of a scroll panel: the above-placed box lands above the clip edge
+    // (viewport top = 0 here), so it must flip below rather than hide behind the header.
+    const orig = Element.prototype.getBoundingClientRect;
+    Element.prototype.getBoundingClientRect = function () {
+      return { top: -12, bottom: 0, left: 0, right: 0, width: 0, height: 0, x: 0, y: 0, toJSON: () => ({}) } as DOMRect;
+    };
+    try {
+      renderComponent(numeric(), { state: { total: 120 }, provenance: runtime({ hoveredLeafId: '$.total' }) });
+      const pop = screen.getByTestId('provenance-popover');
+      expect(pop.getAttribute('data-placement')).toBe('below');
+      expect(pop.style.top).toBe('calc(100% + 6px)');
+      expect(pop.style.bottom).toBe('');
+    } finally {
+      Element.prototype.getBoundingClientRect = orig;
+    }
   });
 
   it('outlines an input leaf that is in the hovered node’s highlight set (F2)', () => {

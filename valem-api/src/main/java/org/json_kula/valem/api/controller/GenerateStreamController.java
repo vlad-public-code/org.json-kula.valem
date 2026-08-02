@@ -99,6 +99,9 @@ public class GenerateStreamController {
                     done = new LinkedHashMap<>();
                     done.put("valid", true);
                     done.put("spec", s.spec());
+                    // Trust-layer report (built & checked against N cases) — computed from the same
+                    // self-test run that gated generation, so the badge shows instantly with no fetch.
+                    done.put("verification", s.verification());
                 } else if (result instanceof SpecGenerator.GenerationResult.Failure f) {
                     done = new LinkedHashMap<>();
                     done.put("valid", false);

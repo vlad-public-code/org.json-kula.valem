@@ -3,6 +3,7 @@ package org.json_kula.valem.api.controller;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.json_kula.valem.core.engine.SpecVerifier;
 import org.json_kula.valem.core.graph.ModelSpecValidator;
 import org.json_kula.valem.core.graph.SpecEvolution;
 import org.json_kula.valem.core.llm.LlmClient;
@@ -172,9 +173,12 @@ public class GenerateController {
                 // so clients/tools don't try to write it (the SpecGenerator loop does this too).
                 spec = SpecGenerator.markDerivedFieldsReadOnly(spec);
                 log.info("Generate succeeded: modelId={}", req.modelId());
+                // Trust-layer report parity with the streaming path: the blocking generate does not run
+                // the retry loop's self-tests, so verify the returned spec here (docs/sandbox/trust-layer.md).
                 return ResponseEntity.ok(Map.of(
                         "valid", true,
-                        "spec", spec));
+                        "spec", spec,
+                        "verification", SpecVerifier.verify(spec)));
             } else {
                 log.warn("Generate: spec failed validation for modelId={} ({} errors)",
                         req.modelId(), validation.errors().size());
