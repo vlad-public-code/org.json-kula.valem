@@ -1,60 +1,56 @@
-# MCP directory listings for `valem-mcp`
+# MCP directory listing for Valem — hosted, no jar
 
-Packaging manifests that let Valem be *found and installed* from the places assistants and their
-users already look for MCP servers. This is distribution, not code: the server itself is
-[`valem-mcp`](../), and these files only describe how to launch it.
+Valem runs as a **hosted MCP server** at `https://valem.onrender.com/mcp` (Streamable HTTP). An agent
+connects over the network and drives a live [sandbox](https://valem.onrender.com) session — no jar to
+download, no Java to install. This directory holds the one file that makes that discoverable: the
+official-registry entry.
 
-| File | Directory / installer | What it is |
+| File | Directory | What it is |
 |---|---|---|
-| [`server.json`](server.json) | **Official MCP registry** (`registry.modelcontextprotocol.io`) | The canonical registry entry — reverse-DNS name `io.github.vlad-public-code/valem`, pointing at the `.mcpb` bundle attached to the GitHub release. |
-| [`manifest.json`](manifest.json) | **Claude Desktop extensions** (MCP Bundle / `.mcpb`, formerly `.dxt`) | The bundle manifest. Zipped together with `valem-mcp.jar` it becomes a one-click `valem-mcp.mcpb` a user installs in Claude Desktop. |
-| [`smithery.yaml`](smithery.yaml) | **[Smithery](https://smithery.ai)** | The Smithery local-stdio listing — launch command + a config schema for the optional remote-server URL / API key. |
+| [`server.json`](server.json) | **Official MCP registry** (`registry.modelcontextprotocol.io`) | The registry entry — reverse-DNS name `io.github.vlad-public-code/valem` with a `remotes` entry pointing at the hosted Streamable-HTTP endpoint. |
 
-All three describe the **same** stdio server: `java -jar valem-mcp.jar`, embedded and in-memory by
-default, or driving a remote `valem-web` server when given a URL (via `--url` / `VALEM_URL`) and
-optional API key (`VALEM_API_KEY`). See [Running the MCP
-server](https://vlad-public-code.github.io/org.json-kula.valem/deployment/mcp-server.html).
+For Claude Code and Claude Desktop there is no file to ship — a remote MCP server is added by **URL**
+(see below).
 
-## Build the bundle
+## How an agent connects (no jar)
 
-The registry entry and the Claude Desktop extension both distribute one artifact — an `.mcpb` bundle
-(a zip of `manifest.json` + the jar):
+Point any remote-capable MCP client at the endpoint, then pair it with a browser sandbox session:
 
 ```bash
-# 1. build the shaded jar
-mvn install -pl valem-core,valem-service,valem-view -q
-mvn package -pl valem-mcp -DskipTests
-cp valem-mcp/target/valem-mcp-*.jar valem-mcp/packaging/valem-mcp.jar
-
-# 2. pack the bundle (npx @anthropic-ai/mcpb, formerly @anthropic-ai/dxt)
-cd valem-mcp/packaging
-npx @anthropic-ai/mcpb pack . valem-mcp.mcpb
+# Claude Code — add the hosted server over HTTP
+claude mcp add --transport http valem https://valem.onrender.com/mcp
 ```
 
-Attach both `valem-mcp.jar` and `valem-mcp.mcpb` to the GitHub release so the download URLs in
-`server.json` and the docs resolve.
+- **Claude Desktop:** Settings → Connectors → Add custom connector → URL `https://valem.onrender.com/mcp`.
+- **Any MCP client:** connect to `https://valem.onrender.com/mcp` (Streamable HTTP).
 
-## Publish
+Then, in the agent, **call the `pair_browser` tool**. It returns a verification link and a confirmation
+code; open the link, check the code matches, and click Approve in the sandbox. From then on the agent's
+`create_model` / `mutate` / `get_state` / `explain` calls drive that browser session's models live. The
+pure authoring tools (`validate_spec`, `eval_expression`, `test_spec`, `dry_run`) work before pairing.
+See [Connect your agent](https://vlad-public-code.github.io/org.json-kula.valem/getting-started/connect-your-agent.html).
 
-- **MCP registry:** fill `packages[0].fileSha256` in `server.json` with the released bundle's SHA-256
-  (`sha256sum valem-mcp.mcpb`), then publish with the [`mcp-publisher`
-  CLI](https://github.com/modelcontextprotocol/registry) (GitHub auth proves ownership of the
-  `io.github.vlad-public-code/*` namespace).
-- **Claude Desktop:** submit `valem-mcp.mcpb` through the Claude Desktop extensions directory
-  submission flow; users can also install the `.mcpb` file directly.
-- **Smithery:** connect the GitHub repo at [smithery.ai/new](https://smithery.ai/new); Smithery reads
-  `smithery.yaml`. (Smithery is set to look here — see `valem-mcp` module root for the pointer.)
+## Publish to the registry
 
-## Keep in sync when releasing
+```bash
+# install the publisher CLI — github.com/modelcontextprotocol/registry
+mcp-publisher login github     # OAuth proves ownership of the io.github.vlad-public-code/* namespace
+mcp-publisher publish          # validates & submits server.json
+```
 
-These files are hand-maintained. On each release, bump in lockstep:
+The registry's `server.json` schema changes fairly often; `mcp-publisher` validates on publish, so run it
+and fix any field it rejects rather than trusting this file blindly.
 
-- **version** — `server.json` (`version` + `packages[0].version`) and `manifest.json` (`version`) must
-  match the released jar/tag.
-- **artifact URL** — `server.json` `packages[0].identifier` points at
-  `releases/download/v<version>/valem-mcp.mcpb`.
-- **fileSha256** — recompute for the new bundle; never leave the `REPLACE_WITH_...` placeholder in a
-  published entry.
-- **tool list** — the `tools` hint in `manifest.json` is a discovery aid, not the source of truth; the
-  authoritative surface is [`reference/mcp-tools.md`](../../docs/reference/mcp-tools.md). Keep it
-  roughly current but don't let it drift into a second spec.
+## Keep in sync
+
+- **endpoint** — `remotes[0].url` must match the deployed sandbox origin. If the host moves off
+  `valem.onrender.com`, update it here and re-publish.
+- **version** — bump `version` on a meaningful change to the exposed surface, then re-publish.
+
+## Self-hosting instead (the jar)
+
+Prefer to run your own server or drive an embedded, in-memory instance? That's the stdio jar path —
+`valem-mcp.jar`, `--url`, `--browser` — documented in
+[Running the MCP server](https://vlad-public-code.github.io/org.json-kula.valem/deployment/mcp-server.html).
+The hosted remote above is the zero-install default; the jar is for self-hosting, offline use, and
+driving a private `valem-web` server.

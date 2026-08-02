@@ -137,6 +137,35 @@ public class McpServer {
         this.resources = new ResourceRegistry(mapper);
     }
 
+    /**
+     * Builds the {@code remote_with_browser} model-operations facade — a device-flow pairing client of a
+     * hosted Valem sandbox at {@code baseUrl} — so a host <b>other than the stdio jar</b> can drive the
+     * same pairing protocol. The stdio {@code main} builds this itself; this factory lets an in-server
+     * MCP transport (the sandbox's own {@code /mcp} endpoint) hand a per-session instance to
+     * {@link McpHttpSession}, giving a jarless, hosted MCP the exact {@code pair_browser} flow the jar
+     * exposes. The returned facade is {@code BrowserPairable}, so {@code ToolRegistry} surfaces
+     * {@code pair_browser}; every model operation throws until pairing completes.
+     *
+     * @param baseUrl the sandbox host the facade pairs with and routes model operations to (its
+     *                {@code /sandbox/pair} handshake and {@code /models} REST surface)
+     */
+    public static ModelOperations remoteWithBrowserOperations(String baseUrl, ObjectMapper mapper) {
+        return new SandboxSessionModelOperations(baseUrl, mapper);
+    }
+
+    /**
+     * As {@link #remoteWithBrowserOperations(String, ObjectMapper)} but with an explicit
+     * <b>poll budget</b> — how long a single {@code pair_browser} call blocks waiting for the developer to
+     * approve before it returns {@code "pending"} (with the same link) so the agent can retry. A hosted
+     * MCP transport that runs this on a request thread wants a shorter budget than the stdio default so it
+     * does not hold a container thread for a full minute; the agent simply calls {@code pair_browser}
+     * again. Values are floored at one second.
+     */
+    public static ModelOperations remoteWithBrowserOperations(String baseUrl, ObjectMapper mapper,
+                                                              java.time.Duration pollBudget) {
+        return new SandboxSessionModelOperations(baseUrl, mapper, pollBudget);
+    }
+
     public static void main(String[] args) throws Exception {
         ObjectMapper mapper = new ObjectMapper()
                 .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)

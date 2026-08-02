@@ -41,6 +41,16 @@ them, both of you are looking at the same live object.
 - A host to pair with — the [hosted sandbox]({{ site.sandbox_url }}) or your own `valem-web`
   deployment.
 
+{: .tip }
+> **No jar needed for the hosted sandbox.** The sandbox exposes this same pairing flow as a **remote
+> MCP server** over HTTP, so you can skip the download and Java entirely:
+> ```bash
+> claude mcp add --transport http valem {{ site.sandbox_url }}/mcp
+> ```
+> (Claude Desktop: add it as a custom connector with URL `{{ site.sandbox_url }}/mcp`.) Then jump
+> straight to [step 2](#2-ask-the-agent-to-pair) and call `pair_browser`. The jar steps below are for pairing
+> with **your own** `valem-web` deployment, or for driving an embedded/offline instance.
+
 ## 1. Register the MCP server in browser-pairing mode
 
 Pairing mode is `--url <host> --browser`. For **Claude Code**:

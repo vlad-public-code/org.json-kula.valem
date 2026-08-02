@@ -136,21 +136,39 @@ claude mcp add valem -- \
 The client launches the process, performs the `initialize` handshake, and lists the
 [tools]({% link reference/mcp-tools.md %}).
 
+## Connect without a jar — the hosted sandbox
+
+You don't need this jar at all to *try* Valem from an agent. The hosted sandbox exposes the same MCP
+surface over **Streamable HTTP** at **`https://valem.onrender.com/mcp`**, so a remote-capable MCP client
+connects by URL and drives a live sandbox session — no download, no Java:
+
+```bash
+# Claude Code — add the hosted server over HTTP
+claude mcp add --transport http valem https://valem.onrender.com/mcp
+```
+
+For Claude Desktop, add it as a custom connector (Settings → Connectors) with that URL; any MCP client
+can connect to the endpoint directly. Then call the **`pair_browser`** tool: it returns a verification
+link and confirmation code — open the link, check the code, click Approve in the sandbox — and from then
+on your agent's `create_model` / `mutate` / `get_state` calls drive that browser's models live. The full
+walkthrough (and what pairing protects) is in
+[Connect your agent]({% link getting-started/connect-your-agent.md %}). This is the same device-flow
+pairing as the jar's `remote_with_browser` mode, but the endpoint runs on the sandbox, so no local
+process is involved.
+
 ## Find it in MCP directories
 
-Valem is packaged for the places agents and their users discover MCP servers, so you can install it
-without hand-writing the config above:
+Valem is listed as a **hosted remote server**, so users add it by URL rather than installing anything:
 
 | Directory | How Valem is listed |
 |---|---|
-| **Official MCP registry** (`registry.modelcontextprotocol.io`) | as `io.github.vlad-public-code/valem`, distributed as the `.mcpb` bundle attached to each [release]({{ site.gh_repo }}/releases/latest). |
-| **Claude Desktop extensions** | as a one-click MCP Bundle (`valem-mcp.mcpb`) — install it and Claude Desktop launches the server for you. |
-| **[Smithery](https://smithery.ai)** | as a local stdio server with a small config form for the optional remote-server URL and API key. |
+| **Official MCP registry** (`registry.modelcontextprotocol.io`) | as `io.github.vlad-public-code/valem`, with a `remotes` entry pointing at `https://valem.onrender.com/mcp`. |
+| **Claude Code / Claude Desktop** | as a remote server / custom connector added by URL (the commands above) — no manifest file. |
 
-The manifests that produce these listings — and how to build the bundle and publish — live in
-[`valem-mcp/packaging/`]({{ site.gh_repo }}/blob/main/valem-mcp/packaging). Every listing launches the
-same server described on this page: embedded and in-memory by default, remote against a `valem-web`
-server when given `VALEM_URL` (and `VALEM_API_KEY`).
+The registry entry and publish steps live in
+[`valem-mcp/packaging/`]({{ site.gh_repo }}/blob/main/valem-mcp/packaging). Prefer to run your own
+server or an embedded instance instead? That's the jar path on the rest of this page — self-hosting,
+offline use, and driving a private `valem-web`.
 
 ## HTTP transport: an MCP endpoint on the server
 
