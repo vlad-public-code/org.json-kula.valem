@@ -1,0 +1,41 @@
+# Valem — live sandbox
+
+> This is the hosted Valem sandbox: describe a domain in plain language, watch an LLM generate a
+> ModelSpec, then type into it and see derivations, constraints, and effects recompute live. Valem
+> is a deterministic, reactive computation runtime for AI-generated structured data models — a
+> spreadsheet-like computation core for JSON-based agent systems, addressed by JSON Path and
+> expressed in JSONata. Open source (Apache-2.0), Java 21.
+
+You give Valem a **ModelSpec** — a JSON document naming a domain's fields (`schema`), the JSONata
+formulas that derive values from them (`derivations`), the invariants that must always hold
+(`constraints`), optional side effects (`effects`), and a `viewDefinition` that renders it as a UI.
+Write only base fields; Valem recomputes every dependent value in dependency order and enforces every
+constraint before the change commits. Because the pure core does no I/O, runs are deterministic and
+replayable.
+
+Use it here (no install), or run it yourself and drive it from an agent over MCP.
+
+## This sandbox
+
+- [Open the sandbox](https://valem.onrender.com/): describe a model in a sentence and interact with it live.
+- [What to do in it](https://vlad-public-code.github.io/org.json-kula.valem/getting-started/sandbox.html): a short tour of the generate → interact loop.
+
+## Learn and build
+
+- [Documentation](https://vlad-public-code.github.io/org.json-kula.valem/): the full guide, reference, and deployment docs.
+- [llms.txt (documentation site)](https://vlad-public-code.github.io/org.json-kula.valem/llms.txt): the curated index for assistants — start there for the complete map.
+- [What is Valem?](https://vlad-public-code.github.io/org.json-kula.valem/getting-started/what-is-valem.html): the problem it solves and how the causes-only model closes it.
+- [Copy-paste spec examples](https://vlad-public-code.github.io/org.json-kula.valem/reference/copy-paste-specs.html): minimal, self-contained ModelSpecs with the exact command to create and run each.
+- [Model spec format](https://vlad-public-code.github.io/org.json-kula.valem/reference/model-spec-format.html): the authoritative field-by-field reference.
+
+## Connect an AI agent (MCP)
+
+- [Running the MCP server](https://vlad-public-code.github.io/org.json-kula.valem/deployment/mcp-server.html): install/run `valem-mcp`; register it with Claude Code or Claude Desktop; find it in MCP directories.
+- [MCP tools & resources](https://vlad-public-code.github.io/org.json-kula.valem/reference/mcp-tools.html): every tool (`create_model`, `mutate`, `get_state`, `explain`, `validate_spec`, `test_spec`, `dry_run`, …) and its arguments.
+- [Connect your agent](https://vlad-public-code.github.io/org.json-kula.valem/getting-started/connect-your-agent.html): the paired-browser loop — an agent drives a model while you watch it react in this sandbox.
+
+## Optional
+
+- [Examples gallery](https://vlad-public-code.github.io/org.json-kula.valem/usage-scenarios/examples-gallery.html): ready-to-run ModelSpec documents that double as demos and starting points.
+- [API reference](https://vlad-public-code.github.io/org.json-kula.valem/reference/api-reference.html): REST endpoints, the WebSocket protocol, and request/response shapes.
+- [Source on GitHub](https://github.com/vlad-public-code/org.json-kula.valem): Apache-2.0, Java 21.

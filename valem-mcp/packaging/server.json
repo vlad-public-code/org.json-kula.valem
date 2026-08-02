@@ -1,0 +1,38 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.json",
+  "name": "io.github.vlad-public-code/valem",
+  "description": "Deterministic reactive state models an agent can create, mutate, read, and verify over MCP — a spreadsheet-like computation core, not a text buffer.",
+  "status": "active",
+  "repository": {
+    "url": "https://github.com/vlad-public-code/org.json-kula.valem",
+    "source": "github"
+  },
+  "websiteUrl": "https://vlad-public-code.github.io/org.json-kula.valem/",
+  "version": "1.0.0",
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "registryBaseUrl": "https://github.com",
+      "identifier": "https://github.com/vlad-public-code/org.json-kula.valem/releases/download/v1.0.0/valem-mcp.mcpb",
+      "version": "1.0.0",
+      "fileSha256": "REPLACE_WITH_RELEASE_ARTIFACT_SHA256",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "VALEM_URL",
+          "description": "Drive a remote valem-web server instead of the default embedded, in-memory mode. Leave unset for embedded.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "VALEM_API_KEY",
+          "description": "API key for the remote valem-web server (only used with VALEM_URL).",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

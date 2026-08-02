@@ -13,6 +13,7 @@ rest of the docs link here rather than restating any of it.
 | Page | The single source of truth for |
 |---|---|
 | [Model spec format](model-spec-format.md) | Every `ModelSpec` field, across six section pages: [schema/constants/defaults](model-spec/schema-and-values.md), [derivations & constraints](model-spec/derivations-and-constraints.md), [effects](model-spec/effects.md), [tests & evolution](model-spec/tests-and-evolution.md), [views](model-spec/views.md), [component catalog](model-spec/component-catalog.md). |
+| [Copy-paste spec examples](copy-paste-specs.md) | Minimal, self-contained ModelSpecs (one derivation, a constraint, an array rollup) with the exact command to create and run each — the fastest correct starting point. |
 | [API reference](api-reference.md) | REST endpoints, the WebSocket protocol, and the console JSON protocol — request and response shapes. |
 | [MCP tools & resources](mcp-tools.md) | Every MCP tool, its arguments, result shape and error shapes; the advertised resources; protocol details. |
 | [LLM prompts](llm-prompts.md) | Exactly what is sent to the LLM on generation, repair, evolution, and test-repair calls. |

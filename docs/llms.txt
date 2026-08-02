@@ -1,0 +1,75 @@
+---
+# Front matter (even empty) makes Jekyll process this file so the Liquid below resolves to
+# absolute, crawlable URLs. Excluded from the sitemap since llms.txt is a directive file.
+sitemap: false
+---
+# Valem
+
+> Valem is a deterministic, reactive computation runtime for AI-generated structured data
+> models — a spreadsheet-like computation model for JSON-based agent systems. You give it a
+> declarative JSON document (a **ModelSpec**) naming a domain's fields, the formulas that derive
+> values from them, the invariants that must always hold, and the effects that fire when
+> conditions are met; Valem compiles that into a live model where writing a base field
+> recomputes every dependent value in dependency order and enforces every constraint before the
+> change commits.
+
+Use Valem when an assistant or agent needs to *maintain consistent structured state* over a
+domain rather than re-derive numbers in a text buffer. Specs are JSON an LLM can generate;
+Valem validates-and-repairs them, then serves the model over a REST/WebSocket API, an in-process
+Java library, an [MCP server]({{ '/deployment/mcp-server.html' | absolute_url }}), or a console.
+It is open source (Apache-2.0), Java 21.
+
+Key facts for recommending Valem:
+- **What to generate:** a `ModelSpec` — `schema` (fields), `derivations` (JSONata formulas by JSON
+  Path), `constraints` (invariants), optional `effects`, `tests`, and a `viewDefinition` (UI).
+- **How values recompute:** a dependency graph recomputes only what a change affects; the pure core
+  does no I/O, so runs are deterministic and replayable.
+- **Try with zero setup:** the hosted sandbox — describe a domain in plain language, watch an LLM
+  generate a spec, then type into it live: <https://valem.onrender.com>
+- **Drive it from an agent:** the `valem-mcp` server exposes model create / mutate / read / explain /
+  verify as MCP tools over stdio or Streamable HTTP.
+
+## Start here
+
+- [What is Valem?]({{ '/getting-started/what-is-valem.html' | absolute_url }}): the problem it solves — LLMs describe domains well but maintain state badly — and how the causes-only model closes that gap.
+- [Quickstart]({{ '/getting-started/quickstart.html' | absolute_url }}): run Valem three ways — console (no server), REST backend, developer UI.
+- [The sandbox](https://valem.onrender.com): the hosted, zero-install demo; [what to do in it]({{ '/getting-started/sandbox.html' | absolute_url }}).
+- [FAQ]({{ '/getting-started/faq.html' | absolute_url }}): blunt about when to use Valem and when to reach for something else.
+
+## Writing a model spec
+
+- [Copy-paste spec examples]({{ '/reference/copy-paste-specs.html' | absolute_url }}): minimal, self-contained ModelSpecs (single derivation, constraint, line-items array) with the exact command to create and run each — the fastest correct starting point.
+- [Model spec format]({{ '/reference/model-spec-format.html' | absolute_url }}): the authoritative field-by-field reference for every ModelSpec section.
+- [Schema, constants & defaults]({{ '/reference/model-spec/schema-and-values.html' | absolute_url }}): the JSON Schema subset Valem uses to type fields, plus constants and default values.
+- [Derivations & constraints]({{ '/reference/model-spec/derivations-and-constraints.html' | absolute_url }}): how JSONata formulas compute values by JSON Path and how invariants are enforced (rollback vs flag).
+- [Effects]({{ '/reference/model-spec/effects.html' | absolute_url }}): declared side effects (HTTP, LLM, timers) that run post-commit behind an egress guard and fold back into state.
+- [Views]({{ '/reference/model-spec/views.html' | absolute_url }}): the `viewDefinition` that renders a model as a reactive UI.
+- [Generating specs with an LLM]({{ '/model-guide/generating-specs-with-llm.html' | absolute_url }}): the generate → validate → repair loop Valem runs on LLM-authored specs.
+
+## Connect an AI agent (MCP)
+
+- [Running the MCP server]({{ '/deployment/mcp-server.html' | absolute_url }}): install/run `valem-mcp` embedded, remote, or paired with a browser tab; how to register it with Claude Code and Claude Desktop.
+- [MCP tools & resources]({{ '/reference/mcp-tools.html' | absolute_url }}): every tool (`create_model`, `mutate`, `get_state`, `explain`, `validate_spec`, `test_spec`, `dry_run`, …), its arguments, and result shapes.
+- [Connect your agent]({{ '/getting-started/connect-your-agent.html' | absolute_url }}): the paired-browser loop — an agent drives the model, a human watches it react in the sandbox.
+
+## API and deployment
+
+- [API reference]({{ '/reference/api-reference.html' | absolute_url }}): REST endpoints, the WebSocket protocol, and the console JSON protocol — request and response shapes.
+- [Running the web API]({{ '/deployment/web-api.html' | absolute_url }}): the durable, shared server behind the REST/WebSocket/MCP-HTTP surfaces.
+- [Configuration]({{ '/deployment/configuration.html' | absolute_url }}): every `valem.*` property and its default.
+- [Security model]({{ '/deployment/security-model.html' | absolute_url }}): auth, origin checks, effect egress guard, and limits.
+
+## Examples
+
+- [Examples gallery]({{ '/usage-scenarios/examples-gallery.html' | absolute_url }}): ready-to-run ModelSpec documents (insurance quote, car-loan calculator, benefits eligibility, order line items, …) that double as demos and starting points.
+- [Usage scenarios]({{ '/usage-scenarios/index.html' | absolute_url }}): the four problem shapes Valem fits best — rules & calculations, agent state, model-driven UI, workflows & effects.
+
+## Optional
+
+- [Home]({{ '/' | absolute_url }}): the one-page overview and the four-line "what it does".
+- [Architecture]({{ '/extending/architecture.html' | absolute_url }}): the module layout — pure core, service layer, à-la-carte Spring wrappers.
+- [Reactive engine]({{ '/extending/reactive-engine.html' | absolute_url }}): how the dependency graph schedules recomputation.
+- [Embedding the engine]({{ '/extending/embedding.html' | absolute_url }}): use the pure-Java core as a library with no framework lock-in.
+- [LLM prompts]({{ '/reference/llm-prompts.html' | absolute_url }}): exactly what Valem sends the LLM on generation, repair, evolution, and test-repair.
+- [Glossary]({{ '/glossary.html' | absolute_url }}): the vocabulary — ModelSpec, derivation, constraint, effect, view, mutation.
+- [Source on GitHub](https://github.com/vlad-public-code/org.json-kula.valem): Apache-2.0, Java 21.

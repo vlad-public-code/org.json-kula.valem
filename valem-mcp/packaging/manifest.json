@@ -1,0 +1,69 @@
+{
+  "dxt_version": "0.1",
+  "name": "valem",
+  "display_name": "Valem",
+  "version": "1.0.0",
+  "description": "Deterministic reactive state models an agent can create, mutate, read, and verify over MCP.",
+  "long_description": "Valem gives an agent a spreadsheet-like computation core instead of a text buffer. Create a model from a declarative ModelSpec (schema + JSONata derivations + constraints + effects); write only base fields and Valem recomputes every dependent value in dependency order and enforces every invariant before the change commits. Tools cover create/mutate/read/explain plus pure, offline authoring checks (validate_spec, test_spec, dry_run). Runs embedded and in-memory by default; point it at a running valem-web server for durable, shared state.",
+  "author": {
+    "name": "vlad-public-code",
+    "url": "https://github.com/vlad-public-code"
+  },
+  "homepage": "https://vlad-public-code.github.io/org.json-kula.valem/",
+  "documentation": "https://vlad-public-code.github.io/org.json-kula.valem/deployment/mcp-server.html",
+  "support": "https://github.com/vlad-public-code/org.json-kula.valem/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vlad-public-code/org.json-kula.valem"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "state",
+    "reactive",
+    "constraints",
+    "jsonata",
+    "structured-data",
+    "agent-state",
+    "calculations",
+    "spreadsheet"
+  ],
+  "server": {
+    "type": "binary",
+    "entry_point": "valem-mcp.jar",
+    "mcp_config": {
+      "command": "java",
+      "args": ["-jar", "${__dirname}/valem-mcp.jar"],
+      "env": {
+        "VALEM_URL": "${user_config.url}",
+        "VALEM_API_KEY": "${user_config.api_key}"
+      }
+    }
+  },
+  "user_config": {
+    "url": {
+      "type": "string",
+      "title": "Remote server URL",
+      "description": "Drive a remote valem-web server for durable, shared state. Leave blank to run embedded and in-memory.",
+      "required": false
+    },
+    "api_key": {
+      "type": "string",
+      "title": "API key",
+      "description": "API key for the remote valem-web server (only used with a Remote server URL).",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "tools": [
+    { "name": "create_model", "description": "Create a model from a ModelSpec." },
+    { "name": "mutate", "description": "Write base fields; dependent values recompute and constraints are enforced." },
+    { "name": "get_state", "description": "Read the merged, reactively-computed state." },
+    { "name": "explain", "description": "Trace why a value is what it is." },
+    { "name": "validate_spec", "description": "Structurally check a candidate ModelSpec offline." },
+    { "name": "test_spec", "description": "Run a spec's embedded test cases offline." },
+    { "name": "dry_run", "description": "Apply mutations without committing." }
+  ],
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"]
+  }
+}

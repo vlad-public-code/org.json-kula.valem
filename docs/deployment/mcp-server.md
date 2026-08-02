@@ -136,6 +136,22 @@ claude mcp add valem -- \
 The client launches the process, performs the `initialize` handshake, and lists the
 [tools]({% link reference/mcp-tools.md %}).
 
+## Find it in MCP directories
+
+Valem is packaged for the places agents and their users discover MCP servers, so you can install it
+without hand-writing the config above:
+
+| Directory | How Valem is listed |
+|---|---|
+| **Official MCP registry** (`registry.modelcontextprotocol.io`) | as `io.github.vlad-public-code/valem`, distributed as the `.mcpb` bundle attached to each [release]({{ site.gh_repo }}/releases/latest). |
+| **Claude Desktop extensions** | as a one-click MCP Bundle (`valem-mcp.mcpb`) — install it and Claude Desktop launches the server for you. |
+| **[Smithery](https://smithery.ai)** | as a local stdio server with a small config form for the optional remote-server URL and API key. |
+
+The manifests that produce these listings — and how to build the bundle and publish — live in
+[`valem-mcp/packaging/`]({{ site.gh_repo }}/blob/main/valem-mcp/packaging). Every listing launches the
+same server described on this page: embedded and in-memory by default, remote against a `valem-web`
+server when given `VALEM_URL` (and `VALEM_API_KEY`).
+
 ## HTTP transport: an MCP endpoint on the server
 
 Besides the stdio jar, `valem-web` exposes the **same MCP tool/resource surface over Streamable HTTP**
