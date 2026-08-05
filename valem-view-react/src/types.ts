@@ -257,6 +257,26 @@ export interface LinkSpec extends ComponentSpecBase {
   icon?: string;
 }
 
+/** One citation of a sourceList: a named external reference and the date it was last checked. */
+export interface SourceItemSpec {
+  label?: string;
+  url: string;
+  date?: string;
+}
+
+/**
+ * sourceList — a titled block of external source citations (the E-E-A-T "sources" block a
+ * calculator ends on). Rows come from `items`; `label` is the heading, defaulting to "Sources".
+ * Citations are authored literals, not paths — a source block names the authority a formula is
+ * checked against, which is provenance, not model state.
+ */
+export interface SourceListSpec extends ComponentSpecBase {
+  type: 'sourceList';
+  label?: string;
+  items?: SourceItemSpec[];
+  tooltip?: string;
+}
+
 /** progressBar and gauge — the same bound number as a bar or an arc. */
 export interface ProgressBarSpec extends ComponentSpecBase {
   type: 'progressBar' | 'gauge';
@@ -473,6 +493,7 @@ export type KnownComponentSpec =
   | SeparatorLineSpec
   | ImageSpec
   | LinkSpec
+  | SourceListSpec
   | ProgressBarSpec
   | DataTableSpec
   | DataChartSpec
@@ -509,7 +530,7 @@ export const KNOWN_COMPONENT_TYPES = [
   'countryRegionSelector',
   // output
   'label', 'staticText', 'badge', 'alert', 'callout', 'separatorLine', 'spacer',
-  'image', 'link', 'dataTable', 'dataChart', 'sparkline', 'progressBar', 'gauge',
+  'image', 'link', 'sourceList', 'dataTable', 'dataChart', 'sparkline', 'progressBar', 'gauge',
   'keyValueList', 'summaryList', 'statTile', 'metric', 'jsonViewer',
   'explainPanel', 'auditTimeline', 'validationSummary', 'effectStatus',
   // containers
@@ -638,6 +659,8 @@ export interface EvaluatedComponent {
   target?: string;
   /** keyValueList — rows already resolved server-side. */
   items?: EvaluatedKeyValueItem[];
+  /** sourceList — citations resolved server-side. */
+  sourceItems?: EvaluatedSourceItem[];
   /** statTile */
   delta?: string;
   caption?: string;
@@ -671,6 +694,13 @@ export interface EvaluatedKeyValueItem {
   text?: string;
   format?: string;
   currency?: string;
+}
+
+/** One resolved citation of an evaluated sourceList. */
+export interface EvaluatedSourceItem {
+  label?: string;
+  url: string;
+  date?: string;
 }
 
 /** Server-evaluated view — returned by GET /models/{id}/view */

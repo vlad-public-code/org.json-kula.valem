@@ -54,6 +54,7 @@ import com.fasterxml.jackson.databind.JsonNode;
                 "separatorLine", "spacer"}),
         @JsonSubTypes.Type(value = ImageSpec.class,             names = "image"),
         @JsonSubTypes.Type(value = LinkSpec.class,              names = "link"),
+        @JsonSubTypes.Type(value = SourceListSpec.class,        names = "sourceList"),
         @JsonSubTypes.Type(value = ProgressBarSpec.class,       names = {
                 "progressBar", "gauge"}),
         @JsonSubTypes.Type(value = DataTableSpec.class,         names = "dataTable"),
@@ -90,6 +91,7 @@ public sealed interface ComponentSpec permits
         SeparatorLineSpec,
         ImageSpec,
         LinkSpec,
+        SourceListSpec,
         ProgressBarSpec,
         DataTableSpec,
         DataChartSpec,

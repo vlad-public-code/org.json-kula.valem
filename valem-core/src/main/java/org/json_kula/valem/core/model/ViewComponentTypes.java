@@ -32,7 +32,7 @@ public final class ViewComponentTypes {
     /** Read-only display components. */
     public static final Set<String> OUTPUT = Set.of(
             "label", "staticText", "badge", "alert", "callout", "separatorLine", "spacer",
-            "image", "link", "dataTable", "dataChart", "sparkline", "progressBar", "gauge",
+            "image", "link", "sourceList", "dataTable", "dataChart", "sparkline", "progressBar", "gauge",
             "keyValueList", "summaryList", "statTile", "metric", "jsonViewer",
             "explainPanel", "auditTimeline", "validationSummary", "effectStatus");
 

@@ -23,6 +23,8 @@ import org.json_kula.valem.view.model.KeyValueItemSpec;
 import org.json_kula.valem.view.model.KeyValueListSpec;
 import org.json_kula.valem.view.model.LabelSpec;
 import org.json_kula.valem.view.model.LinkSpec;
+import org.json_kula.valem.view.model.SourceItemSpec;
+import org.json_kula.valem.view.model.SourceListSpec;
 import org.json_kula.valem.view.model.MenuSpec;
 import org.json_kula.valem.view.model.ProgressBarSpec;
 import org.json_kula.valem.view.model.SectionListSpec;
@@ -122,6 +124,10 @@ public final class ViewEvaluator {
                                          textValue(value)),
                             resolveText(l.text(), mergedDocument, exprCache, bindings),
                             l.target(), l.icon());
+
+            case SourceListSpec sl ->
+                    new EvaluatedSourceList(sl.id(), sl.type(), sl.label(), sl.bind(), visible,
+                            evaluateSourceItems(sl.items()), sl.tooltip());
 
             case ProgressBarSpec p ->
                     new EvaluatedProgressBar(p.id(), p.type(), p.label(), p.bind(), value,
@@ -270,6 +276,14 @@ public final class ViewEvaluator {
                         i.bind() != null ? null
                                 : resolveText(i.text(), mergedDocument, exprCache, bindings),
                         i.format(), i.currency()))
+                .toList();
+    }
+
+    /** Source citations are authored literals — resolved by a straight field copy, no JSONata. */
+    private static List<EvaluatedSourceItem> evaluateSourceItems(List<SourceItemSpec> items) {
+        if (items == null || items.isEmpty()) return null;
+        return items.stream()
+                .map(i -> new EvaluatedSourceItem(i.label(), i.url(), i.date()))
                 .toList();
     }
 

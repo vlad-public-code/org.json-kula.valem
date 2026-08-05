@@ -27,6 +27,7 @@ public sealed interface EvaluatedComponent permits
         EvaluatedBadge,
         EvaluatedImage,
         EvaluatedLink,
+        EvaluatedSourceList,
         EvaluatedProgressBar,
         EvaluatedDataTable,
         EvaluatedDataChart,
@@ -76,6 +77,7 @@ public sealed interface EvaluatedComponent permits
     default List<ChartSeriesSpec> chartSeries()    { return null; }
     default List<MenuItemSpec> menuItems()         { return null; }
     default List<EvaluatedKeyValueItem> items()    { return null; }
+    default List<EvaluatedSourceItem> sourceItems() { return null; }
     default EventHandler onClick()      { return null; }
     default EventHandler onChange()     { return null; }
     default EventHandler onOpen()       { return null; }

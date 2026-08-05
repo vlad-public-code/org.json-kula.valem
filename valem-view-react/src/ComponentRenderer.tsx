@@ -40,6 +40,7 @@ import { Alert } from './output/Alert';
 import { SeparatorLine } from './output/SeparatorLine';
 import { ImageComponent } from './output/ImageComponent';
 import { LinkComponent } from './output/LinkComponent';
+import { SourceList } from './output/SourceList';
 import { DataTable } from './output/DataTable';
 import { DataChart } from './output/DataChart';
 import { Sparkline } from './output/Sparkline';
@@ -232,6 +233,7 @@ function renderKnown(c: KnownComponentSpec, rest: CommonProps): ReactElement {
     case 'spacer':                return <SeparatorLine         component={c} {...rest} />;
     case 'image':                 return <ImageComponent        component={c} {...rest} />;
     case 'link':                  return <LinkComponent         component={c} {...rest} />;
+    case 'sourceList':            return <SourceList            component={c} {...rest} />;
     case 'dataTable':             return <DataTable             component={c} {...rest} />;
     case 'dataChart':             return <DataChart             component={c} {...rest} />;
     case 'sparkline':             return <Sparkline             component={c} {...rest} />;
