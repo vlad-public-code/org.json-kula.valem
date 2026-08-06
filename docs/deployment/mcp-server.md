@@ -130,7 +130,7 @@ API key:
 
 ```bash
 claude mcp add valem -- \
-  java -jar /absolute/path/to/valem-mcp-1.0.0-SNAPSHOT.jar --url https://valem.onrender.com --browser
+  java -jar /absolute/path/to/valem-mcp-1.0.0-SNAPSHOT.jar --url https://valem.run --browser
 ```
 
 The client launches the process, performs the `initialize` handshake, and lists the
@@ -139,12 +139,12 @@ The client launches the process, performs the `initialize` handshake, and lists 
 ## Connect without a jar — the hosted sandbox
 
 You don't need this jar at all to *try* Valem from an agent. The hosted sandbox exposes the same MCP
-surface over **Streamable HTTP** at **`https://valem.onrender.com/mcp`**, so a remote-capable MCP client
+surface over **Streamable HTTP** at **`https://valem.run/mcp`**, so a remote-capable MCP client
 connects by URL and drives a live sandbox session — no download, no Java:
 
 ```bash
 # Claude Code — add the hosted server over HTTP
-claude mcp add --transport http valem https://valem.onrender.com/mcp
+claude mcp add --transport http valem https://valem.run/mcp
 ```
 
 For Claude Desktop, add it as a custom connector (Settings → Connectors) with that URL; any MCP client
@@ -162,7 +162,7 @@ Valem is listed as a **hosted remote server**, so users add it by URL rather tha
 
 | Directory | How Valem is listed |
 |---|---|
-| **Official MCP registry** (`registry.modelcontextprotocol.io`) | as `io.github.vlad-public-code/valem`, with a `remotes` entry pointing at `https://valem.onrender.com/mcp`. |
+| **Official MCP registry** (`registry.modelcontextprotocol.io`) | as `io.github.vlad-public-code/valem`, with a `remotes` entry pointing at `https://valem.run/mcp`. |
 | **Claude Code / Claude Desktop** | as a remote server / custom connector added by URL (the commands above) — no manifest file. |
 
 The registry entry and publish steps live in

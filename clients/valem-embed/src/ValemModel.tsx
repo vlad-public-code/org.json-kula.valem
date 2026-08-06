@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { buildEmbedSrc, encodeSpec, type EmbedMode, type EmbedTheme } from './embedUrl';
 
-const DEFAULT_ENDPOINT = 'https://valem.onrender.com';
+const DEFAULT_ENDPOINT = 'https://valem.run';
 
 export interface ConstraintViolation {
   constraintId: string;

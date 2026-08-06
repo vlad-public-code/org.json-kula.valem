@@ -17,7 +17,7 @@ Use it here (no install), or run it yourself and drive it from an agent over MCP
 
 ## This sandbox
 
-- [Open the sandbox](https://valem.onrender.com/): describe a model in a sentence and interact with it live.
+- [Open the sandbox](https://valem.run/): describe a model in a sentence and interact with it live.
 - [What to do in it](https://vlad-public-code.github.io/org.json-kula.valem/getting-started/sandbox.html): a short tour of the generate → interact loop.
 
 ## Learn and build

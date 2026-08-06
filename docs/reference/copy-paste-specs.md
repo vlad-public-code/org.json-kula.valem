@@ -189,4 +189,4 @@ committing). These always run against local core, even in remote mode. See the
   result back into state.
 - Let an LLM write the whole spec from a sentence: [Generating specs with an
   LLM]({% link model-guide/generating-specs-with-llm.md %}), or just describe it in the
-  [sandbox](https://valem.onrender.com).
+  [sandbox](https://valem.run).

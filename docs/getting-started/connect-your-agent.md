@@ -57,7 +57,7 @@ Pairing mode is `--url <host> --browser`. For **Claude Code**:
 
 ```bash
 claude mcp add valem -- \
-  java -jar /absolute/path/to/valem-mcp.jar --url https://valem.onrender.com --browser
+  java -jar /absolute/path/to/valem-mcp.jar --url https://valem.run --browser
 ```
 
 For **Claude Desktop** (`claude_desktop_config.json`) or any client using the same shape:
@@ -69,7 +69,7 @@ For **Claude Desktop** (`claude_desktop_config.json`) or any client using the sa
       "command": "java",
       "args": [
         "-jar", "/absolute/path/to/valem-mcp.jar",
-        "--url", "https://valem.onrender.com", "--browser"
+        "--url", "https://valem.run", "--browser"
       ]
     }
   }

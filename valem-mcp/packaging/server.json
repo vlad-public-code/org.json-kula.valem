@@ -12,7 +12,7 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://valem.onrender.com/mcp"
+      "url": "https://valem.run/mcp"
     }
   ]
 }

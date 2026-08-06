@@ -13,7 +13,7 @@ import { dirname, join } from 'node:path';
 
 const { chromium } = createRequire(join(process.cwd(), 'package.json'))('playwright');
 
-const BASE = process.argv[2] || 'https://valem.onrender.com';
+const BASE = process.argv[2] || 'https://valem.run';
 const OUT = join(dirname(fileURLToPath(import.meta.url)), 'img');
 mkdirSync(OUT, { recursive: true });
 

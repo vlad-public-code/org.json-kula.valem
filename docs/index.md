@@ -100,7 +100,7 @@ Plus a [glossary]({% link glossary.md %}), the [FAQ]({% link getting-started/faq
 none of them. Apache-2.0. Latest release: [v1.0.0]({{ site.gh_repo }}/releases/latest).
 
 ## See also
-- [Valem sandbox](https://valem.onrender.com/)
+- [Valem sandbox](https://valem.run/)
 - [Valem source code](https://github.com/vlad-public-code/org.json-kula.valem)
 - [tracked-json](https://vlad-public-code.github.io/org.json-kula.tracked-json/) — Jackson JsonNode wrapper that tracks each node's location (JsonPointer) and document root through every navigation — get, path, at, parent(), and JSONPath (RFC 9535). Includes JSON Patch (RFC 6902).
 - [jsonata-jvm-compiler](https://vlad-public-code.github.io/org.json-kula.jsonata-jvm-compiler/) — A Java library that compiles [JSONata](https://jsonata.org) expressions into native Java classes at runtime

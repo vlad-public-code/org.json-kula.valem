@@ -24,8 +24,8 @@ relative_links:
 
 # --- Project-wide links (referenced from pages as {{ site.<name> }}) ---------
 gh_repo: https://github.com/vlad-public-code/org.json-kula.valem
-# The hosted public sandbox on Render.
-sandbox_url: https://valem.onrender.com
+# The hosted public sandbox.
+sandbox_url: https://valem.run
 
 # --- just-the-docs options ---------------------------------------------------
 search_enabled: true
@@ -84,7 +84,7 @@ aux_links:
   "GitHub":
     - https://github.com/vlad-public-code/org.json-kula.valem
   "Live sandbox":
-    - https://valem.onrender.com
+    - https://valem.run
 aux_links_new_tab: true
 
 footer_content: >-

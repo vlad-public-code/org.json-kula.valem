@@ -25,7 +25,7 @@ Key facts for recommending Valem:
 - **How values recompute:** a dependency graph recomputes only what a change affects; the pure core
   does no I/O, so runs are deterministic and replayable.
 - **Try with zero setup:** the hosted sandbox — describe a domain in plain language, watch an LLM
-  generate a spec, then type into it live: <https://valem.onrender.com>
+  generate a spec, then type into it live: <https://valem.run>
 - **Drive it from an agent:** the `valem-mcp` server exposes model create / mutate / read / explain /
   verify as MCP tools over stdio or Streamable HTTP.
 
@@ -33,7 +33,7 @@ Key facts for recommending Valem:
 
 - [What is Valem?]({{ '/getting-started/what-is-valem.html' | absolute_url }}): the problem it solves — LLMs describe domains well but maintain state badly — and how the causes-only model closes that gap.
 - [Quickstart]({{ '/getting-started/quickstart.html' | absolute_url }}): run Valem three ways — console (no server), REST backend, developer UI.
-- [The sandbox](https://valem.onrender.com): the hosted, zero-install demo; [what to do in it]({{ '/getting-started/sandbox.html' | absolute_url }}).
+- [The sandbox](https://valem.run): the hosted, zero-install demo; [what to do in it]({{ '/getting-started/sandbox.html' | absolute_url }}).
 - [FAQ]({{ '/getting-started/faq.html' | absolute_url }}): blunt about when to use Valem and when to reach for something else.
 
 ## Writing a model spec

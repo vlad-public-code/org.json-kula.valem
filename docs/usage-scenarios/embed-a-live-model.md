@@ -35,7 +35,7 @@ In the [sandbox]({% link getting-started/sandbox.md %}), open a model and choose
 Pick **Interactive** or **Read-only** and a theme, then copy the snippet:
 
 ```html
-<iframe src="https://valem.onrender.com/embed.html#e=1.q7Fh…"
+<iframe src="https://valem.run/embed.html#e=1.q7Fh…"
   style="width:100%;border:0" height="480" loading="lazy"
   sandbox="allow-scripts allow-forms allow-same-origin"
   title="Valem model"></iframe>
@@ -51,7 +51,7 @@ The frame reports its content height to the host. Paste this once per page to si
 ```html
 <script>
   window.addEventListener('message', function (e) {
-    if (e.origin !== 'https://valem.onrender.com') return;
+    if (e.origin !== 'https://valem.run') return;
     if ((e.data || {}).type !== 'valem:height') return;
     document.querySelectorAll('iframe').forEach(function (f) {
       if (f.contentWindow === e.source) f.style.height = e.data.px + 'px';

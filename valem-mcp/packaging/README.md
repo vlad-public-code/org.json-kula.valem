@@ -1,7 +1,7 @@
 # MCP directory listing for Valem — hosted, no jar
 
-Valem runs as a **hosted MCP server** at `https://valem.onrender.com/mcp` (Streamable HTTP). An agent
-connects over the network and drives a live [sandbox](https://valem.onrender.com) session — no jar to
+Valem runs as a **hosted MCP server** at `https://valem.run/mcp` (Streamable HTTP). An agent
+connects over the network and drives a live [sandbox](https://valem.run) session — no jar to
 download, no Java to install. This directory holds the one file that makes that discoverable: the
 official-registry entry.
 
@@ -18,11 +18,11 @@ Point any remote-capable MCP client at the endpoint, then pair it with a browser
 
 ```bash
 # Claude Code — add the hosted server over HTTP
-claude mcp add --transport http valem https://valem.onrender.com/mcp
+claude mcp add --transport http valem https://valem.run/mcp
 ```
 
-- **Claude Desktop:** Settings → Connectors → Add custom connector → URL `https://valem.onrender.com/mcp`.
-- **Any MCP client:** connect to `https://valem.onrender.com/mcp` (Streamable HTTP).
+- **Claude Desktop:** Settings → Connectors → Add custom connector → URL `https://valem.run/mcp`.
+- **Any MCP client:** connect to `https://valem.run/mcp` (Streamable HTTP).
 
 Then, in the agent, **call the `pair_browser` tool**. It returns a verification link and a confirmation
 code; open the link, check the code matches, and click Approve in the sandbox. From then on the agent's
@@ -44,7 +44,7 @@ and fix any field it rejects rather than trusting this file blindly.
 ## Keep in sync
 
 - **endpoint** — `remotes[0].url` must match the deployed sandbox origin. If the host moves off
-  `valem.onrender.com`, update it here and re-publish.
+  `valem.run`, update it here and re-publish.
 - **version** — bump `version` on a meaningful change to the exposed surface, then re-publish.
 
 ## Self-hosting instead (the jar)

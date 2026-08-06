@@ -3,7 +3,7 @@
 Deterministic reactive computation runtime for AI-generated structured data models.
 A spreadsheet-like computation model for JSON-based agent systems.
 
-**▶ [Try the live sandbox](https://valem.onrender.com/)** — a zero-setup public demo: describe a
+**▶ [Try the live sandbox](https://valem.run/)** — a zero-setup public demo: describe a
 domain in plain language, watch an LLM generate a ModelSpec, then mutate fields and see derivations,
 constraints, and effects react live.
 

@@ -91,7 +91,7 @@ printf '%s\n' \
 # → {"ok":true,"result":{"subtotal":100,"tax":8,"total":108}}   (total derived reactively)
 ```
 
-Zero-setup alternative: the [live sandbox](https://valem.onrender.com/) — describe a domain in
+Zero-setup alternative: the [live sandbox](https://valem.run/) — describe a domain in
 plain language, watch an LLM generate a ModelSpec, then mutate fields and see it react.
 
 ---
@@ -189,7 +189,7 @@ Rules for anyone — human or agent — editing this tree:
 
 ## See also
 
-- [Live sandbox](https://valem.onrender.com/)
+- [Live sandbox](https://valem.run/)
 - [Source repository](https://github.com/vlad-public-code/org.json-kula.valem)
 - [tracked-json](https://vlad-public-code.github.io/org.json-kula.tracked-json/) — `JsonPointer`-tracking Jackson `JsonNode` wrapper with JSONPath (RFC 9535) and JSON Patch (RFC 6902); one of Valem's two JSON foundations
 - [jsonata-jvm-compiler](https://vlad-public-code.github.io/org.json-kula.jsonata-jvm-compiler/) — compiles JSONata expressions to native Java classes at runtime; evaluates every Valem expression
