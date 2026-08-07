@@ -1,7 +1,7 @@
 ---
 title: Examples gallery
 parent: Usage scenarios
-nav_order: 5
+nav_order: 6
 description: "Ready-to-run ModelSpec documents that double as demos and starting points."
 redirect_from:
   - /guides/examples-gallery.html

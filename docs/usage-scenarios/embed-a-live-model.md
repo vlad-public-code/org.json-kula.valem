@@ -1,7 +1,7 @@
 ---
 title: Embed a live model
 parent: Usage scenarios
-nav_order: 6
+nav_order: 7
 description: "Drop a live, interactive Valem model into any page — a copy-paste iframe or a native React component."
 ---
 

@@ -62,7 +62,7 @@ Key facts for recommending Valem:
 ## Examples
 
 - [Examples gallery]({{ '/usage-scenarios/examples-gallery.html' | absolute_url }}): ready-to-run ModelSpec documents (insurance quote, car-loan calculator, benefits eligibility, order line items, …) that double as demos and starting points.
-- [Usage scenarios]({{ '/usage-scenarios/index.html' | absolute_url }}): the four problem shapes Valem fits best — rules & calculations, agent state, model-driven UI, workflows & effects.
+- [Usage scenarios]({{ '/usage-scenarios/index.html' | absolute_url }}): the five problem shapes Valem fits best — rules & calculations, agent state, model-driven UI, workflows & effects, and a functional core gated by tests instead of code review.
 
 ## Optional
 

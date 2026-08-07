@@ -8,7 +8,7 @@ description: "Where Valem fits in a real project: agent state, rules and calcula
 # Usage scenarios
 
 Valem is a runtime for **state whose rules must always hold** — expressed as data, not code. That
-shape shows up in more places than it first appears. These pages describe the four it fits best,
+shape shows up in more places than it first appears. These pages describe the five it fits best,
 with the concrete pieces each one uses.
 
 | Scenario | The problem it solves | Start here |
@@ -17,6 +17,7 @@ with the concrete pieces each one uses.
 | [Rules & calculations as data](rules-and-calculations.md) | Pricing, quoting, eligibility, scoring: business arithmetic that changes far more often than your release cycle. | [Model guide]({% link model-guide/index.md %}) |
 | [Effect-driven workflows](workflows-and-effects.md) | State changes that must reach the outside world — call an API, ask an LLM, wait an hour — without losing determinism. | [Effects]({% link model-guide/effects.md %}) |
 | [Model-driven UIs](model-driven-ui.md) | A form or dashboard that should follow the model, not be rebuilt every time the model changes. | [View system]({% link reference/view-system.md %}) |
+| [A functional core without code review](functional-core.md) | AI writes logic faster than humans can review it. A pure, spec-shaped core makes tests — not reviewers — the gate. | [Tests & evolution]({% link reference/model-spec/tests-and-evolution.md %}) |
 
 ## The common thread
 
