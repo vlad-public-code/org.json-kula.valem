@@ -108,7 +108,7 @@ class ModelSpecValidatorViewTest {
         // docs/reference/view-system.md list exactly these. ViewComponentTypesCoverageTest in
         // valem-view is what checks the three lists actually agree; this only catches a change
         // arriving without anyone meaning to make one.
-        assertThat(ViewComponentTypes.ALL).hasSize(65);
+        assertThat(ViewComponentTypes.ALL).hasSize(66);
         assertThat(ViewComponentTypes.isKnown("sliderField")).isTrue();
         assertThat(ViewComponentTypes.isKnown("slider")).isFalse();
     }

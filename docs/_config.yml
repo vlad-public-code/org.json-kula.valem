@@ -27,6 +27,11 @@ gh_repo: https://github.com/vlad-public-code/org.json-kula.valem
 # The hosted public sandbox.
 sandbox_url: https://valem.run
 
+# GA4 — same property as the sandbox (valem.run), a separate data stream for docs traffic. No
+# consent gate here (unlike the sandbox): this site holds no user-entered data, just page views.
+ga_tracking: G-J32RZ1H76Q
+ga_tracking_anonymize_ip: true
+
 # --- just-the-docs options ---------------------------------------------------
 search_enabled: true
 heading_anchors: true
