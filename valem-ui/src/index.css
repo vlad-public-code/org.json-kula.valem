@@ -79,9 +79,9 @@
 }
 
 /*
- * Dark palette — opt-in via a `data-theme="dark"` attribute on the root element. Only the embed
- * widget sets it (see the sandbox's embed bootstrap); the sandbox app never does, so its light look
- * is untouched. Overrides only the surface/ink/hairline/soft-status tokens — the accent/signal HUES
+ * Dark palette — opt-in via a `data-theme="dark"` attribute on the root element. Set by the embed
+ * widget's bootstrap and by the sandbox app's own theme toggle (sandbox-ui's theme.ts / auto-follows
+ * OS preference). Overrides only the surface/ink/hairline/soft-status tokens — the accent/signal HUES
  * are kept, just paired with darker soft backgrounds so badges and banners stay legible.
  */
 :root[data-theme="dark"] {
