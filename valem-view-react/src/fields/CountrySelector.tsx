@@ -1,6 +1,7 @@
 import { useViewContext } from '../ViewContext';
 import { useCountries } from '../hooks/useCountries';
 import { getByPath } from '../hooks/useDeferredMutate';
+import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { BasicInputSpec } from '../types';
 
@@ -22,10 +23,11 @@ export function CountrySelector({ component: c, enabled, readOnly, required }: B
         disabled={!enabled || readOnly}
         style={{
           padding: '6px 10px',
-          border: '1px solid #ccc',
+          border: `1px solid ${fieldColors.border}`,
           borderRadius: 4,
           fontSize: 14,
-          background: readOnly ? '#f5f5f5' : '#fff',
+          background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg,
+          color: fieldColors.text,
         }}
         onChange={e => {
           if (c.bind && !readOnly) {

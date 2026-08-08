@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useViewContext } from '../ViewContext';
 import { useCountries, dialCode } from '../hooks/useCountries';
 import { getByPath } from '../hooks/useDeferredMutate';
+import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { BasicInputSpec } from '../types';
 
@@ -26,7 +27,14 @@ export function PhoneNumberField({ component: c, enabled, readOnly, required }: 
         <select
           value={countryCode}
           disabled={!enabled || readOnly}
-          style={{ padding: '6px 4px', border: '1px solid #ccc', borderRadius: 4, fontSize: 13 }}
+          style={{
+            padding: '6px 4px',
+            border: `1px solid ${fieldColors.border}`,
+            borderRadius: 4,
+            fontSize: 13,
+            background: fieldColors.bg,
+            color: fieldColors.text,
+          }}
           onChange={e => setCountryCode(e.target.value)}
         >
           {countries.map(co => {
@@ -47,10 +55,11 @@ export function PhoneNumberField({ component: c, enabled, readOnly, required }: 
           style={{
             flex: 1,
             padding: '6px 10px',
-            border: '1px solid #ccc',
+            border: `1px solid ${fieldColors.border}`,
             borderRadius: 4,
             fontSize: 14,
-            background: readOnly ? '#f5f5f5' : '#fff',
+            background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg,
+            color: fieldColors.text,
           }}
           onChange={e => {
             if (c.bind && !readOnly) {

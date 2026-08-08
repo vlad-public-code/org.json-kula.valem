@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import { useViewContext } from '../ViewContext';
 import { useDeferredMutate } from '../hooks/useDeferredMutate';
 import { currencySymbol } from '../format';
+import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { BasicInputSpec } from '../types';
 
@@ -34,9 +35,10 @@ export function NumericField({ component: c, enabled, readOnly, required }: Base
       <div style={{
         display: 'flex',
         alignItems: 'stretch',
-        border: '1px solid #ccc',
+        border: `1px solid ${fieldColors.border}`,
         borderRadius: 4,
-        background: readOnly ? '#f5f5f5' : '#fff',
+        background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg,
+        color: fieldColors.text,
         overflow: 'hidden',
       }}>
         {prefix && <span data-testid={`${c.id}-prefix`} style={adornment}>{prefix}</span>}
@@ -55,6 +57,7 @@ export function NumericField({ component: c, enabled, readOnly, required }: Base
             outline: 'none',
             fontSize: 14,
             background: 'transparent',
+            color: fieldColors.text,
           }}
           onChange={e => {
             if (!readOnly) {
@@ -87,6 +90,6 @@ const adornment: CSSProperties = {
   alignItems: 'center',
   padding: '0 8px',
   fontSize: 13,
-  color: '#6b7280',
-  background: '#f9fafb',
+  color: fieldColors.mutedText,
+  background: fieldColors.mutedBg,
 };

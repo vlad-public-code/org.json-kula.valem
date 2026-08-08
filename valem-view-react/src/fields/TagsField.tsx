@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
 import { useResolvedOptions } from '../hooks/useResolvedOptions';
+import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { ChoiceInputSpec } from '../types';
 
@@ -55,9 +56,10 @@ export function TagsField(
         alignItems: 'center',
         gap: 6,
         padding: '4px 6px',
-        border: '1px solid #ccc',
+        border: `1px solid ${fieldColors.border}`,
         borderRadius: 4,
-        background: readOnly ? '#f5f5f5' : '#fff',
+        background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg,
+        color: fieldColors.text,
         minHeight: 32,
       }}>
         {tags.map(tag => (
@@ -108,7 +110,10 @@ export function TagsField(
             else if (e.key === 'Backspace' && !entry && tags.length) write(tags.slice(0, -1));
           }}
           onBlur={() => add(entry)}
-          style={{ flex: 1, minWidth: 80, border: 'none', outline: 'none', fontSize: 14, background: 'transparent' }}
+          style={{
+            flex: 1, minWidth: 80, border: 'none', outline: 'none', fontSize: 14,
+            background: 'transparent', color: fieldColors.text,
+          }}
         />
       </div>
       {suggestions.length > 0 && (

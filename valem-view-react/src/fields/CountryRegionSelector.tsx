@@ -1,6 +1,7 @@
 import { useViewContext } from '../ViewContext';
 import { useRegions } from '../hooks/useRegions';
 import { getByPath } from '../hooks/useDeferredMutate';
+import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { DependentSelectorSpec } from '../types';
 
@@ -26,10 +27,11 @@ export function CountryRegionSelector({ component: c, enabled, readOnly, require
         disabled={!enabled || readOnly || !countryCode}
         style={{
           padding: '6px 10px',
-          border: '1px solid #ccc',
+          border: `1px solid ${fieldColors.border}`,
           borderRadius: 4,
           fontSize: 14,
-          background: readOnly || !countryCode ? '#f5f5f5' : '#fff',
+          background: readOnly || !countryCode ? fieldColors.bgReadOnly : fieldColors.bg,
+          color: fieldColors.text,
         }}
         onChange={e => {
           if (c.bind && !readOnly) {

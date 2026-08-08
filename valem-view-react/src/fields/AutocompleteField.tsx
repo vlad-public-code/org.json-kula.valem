@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
 import { useResolvedOptions } from '../hooks/useResolvedOptions';
+import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { ChoiceInputSpec } from '../types';
 
@@ -79,10 +80,11 @@ export function AutocompleteField(
         }, 150)}
         style={{
           padding: '6px 10px',
-          border: '1px solid #ccc',
+          border: `1px solid ${fieldColors.border}`,
           borderRadius: 4,
           fontSize: 14,
-          background: readOnly ? '#f5f5f5' : '#fff',
+          background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg,
+          color: fieldColors.text,
         }}
       />
       {open && matches.length > 0 && (
@@ -99,8 +101,8 @@ export function AutocompleteField(
             listStyle: 'none',
             maxHeight: 220,
             overflowY: 'auto',
-            background: '#fff',
-            border: '1px solid #d1d5db',
+            background: fieldColors.bg,
+            border: `1px solid ${fieldColors.border}`,
             borderRadius: 4,
             boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
           }}
@@ -117,7 +119,8 @@ export function AutocompleteField(
                   width: '100%',
                   padding: '6px 10px',
                   border: 'none',
-                  background: o.value === String(modelValue ?? '') ? '#eff6ff' : 'transparent',
+                  background: o.value === String(modelValue ?? '') ? 'var(--accent-soft, #eff6ff)' : 'transparent',
+                  color: fieldColors.text,
                   fontSize: 14,
                   textAlign: 'left',
                   cursor: 'pointer',

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
+import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { ChoiceInputSpec, OptionSpec } from '../types';
 
@@ -36,10 +37,11 @@ export function SelectField({ component: c, enabled, readOnly, required }: BaseC
         disabled={!enabled || readOnly}
         style={{
           padding: '6px 10px',
-          border: '1px solid #ccc',
+          border: `1px solid ${fieldColors.border}`,
           borderRadius: 4,
           fontSize: 14,
-          background: readOnly ? '#f5f5f5' : '#fff',
+          background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg,
+          color: fieldColors.text,
         }}
         onChange={e => {
           if (c.bind && !readOnly) {

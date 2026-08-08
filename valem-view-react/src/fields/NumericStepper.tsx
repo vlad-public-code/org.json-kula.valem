@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
+import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { SliderSpec } from '../types';
 
@@ -74,7 +75,8 @@ export function NumericStepper(
             textAlign: 'center',
             fontSize: 14,
             padding: '6px 4px',
-            background: readOnly ? '#f5f5f5' : '#fff',
+            background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg,
+            color: fieldColors.text,
           }}
         />
         <StepButton

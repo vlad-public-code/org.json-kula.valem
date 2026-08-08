@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { useViewContext } from '../ViewContext';
 import { useDeferredMutate } from '../hooks/useDeferredMutate';
+import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { TextAreaSpec } from '../types';
 
@@ -64,9 +65,10 @@ export function RichTextField(
               style={{
                 minWidth: 28,
                 padding: '2px 6px',
-                border: '1px solid #d1d5db',
+                border: `1px solid ${fieldColors.border}`,
                 borderRadius: 4,
-                background: '#fff',
+                background: fieldColors.bg,
+                color: fieldColors.text,
                 fontSize: 12,
                 fontWeight: m.label === 'B' ? 700 : 400,
                 fontStyle: m.label === 'I' ? 'italic' : 'normal',
@@ -90,12 +92,13 @@ export function RichTextField(
         onBlur={handleBlur}
         style={{
           padding: '6px 10px',
-          border: '1px solid #ccc',
+          border: `1px solid ${fieldColors.border}`,
           borderRadius: 4,
           fontSize: 14,
           fontFamily: 'inherit',
           resize: 'vertical',
-          background: readOnly ? '#f5f5f5' : '#fff',
+          background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg,
+          color: fieldColors.text,
         }}
       />
       {c.helperText && <span style={{ fontSize: 11, color: '#666' }}>{c.helperText}</span>}

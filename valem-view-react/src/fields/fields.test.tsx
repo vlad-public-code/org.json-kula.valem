@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
 import { renderComponent } from '../test/renderComponent';
-import type { ChoiceInputSpec, SliderSpec } from '../types';
+import { fieldColors } from './fieldColors';
+import type { ChoiceInputSpec, ComponentSpec, SliderSpec } from '../types';
 
 const tags = (over: Partial<ChoiceInputSpec> = {}): ChoiceInputSpec => ({
   id: 'tags', type: 'tagsField', bind: '$.tags', label: 'Tags', ...over,
@@ -184,5 +185,66 @@ describe('NumericField adornments', () => {
     renderComponent({ id: 'c', type: 'numericField', bind: '$.c' }, { state: { c: 1 } });
     expect(screen.queryByTestId('c-prefix')).not.toBeInTheDocument();
     expect(screen.queryByTestId('c-suffix')).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * Regression coverage for the dark-theme bug: every field used to hardcode a light `background`
+ * (`#fff` / `#f5f5f5`) with no `color`, so the input's text inherited the page's `--text` var —
+ * invisible once `data-theme="dark"` flips that var to a light color, since the background never
+ * moved off white. Fields must source both background and color from `fieldColors` so they track
+ * the same theme instead of only one of the two following it.
+ */
+describe('Field surfaces stay legible in dark mode', () => {
+  const cases: [string, ComponentSpec, (container: HTMLElement) => Element | null][] = [
+    ['textField', { id: 't', type: 'textField', bind: '$.t' }, c => c.querySelector('#t')],
+    // The box (border/background) is the input's parent — the input itself is transparent so the
+    // box's (theme-aware) background shows through; the box also carries `color` for the adornments.
+    ['numericField', { id: 'n', type: 'numericField', bind: '$.n' }, c => c.querySelector('#n')?.parentElement ?? null],
+    ['textAreaField', { id: 'ta', type: 'textAreaField', bind: '$.ta' }, c => c.querySelector('#ta')],
+    ['selectField', { id: 's', type: 'selectField', bind: '$.s', options: [] }, c => c.querySelector('#s')],
+    ['emailField', { id: 'e', type: 'emailField', bind: '$.e' }, c => c.querySelector('input[type="email"]')],
+    ['passwordField', { id: 'pw', type: 'passwordField', bind: '$.pw' }, c => c.querySelector('input[type="password"]')],
+    ['dateField', { id: 'd', type: 'dateField', bind: '$.d' }, c => c.querySelector('input[type="date"]')],
+    ['dateTimeField', { id: 'dt', type: 'dateTimeField', bind: '$.dt' }, c => c.querySelector('input[type="datetime-local"]')],
+    ['timeField', { id: 'tm', type: 'timeField', bind: '$.tm' }, c => c.querySelector('input[type="time"]')],
+    ['numericStepper', { id: 'qty', type: 'numericStepper', bind: '$.qty', min: 0, max: 10, step: 1 }, c => c.querySelector('#qty')],
+    ['richTextField', { id: 'rt', type: 'richTextField', bind: '$.rt' }, c => c.querySelector('#rt')],
+    ['autocompleteField', { id: 'ac', type: 'autocompleteField', bind: '$.ac' }, c => c.querySelector('#ac')],
+    // The bordered box is the entry input's parent — the input itself is transparent so the box's
+    // (theme-aware) background shows through.
+    ['tagsField box', { id: 'tg', type: 'tagsField', bind: '$.tg' }, c => c.querySelector('#tg')?.parentElement ?? null],
+  ];
+
+  it.each(cases)('%s reads its color and background from the shared theme tokens', (_name, spec, getEl) => {
+    const { container } = renderComponent(spec, {});
+    const el = getEl(container) as HTMLElement;
+    expect(el).toBeTruthy();
+    expect(el.style.color).toBe(fieldColors.text);
+    expect(el.style.background).toBe(fieldColors.bg);
+  });
+
+  it.each(cases)('%s switches to the read-only surface without losing text color', (_name, spec, getEl) => {
+    const { container } = renderComponent({ ...spec, readOnly: true } as ComponentSpec, {});
+    const el = getEl(container) as HTMLElement;
+    expect(el.style.color).toBe(fieldColors.text);
+    expect(el.style.background).toBe(fieldColors.bgReadOnly);
+  });
+
+  it('dateRangeField applies the same tokens to both ends', () => {
+    const { container } = renderComponent(
+      { id: 'range', type: 'dateRangeField', bindFrom: '$.from', bindTo: '$.to' } as ComponentSpec,
+      {},
+    );
+    const from = container.querySelector('#range-from') as HTMLElement;
+    expect(from.style.color).toBe(fieldColors.text);
+    expect(from.style.background).toBe(fieldColors.bg);
+  });
+
+  it('the currency/percent adornment uses the muted theme tokens, not a hardcoded gray box', () => {
+    renderComponent({ id: 'amt', type: 'currencyField', bind: '$.amt', currency: 'USD' }, { state: { amt: 1 } });
+    const prefix = screen.getByTestId('amt-prefix');
+    expect(prefix.style.color).toBe(fieldColors.mutedText);
+    expect(prefix.style.background).toBe(fieldColors.mutedBg);
   });
 });

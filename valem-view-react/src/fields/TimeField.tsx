@@ -1,5 +1,6 @@
 import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
+import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { BasicInputSpec } from '../types';
 
@@ -23,10 +24,11 @@ export function TimeField({ component: c, enabled, readOnly, required }: BaseCom
         readOnly={readOnly}
         style={{
           padding: '6px 10px',
-          border: '1px solid #ccc',
+          border: `1px solid ${fieldColors.border}`,
           borderRadius: 4,
           fontSize: 14,
-          background: readOnly ? '#f5f5f5' : '#fff',
+          background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg,
+          color: fieldColors.text,
         }}
         onChange={e => {
           if (c.bind && !readOnly) {

@@ -1,5 +1,6 @@
 import { useViewContext } from '../ViewContext';
 import { useDeferredMutate } from '../hooks/useDeferredMutate';
+import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { BasicInputSpec } from '../types';
 
@@ -24,10 +25,11 @@ export function TextField({ component: c, enabled, readOnly, required, text }: B
         readOnly={readOnly}
         style={{
           padding: '6px 10px',
-          border: '1px solid #ccc',
+          border: `1px solid ${fieldColors.border}`,
           borderRadius: 4,
           fontSize: 14,
-          background: readOnly ? '#f5f5f5' : '#fff',
+          background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg,
+          color: fieldColors.text,
           cursor: readOnly ? 'default' : undefined,
         }}
         onChange={e => { if (!readOnly) schedule(e.target.value, e.target.value); }}
