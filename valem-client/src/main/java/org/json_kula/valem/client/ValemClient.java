@@ -20,6 +20,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.WebSocket;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -56,12 +57,26 @@ public final class ValemClient implements AutoCloseable {
 
     private volatile ScheduledExecutorService reconnectScheduler;
 
+    /**
+     * The client used when the caller supplies none. It follows redirects, unlike
+     * {@link HttpClient#newHttpClient()}'s {@code Redirect.NEVER} default: a hosted Valem that moves
+     * to a new domain answers with a permanent redirect (a {@code 308} for a POST, preserving method
+     * and body), and a non-following client turns that into an opaque non-2xx on every call rather
+     * than following the server to its new home.
+     */
+    private static HttpClient defaultHttpClient() {
+        return HttpClient.newBuilder()
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .connectTimeout(Duration.ofSeconds(20))
+                .build();
+    }
+
     public ValemClient(String baseUrl) {
         this(baseUrl, null);
     }
 
     public ValemClient(String baseUrl, String apiKey) {
-        this(baseUrl, apiKey, HttpClient.newHttpClient(), null, new ObjectMapper(), DEFAULT_BACKOFF_MS);
+        this(baseUrl, apiKey, defaultHttpClient(), null, new ObjectMapper(), DEFAULT_BACKOFF_MS);
     }
 
     /**
@@ -71,7 +86,7 @@ public final class ValemClient implements AutoCloseable {
      * {@code ?token=} query parameter, which a session-token host can accept identically.
      */
     public ValemClient(String baseUrl, String apiKey, String authHeaderName) {
-        this(baseUrl, apiKey, authHeaderName, "", HttpClient.newHttpClient(), null,
+        this(baseUrl, apiKey, authHeaderName, "", defaultHttpClient(), null,
                 new ObjectMapper(), DEFAULT_BACKOFF_MS);
     }
 
