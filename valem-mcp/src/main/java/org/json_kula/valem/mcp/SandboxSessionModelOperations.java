@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * The {@code remote_with_browser} mode's {@link ModelOperations} facade: pairs with a hosted
@@ -105,6 +106,25 @@ final class SandboxSessionModelOperations implements ModelOperations, BrowserPai
 
     private final Duration pollBudget;
 
+    /**
+     * Serialises concurrent {@code pair_browser} calls on one facade so two of them cannot mint
+     * competing pairings.
+     *
+     * <p>Deliberately a {@link ReentrantLock} and not {@code synchronized}. This method blocks for the
+     * whole poll budget — on {@link HttpClient#send} and on {@link Thread#sleep} — and a host may run it
+     * on a <b>virtual thread</b> (the sandbox's own {@code /mcp} endpoint does: Spring Boot with
+     * {@code spring.threads.virtual.enabled=true} hands every request to one). Through Java 21 a virtual
+     * thread that blocks while holding a <i>monitor</i> cannot unmount, so it <b>pins its carrier</b> for
+     * the entire wait. On a small host where the scheduler's parallelism is 1 — a container limited to a
+     * fraction of a CPU reports one processor — that one pinned carrier stalls every other request in the
+     * JVM, and the hosted endpoint's calls run back through this same server over loopback, so pairing
+     * then waits on a request that can never be scheduled: a self-deadlock that outlasts the poll budget
+     * and takes the whole service down with it (a platform health check starts failing and the instance
+     * is restarted). A {@code ReentrantLock} holds the same mutual exclusion while letting the virtual
+     * thread unmount at each blocking point, keeping the carrier free to serve those loopback calls.
+     */
+    private final ReentrantLock pairLock = new ReentrantLock();
+
     SandboxSessionModelOperations(String baseUrl, ObjectMapper mapper) {
         this(baseUrl, mapper, POLL_BUDGET);
     }
@@ -124,7 +144,16 @@ final class SandboxSessionModelOperations implements ModelOperations, BrowserPai
     }
 
     @Override
-    public synchronized PairResult pairBrowser(ProgressHandle progress) {
+    public PairResult pairBrowser(ProgressHandle progress) {
+        pairLock.lock();
+        try {
+            return pairBrowserLocked(progress);
+        } finally {
+            pairLock.unlock();
+        }
+    }
+
+    private PairResult pairBrowserLocked(ProgressHandle progress) {
         if (delegate != null) return PairResult.alreadyPaired(namespaceId);
 
         PendingPairing p = pending;
