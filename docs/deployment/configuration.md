@@ -78,6 +78,28 @@ Two mitigations, both worth applying together on a hosted deployment:
   visible, catchable JVM error and prompts class unloading at the high-water mark rather than letting
   the footprint ratchet upward.
 
+### Sizing the expression cache (and why it is a memory setting)
+
+Each cached expression pins a **generated Java class and its classloader in Metaspace** — the JSONata
+engine compiles every distinct expression to real bytecode. Metaspace is *native* memory: a container
+heap cap such as `-XX:MaxRAMPercentage` does not cover it, and it is unbounded by default.
+
+That combination has a specific failure mode worth recognising. A long-lived server whose callers
+supply a stream of **novel** expressions — an agent authoring specs over MCP is the clearest case —
+keeps minting classes, so the live set climbs toward this bound and native memory grows with it. On a
+memory-constrained host the platform then OOM-kills the container, which presents as an unexplained
+restart (exit code `137`) with **no Java `OutOfMemoryError` in the logs**, because the heap was never
+the constraint. The visible symptoms are unrelated: client-abort stack traces from connections
+dropping as the process dies.
+
+Two mitigations, both worth applying together on a hosted deployment:
+
+- Keep this bound modest (the default `250` suits a small instance). Raise it where memory is ample —
+  a larger cache trades memory for CPU, since an evicted expression is recompiled on next use.
+- Run with an explicit **`-XX:MaxMetaspaceSize`**. This converts a silent container kill into a
+  visible, catchable JVM error and prompts class unloading at the high-water mark rather than letting
+  the footprint ratchet upward.
+
 ## Security / auth
 
 | Property | Default | Description |
