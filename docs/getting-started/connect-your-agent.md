@@ -34,33 +34,42 @@ them, both of you are looking at the same live object.
 
 ## What you need
 
-- **Java 21+** and the `valem-mcp` jar —
-  [download the latest release]({{ site.gh_repo }}/releases/latest/download/valem-mcp.jar), or build
-  it from source (see [Running the MCP server]({% link deployment/mcp-server.md %})).
 - An MCP client: Claude Code, Claude Desktop, or any other.
-- A host to pair with — the [hosted sandbox]({{ site.sandbox_url }}) or your own `valem-web`
-  deployment.
+- The [hosted sandbox]({{ site.sandbox_url }}) — it hosts the MCP server itself.
 
-{: .tip }
-> **No jar needed for the hosted sandbox.** The sandbox exposes this same pairing flow as a **remote
-> MCP server** over HTTP, so you can skip the download and Java entirely:
-> ```bash
-> claude mcp add --transport http valem {{ site.sandbox_url }}/mcp
-> ```
-> (Claude Desktop: add it as a custom connector with URL `{{ site.sandbox_url }}/mcp`.) Then jump
-> straight to [step 2](#2-ask-the-agent-to-pair) and call `pair_browser`. The jar steps below are for pairing
-> with **your own** `valem-web` deployment, or for driving an embedded/offline instance.
+That's the whole list. There is **nothing to download and no Java to install**: the sandbox serves the
+MCP surface over Streamable HTTP at `{{ site.sandbox_url }}/mcp`, so your client connects to a URL and
+no process runs on your machine. (Pairing with *your own* `valem-web` deployment does need the jar —
+see [below](#pairing-with-your-own-deployment-the-jar).)
 
-## 1. Register the MCP server in browser-pairing mode
+## 1. Add the MCP server
 
-Pairing mode is `--url <host> --browser`. For **Claude Code**:
+For **Claude Code**:
+
+```bash
+claude mcp add --transport http valem {{ site.sandbox_url }}/mcp
+```
+
+For **Claude Desktop**: Settings → Connectors → *Add custom connector*, with the URL
+`{{ site.sandbox_url }}/mcp`. Any other remote-capable MCP client connects to that same URL.
+
+The `pair_browser` tool now appears alongside the model tools — it exists **only** in browser-pairing
+mode.
+
+### Pairing with your own deployment (the jar)
+{: .no_toc }
+
+Driving your own `valem-web` instead of the hosted sandbox means running the stdio server locally:
+grab **Java 21+** and the `valem-mcp` jar
+([latest release]({{ site.gh_repo }}/releases/latest/download/valem-mcp.jar), or build from source),
+and register it with `--url <your-host> --browser`:
 
 ```bash
 claude mcp add valem -- \
-  java -jar /absolute/path/to/valem-mcp.jar --url https://valem.run --browser
+  java -jar /absolute/path/to/valem-mcp.jar --url https://valem.internal --browser
 ```
 
-For **Claude Desktop** (`claude_desktop_config.json`) or any client using the same shape:
+The same shape in `claude_desktop_config.json`, for Claude Desktop or any client using it:
 
 ```json
 {
@@ -69,15 +78,16 @@ For **Claude Desktop** (`claude_desktop_config.json`) or any client using the sa
       "command": "java",
       "args": [
         "-jar", "/absolute/path/to/valem-mcp.jar",
-        "--url", "https://valem.run", "--browser"
+        "--url", "https://valem.internal", "--browser"
       ]
     }
   }
 }
 ```
 
-Restart the client. The `pair_browser` tool now appears alongside the model tools — it exists **only**
-in this mode.
+Restart the client. Everything from step 2 on is identical — it is the same handshake either way, only
+the transport differs. Embedded and offline modes are covered in
+[Running the MCP server]({% link deployment/mcp-server.md %}).
 
 ## 2. Ask the agent to pair
 
