@@ -37,8 +37,30 @@ from `application.yml`. They apply process-wide.
 | `valem.limits.max-array-index` | `1000000` | Hard ceiling on the array index a single write may target, capping the null-padding one mutation can force. A write beyond it is rejected with a typed `StateLimitExceededException` → HTTP 422, before any allocation. Covers live mutate, defaults, and mutation-log replay. |
 | `valem.limits.regex-max-input` | `100000` | Max input-string length a schema `pattern` keyword will validate; longer values are rejected up front rather than fed to the regex engine (ReDoS amplification guard). |
 | `valem.limits.regex-timeout-ms` | `1000` | Wall-clock budget for a single `pattern` match; a catastrophic-backtracking match is aborted past the deadline instead of pinning a CPU under the model lock. |
-| `valem.limits.expression-cache-size` | `10000` | Max compiled-JSONata-expression entries per `ExpressionCache` (bounded LRU). Eviction is safe — an evicted expression recompiles on next use. |
+| `valem.limits.expression-cache-size` | `250` | Max compiled-JSONata-expression entries (bounded LRU, shared process-wide). Also settable as the **`VALEM_LIMITS_EXPRESSION_CACHE_SIZE` environment variable** — the system property wins where both are set. Values below `64` are floored. Eviction is safe: an evicted expression recompiles on next use. **This bound decides the process's Metaspace footprint** — see the note below. |
 | `valem.history.max-entries` | `50` | (Listed above.) Retained temporal-history snapshots per model. |
+
+### Sizing the expression cache (and why it is a memory setting)
+
+Each cached expression pins a **generated Java class and its classloader in Metaspace** — the JSONata
+engine compiles every distinct expression to real bytecode. Metaspace is *native* memory: a container
+heap cap such as `-XX:MaxRAMPercentage` does not cover it, and it is unbounded by default.
+
+That combination has a specific failure mode worth recognising. A long-lived server whose callers
+supply a stream of **novel** expressions — an agent authoring specs over MCP is the clearest case —
+keeps minting classes, so the live set climbs toward this bound and native memory grows with it. On a
+memory-constrained host the platform then OOM-kills the container, which presents as an unexplained
+restart (exit code `137`) with **no Java `OutOfMemoryError` in the logs**, because the heap was never
+the constraint. The visible symptoms are unrelated: client-abort stack traces from connections
+dropping as the process dies.
+
+Two mitigations, both worth applying together on a hosted deployment:
+
+- Keep this bound modest (the default `250` suits a small instance). Raise it where memory is ample —
+  a larger cache trades memory for CPU, since an evicted expression is recompiled on next use.
+- Run with an explicit **`-XX:MaxMetaspaceSize`**. This converts a silent container kill into a
+  visible, catchable JVM error and prompts class unloading at the high-water mark rather than letting
+  the footprint ratchet upward.
 
 ## Security / auth
 

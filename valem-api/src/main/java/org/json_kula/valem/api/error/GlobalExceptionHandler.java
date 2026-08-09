@@ -20,9 +20,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
+import java.nio.channels.ClosedChannelException;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.springframework.http.HttpStatus.CONFLICT;
@@ -198,10 +201,61 @@ public class GlobalExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
+    /**
+     * The client went away before the response could be written.
+     *
+     * <p>This is not a server fault, and there is nothing useful to return: the socket is already
+     * closed, so writing a Problem Detail only fails again on the way out. It is entirely routine on
+     * long-lived and streaming connections — an agent cancelling a tool call, a browser navigating
+     * away mid-request, a proxy timing out.
+     *
+     * <p>It used to fall through to {@link #handleIo} and be logged as {@code ERROR} with a full
+     * ~140-frame stack trace. On the hosted MCP endpoint, where clients disconnect constantly, that
+     * buried real failures in noise: a service being restarted by its platform emitted pages of these
+     * as its connections dropped, which read like the cause and were only the consequence. Returning
+     * {@code void} tells Spring the exchange is handled and that nothing is to be written.
+     */
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void handleClientDisconnect(AsyncRequestNotUsableException ex) {
+        log.debug("Client disconnected before the response was written: {}", ex.getMessage());
+    }
+
     @ExceptionHandler(IOException.class)
     public ProblemDetail handleIo(IOException ex) {
-        log.error("I/O error", ex);
+        // Container-specific aborts (Tomcat's ClientAbortException, a broken pipe on a reset
+        // connection) are the same non-event as above but arrive as a plain IOException. Match on the
+        // cause chain rather than importing a servlet-container class into this layer.
+        if (isClientDisconnect(ex)) {
+            log.debug("Client disconnected before the response was written: {}", ex.getMessage());
+        } else {
+            log.error("I/O error", ex);
+        }
         return ProblemDetail.forStatusAndDetail(HttpStatus.INTERNAL_SERVER_ERROR, "Storage error");
+    }
+
+    /**
+     * True when an I/O failure is the peer hanging up rather than storage misbehaving.
+     *
+     * <p>Walks a bounded number of links rather than to the end of the chain. {@code initCause}
+     * forbids an exception causing itself, but nothing prevents two exceptions causing each other, and
+     * a cycle here would spin a request thread forever — a much worse outcome than mislabelling a log
+     * line. Real chains are a few frames deep.
+     */
+    static boolean isClientDisconnect(Throwable ex) {
+        int remaining = 20;
+        for (Throwable t = ex; t != null && remaining-- > 0; t = t.getCause()) {
+            if (t instanceof ClosedChannelException) return true;
+            String name = t.getClass().getSimpleName();
+            if (name.equals("ClientAbortException") || name.equals("AsyncRequestNotUsableException")) {
+                return true;
+            }
+            String message = t.getMessage();
+            if (message != null) {
+                String lower = message.toLowerCase(Locale.ROOT);
+                if (lower.contains("broken pipe") || lower.contains("connection reset")) return true;
+            }
+        }
+        return false;
     }
 
     @ExceptionHandler(Exception.class)

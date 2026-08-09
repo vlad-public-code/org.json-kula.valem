@@ -19,16 +19,48 @@ import java.util.Objects;
  * {@link ExpressionCache} per runtime instance amortises that cost so that
  * each distinct expression string is compiled at most once.
  *
- * <p>The cache is bounded (LRU, {@value #DEFAULT_MAX_SIZE} entries by default, overridable via the
- * {@code valem.limits.expression-cache-size} system property) so it cannot grow without limit
- * (audit MEM-2). This matters for a frequently-evolved model — whose runtimes seed forward every
- * expression they have ever had — and for the long-lived, server-lifetime shell caches. Eviction is
- * always safe: an evicted expression is simply recompiled on next use.
+ * <p>The cache is bounded (LRU, 250 entries by default — see {@link #resolveMaxSize}) so it cannot
+ * grow without limit (audit MEM-2). This matters for a frequently-evolved model — whose runtimes seed
+ * forward every expression they have ever had — and for the long-lived, server-lifetime shell caches.
+ * Eviction is always safe: an evicted expression is simply recompiled on next use.
  */
 public final class ExpressionCache {
 
-    static final int DEFAULT_MAX_SIZE =
-            Math.max(64, Integer.getInteger("valem.limits.expression-cache-size", 10_000));
+    static final int DEFAULT_MAX_SIZE = resolveMaxSize();
+
+    /**
+     * How many compiled expressions to retain, from (in precedence order) the
+     * {@code valem.limits.expression-cache-size} system property, the
+     * {@code VALEM_LIMITS_EXPRESSION_CACHE_SIZE} environment variable, or the default of 250.
+     *
+     * <p>The environment variable exists because the setting that matters most is one a deployment
+     * needs to tune without rebuilding an image, and this module has no Spring — so there is no
+     * relaxed binding to lean on, just {@link System#getenv}.
+     *
+     * <p><b>Why 250 and not the 10,000 this used to default to.</b> Each entry pins a compiled Java
+     * class and its classloader in Metaspace, which is native memory and is not covered by the heap
+     * cap a container sets. A memory-constrained host running an agent that authors specs over MCP
+     * mints novel expressions continuously, so the live set climbed toward the bound and the platform
+     * OOM-killed the container — a silent restart, with no Java error, because the heap was never the
+     * constraint. A smaller bound trades CPU for memory: an evicted expression is recompiled on next
+     * use, but the footprint stays flat because the dropped classloader becomes unreachable and can
+     * be unloaded. Raise it on a host with memory to spare; the floor of 64 keeps a pathologically
+     * small value from thrashing the compiler.
+     */
+    static int resolveMaxSize() {
+        Integer fromProperty = Integer.getInteger("valem.limits.expression-cache-size");
+        if (fromProperty != null) return Math.max(64, fromProperty);
+
+        String fromEnv = System.getenv("VALEM_LIMITS_EXPRESSION_CACHE_SIZE");
+        if (fromEnv != null && !fromEnv.isBlank()) {
+            try {
+                return Math.max(64, Integer.parseInt(fromEnv.trim()));
+            } catch (NumberFormatException ignored) {
+                // A malformed override must not stop the engine starting — fall through to the default.
+            }
+        }
+        return 250;
+    }
 
     /** Unchecked wrapper thrown when a JSONata expression fails to compile. */
     public static final class CompilationException extends RuntimeException {
