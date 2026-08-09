@@ -26,19 +26,57 @@ listing partial, divergent subsets.
 | `valem.max-models` | `1000` | Max number of models the registry will hold; excess `POST /models` returns HTTP 429. |
 | `valem.history.max-entries` | `50` | Retained per-model temporal-history snapshots — the source for `GET /models/{id}/history` and point-in-time `?at=` reads. `0` disables temporal history. **JVM system property** (see below), not a Spring property. |
 
-### Core safety limits (JVM system properties)
+### Core safety limits
 
-These bound resource use inside `valem-core`, which has no Spring dependency, so they are read as
-**JVM `-D` system properties at class-load** (e.g. `-Dvalem.limits.max-array-index=2000000`) — *not*
-from `application.yml`. They apply process-wide.
+These bound resource use inside `valem-core`. Set them in `application.yml` like any other `valem.*`
+property — `CoreLimitsEnvironmentPostProcessor` publishes the resolved values as JVM system properties
+during environment preparation, before any bean (and so before any core class) is loaded, because the
+core module has no Spring and reads them with `Integer.getInteger` in a static initialiser. They apply
+process-wide.
+
+Three ways to set one, in precedence order:
+
+1. An explicit JVM flag — `-Dvalem.limits.max-array-index=2000000`. Left untouched by the bridge.
+2. The environment variable Boot's relaxed binding maps to the property —
+   `VALEM_LIMITS_EXPRESSION_CACHE_SIZE`, `VALEM_LIMITS_MAX_ARRAY_INDEX`, and so on.
+3. `application.yml`, which is where the shipped defaults live.
+
+A malformed value is ignored rather than thrown (this is read in a static initialiser — throwing would
+fail every model in the process), so a bad entry degrades to the built-in default.
+
+In a **Spring-less embedding** — the MCP server over stdio, the console — only options 1 and 2 apply;
+`valem.limits.expression-cache-size` reads `VALEM_LIMITS_EXPRESSION_CACHE_SIZE` directly for exactly
+this reason, and the remaining limits are `-D`-only there.
 
 | Property | Default | Description |
 |---|---|---|
 | `valem.limits.max-array-index` | `1000000` | Hard ceiling on the array index a single write may target, capping the null-padding one mutation can force. A write beyond it is rejected with a typed `StateLimitExceededException` → HTTP 422, before any allocation. Covers live mutate, defaults, and mutation-log replay. |
 | `valem.limits.regex-max-input` | `100000` | Max input-string length a schema `pattern` keyword will validate; longer values are rejected up front rather than fed to the regex engine (ReDoS amplification guard). |
 | `valem.limits.regex-timeout-ms` | `1000` | Wall-clock budget for a single `pattern` match; a catastrophic-backtracking match is aborted past the deadline instead of pinning a CPU under the model lock. |
-| `valem.limits.expression-cache-size` | `250` | Max compiled-JSONata-expression entries (bounded LRU, shared process-wide). Also settable as the **`VALEM_LIMITS_EXPRESSION_CACHE_SIZE` environment variable** — the system property wins where both are set. Values below `64` are floored. Eviction is safe: an evicted expression recompiles on next use. **This bound decides the process's Metaspace footprint** — see the note below. |
-| `valem.history.max-entries` | `50` | (Listed above.) Retained temporal-history snapshots per model. |
+| `valem.limits.expression-cache-size` | `500` | Max compiled-JSONata-expression entries (bounded LRU, shared process-wide). Values below `64` are floored. Eviction is safe: an evicted expression recompiles on next use. **This bound decides the process's Metaspace footprint** — see the note below. |
+| `valem.history.max-entries` | `50` | (Listed above.) Retained temporal-history snapshots per model. **Not bridged** — this one is still `-D`-only, in every deployment. |
+
+### Sizing the expression cache (and why it is a memory setting)
+
+Each cached expression pins a **generated Java class and its classloader in Metaspace** — the JSONata
+engine compiles every distinct expression to real bytecode. Metaspace is *native* memory: a container
+heap cap such as `-XX:MaxRAMPercentage` does not cover it, and it is unbounded by default.
+
+That combination has a specific failure mode worth recognising. A long-lived server whose callers
+supply a stream of **novel** expressions — an agent authoring specs over MCP is the clearest case —
+keeps minting classes, so the live set climbs toward this bound and native memory grows with it. On a
+memory-constrained host the platform then OOM-kills the container, which presents as an unexplained
+restart (exit code `137`) with **no Java `OutOfMemoryError` in the logs**, because the heap was never
+the constraint. The visible symptoms are unrelated: client-abort stack traces from connections
+dropping as the process dies.
+
+Two mitigations, both worth applying together on a hosted deployment:
+
+- Keep this bound modest (the default `500` suits a small instance). Raise it where memory is ample —
+  a larger cache trades memory for CPU, since an evicted expression is recompiled on next use.
+- Run with an explicit **`-XX:MaxMetaspaceSize`**. This converts a silent container kill into a
+  visible, catchable JVM error and prompts class unloading at the high-water mark rather than letting
+  the footprint ratchet upward.
 
 ### Sizing the expression cache (and why it is a memory setting)
 

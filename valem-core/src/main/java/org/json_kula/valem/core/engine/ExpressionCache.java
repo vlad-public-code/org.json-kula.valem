@@ -19,33 +19,46 @@ import java.util.Objects;
  * {@link ExpressionCache} per runtime instance amortises that cost so that
  * each distinct expression string is compiled at most once.
  *
- * <p>The cache is bounded (LRU, 250 entries by default — see {@link #resolveMaxSize}) so it cannot
+ * <p>The cache is bounded (LRU, 500 entries by default — see {@link #resolveMaxSize}) so it cannot
  * grow without limit (audit MEM-2). This matters for a frequently-evolved model — whose runtimes seed
  * forward every expression they have ever had — and for the long-lived, server-lifetime shell caches.
  * Eviction is always safe: an evicted expression is simply recompiled on next use.
  */
 public final class ExpressionCache {
 
+    /**
+     * Last-resort bound when nothing configures one; mirrors the default in {@code application.yml}.
+     * Declared before {@link #DEFAULT_MAX_SIZE} so it is assigned before the initialiser that reads it.
+     */
+    static final int FALLBACK_MAX_SIZE = 500;
+
     static final int DEFAULT_MAX_SIZE = resolveMaxSize();
 
     /**
      * How many compiled expressions to retain, from (in precedence order) the
      * {@code valem.limits.expression-cache-size} system property, the
-     * {@code VALEM_LIMITS_EXPRESSION_CACHE_SIZE} environment variable, or the default of 250.
+     * {@code VALEM_LIMITS_EXPRESSION_CACHE_SIZE} environment variable, or the fallback below.
      *
-     * <p>The environment variable exists because the setting that matters most is one a deployment
-     * needs to tune without rebuilding an image, and this module has no Spring — so there is no
-     * relaxed binding to lean on, just {@link System#getenv}.
+     * <p><b>The configured value lives in {@code application.yml}, not here.</b> A server deployment
+     * sets {@code valem.limits.expression-cache-size} (defaulted there to
+     * {@code ${VALEM_LIMITS_EXPRESSION_CACHE_SIZE:500}}) alongside every other {@code valem.*}
+     * setting, and {@code CoreLimitsEnvironmentPostProcessor} publishes it as the system property read
+     * here before any core class loads. This module has no Spring, so it cannot read that file itself
+     * and cannot lean on relaxed binding — hence the direct {@link System#getenv} branch, which is
+     * also what configures the Spring-less embeddings (the MCP server, the console) and what lets a
+     * platform tune a container without rebuilding its image. The constant below is only the
+     * last-resort library fallback for an embedding that configures nothing at all; keep it in step
+     * with the value in {@code application.yml}.
      *
-     * <p><b>Why 250 and not the 10,000 this used to default to.</b> Each entry pins a compiled Java
-     * class and its classloader in Metaspace, which is native memory and is not covered by the heap
-     * cap a container sets. A memory-constrained host running an agent that authors specs over MCP
-     * mints novel expressions continuously, so the live set climbed toward the bound and the platform
-     * OOM-killed the container — a silent restart, with no Java error, because the heap was never the
-     * constraint. A smaller bound trades CPU for memory: an evicted expression is recompiled on next
-     * use, but the footprint stays flat because the dropped classloader becomes unreachable and can
-     * be unloaded. Raise it on a host with memory to spare; the floor of 64 keeps a pathologically
-     * small value from thrashing the compiler.
+     * <p><b>Why a few hundred and not the 10,000 this used to default to.</b> Each entry pins a
+     * compiled Java class and its classloader in Metaspace, which is native memory and is not covered
+     * by the heap cap a container sets. A memory-constrained host running an agent that authors specs
+     * over MCP mints novel expressions continuously, so the live set climbed toward the bound and the
+     * platform OOM-killed the container — a silent restart, with no Java error, because the heap was
+     * never the constraint. A smaller bound trades CPU for memory: an evicted expression is recompiled
+     * on next use, but the footprint stays flat because the dropped classloader becomes unreachable
+     * and can be unloaded. Raise it on a host with memory to spare; the floor of 64 keeps a
+     * pathologically small value from thrashing the compiler.
      */
     static int resolveMaxSize() {
         Integer fromProperty = Integer.getInteger("valem.limits.expression-cache-size");
@@ -59,7 +72,7 @@ public final class ExpressionCache {
                 // A malformed override must not stop the engine starting — fall through to the default.
             }
         }
-        return 250;
+        return FALLBACK_MAX_SIZE;
     }
 
     /** Unchecked wrapper thrown when a JSONata expression fails to compile. */

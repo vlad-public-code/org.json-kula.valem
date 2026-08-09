@@ -34,6 +34,14 @@ management:
       max-request-size: 55MB     # cap on the whole multipart request
 
 valem:
+  limits:
+    # Max compiled-JSONata-expression entries (bounded LRU, shared process-wide). Each entry pins a
+    # generated class + its classloader in Metaspace — native memory a container's heap cap does not
+    # cover — so this bound decides the process's Metaspace footprint. Values below 64 are floored;
+    # eviction is safe (an evicted expression recompiles on next use). Bridged into the JVM system
+    # property valem-core reads by CoreLimitsEnvironmentPostProcessor; see
+    # docs/deployment/configuration.md for sizing guidance.
+    expression-cache-size: ${VALEM_LIMITS_EXPRESSION_CACHE_SIZE:500}
   blob-store: memory           # memory | filesystem
   blob-store-path: ${user.home}/.valem/blobs
   blob:

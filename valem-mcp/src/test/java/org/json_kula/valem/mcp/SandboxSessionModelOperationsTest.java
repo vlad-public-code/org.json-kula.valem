@@ -3,6 +3,7 @@ package org.json_kula.valem.mcp;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -30,6 +31,7 @@ class SandboxSessionModelOperationsTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private HttpServer server;
+    private HttpServer auxServer;
     private final AtomicInteger mintCount = new AtomicInteger();
     private final AtomicInteger pollCount = new AtomicInteger();
     private final List<String> sessionTokensSeen = new CopyOnWriteArrayList<>();
@@ -107,6 +109,14 @@ class SandboxSessionModelOperationsTest {
         respond(ex, 404, "{\"error\":\"not_found\"}");
     }
 
+    /** A second server, for the cases that need one host to point at another. */
+    private String startAuxServer(HttpHandler handler) throws IOException {
+        auxServer = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        auxServer.createContext("/", handler);
+        auxServer.start();
+        return "http://127.0.0.1:" + auxServer.getAddress().getPort();
+    }
+
     private void respond(HttpExchange ex, int status, String body) throws IOException {
         byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
         ex.getResponseHeaders().add("Content-Type", "application/json");
@@ -118,6 +128,7 @@ class SandboxSessionModelOperationsTest {
     @AfterEach
     void stop() {
         if (server != null) server.stop(0);
+        if (auxServer != null) auxServer.stop(0);
     }
 
     // ── pairing state machine ────────────────────────────────────────────────
@@ -243,5 +254,52 @@ class SandboxSessionModelOperationsTest {
         assertThatThrownBy(() -> ops.getInfo("loan"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("pair_browser");
+    }
+
+    // ── reaching a sandbox that moved, and failing legibly when it cannot be reached ──
+
+    @Test
+    void pairing_follows_a_permanent_redirect_when_the_sandbox_has_moved() throws IOException {
+        // A hosted sandbox that gains a custom domain answers the old URL with a permanent redirect —
+        // 308 for a POST, so method and body survive. An agent whose --url still names the old host
+        // should land on the new one rather than fail, because that config lives outside this repo and
+        // is not something a pairing attempt can fix for itself.
+        pendingPollsBeforeSuccess = 0;
+        String movedTo = startServer();
+        String staleUrl = startAuxServer(ex -> {
+            ex.getResponseHeaders().add("Location", movedTo + ex.getRequestURI().getPath());
+            ex.sendResponseHeaders(308, -1);
+            ex.close();
+        });
+
+        PairResult result = new SandboxSessionModelOperations(staleUrl, MAPPER, Duration.ofSeconds(30))
+                .pairBrowser();
+
+        assertThat(result.status()).isEqualTo("paired");
+        assertThat(result.namespaceId()).isEqualTo(NAMESPACE);
+        assertThat(mintCount.get()).isEqualTo(1);
+    }
+
+    @Test
+    void an_edge_proxy_error_page_is_summarised_not_dumped() throws IOException {
+        // A failure here usually comes from an edge proxy, not the sandbox, and those reply with a
+        // full HTML page. Passing that through verbatim buries the only useful fact — the status —
+        // under a screenful of markup that lands in the agent's context.
+        String html = "<html><head><title>502 Bad Gateway</title></head><body>"
+                + "padding ".repeat(2000) + "</body></html>";
+        String baseUrl = startAuxServer(ex -> {
+            byte[] bytes = html.getBytes(StandardCharsets.UTF_8);
+            ex.getResponseHeaders().add("Content-Type", "text/html");
+            ex.sendResponseHeaders(502, bytes.length);
+            ex.getResponseBody().write(bytes);
+            ex.close();
+        });
+        SandboxSessionModelOperations ops =
+                new SandboxSessionModelOperations(baseUrl, MAPPER, Duration.ofSeconds(5));
+
+        assertThatThrownBy(ops::pairBrowser)
+                .hasMessageContaining("502")
+                .hasMessageNotContaining("<html")
+                .satisfies(e -> assertThat(e.getMessage()).hasSizeLessThan(300));
     }
 }

@@ -57,7 +57,17 @@ final class SandboxSessionModelOperations implements ModelOperations, BrowserPai
 
     private final String baseUrl;
     private final ObjectMapper mapper;
-    private final HttpClient http = HttpClient.newHttpClient();
+
+    /**
+     * Follows redirects, unlike {@link HttpClient#newHttpClient()}'s {@code Redirect.NEVER} default.
+     * A hosted sandbox that moves to a new domain answers with a permanent redirect — Render issues
+     * {@code 308} for a POST, preserving method and body — and without this every pairing attempt
+     * against the old URL failed as an opaque non-2xx instead of simply landing on the new host.
+     */
+    private final HttpClient http = HttpClient.newBuilder()
+            .followRedirects(HttpClient.Redirect.NORMAL)
+            .connectTimeout(Duration.ofSeconds(20))
+            .build();
 
     // null until paired; a volatile single-assignment publish is enough (set once, read many).
     private volatile RemoteModelOperations delegate;
@@ -395,8 +405,36 @@ final class SandboxSessionModelOperations implements ModelOperations, BrowserPai
 
     private JsonNode postJson(String path, JsonNode body) {
         HttpResponse<String> res = rawPost(path, body);
-        if (res.statusCode() / 100 != 2) throw new RemoteOperationException(res.statusCode(), res.body());
+        if (res.statusCode() / 100 != 2) throw new RemoteOperationException(res.statusCode(), describe(res));
         return readTree(res.body());
+    }
+
+    /**
+     * A short, actionable description of a failed pairing response.
+     *
+     * <p>The body is never passed through verbatim: a failure at this layer usually comes from an
+     * edge proxy rather than the sandbox, and those answer with a full HTML error page. Handing that
+     * to an agent buries the one useful fact — the status — under a screenful of markup, so the body
+     * is only included when it is small and not HTML.
+     */
+    private static String describe(HttpResponse<String> res) {
+        int status = res.statusCode();
+        if (status / 100 == 3) {
+            String location = res.headers().firstValue("location").orElse("(no Location header)");
+            return "the sandbox has moved: HTTP " + status + " redirects to " + location
+                    + ". Point the MCP server's --url at that host.";
+        }
+        String hint = switch (status / 100) {
+            case 5 -> "the sandbox is unreachable or still waking up; retry shortly";
+            case 4 -> "the sandbox rejected the pairing request";
+            default -> "unexpected pairing response";
+        };
+        String body = res.body() == null ? "" : res.body().strip();
+        boolean isHtml = body.regionMatches(true, 0, "<", 0, 1) || body.toLowerCase().contains("<html");
+        if (body.isEmpty() || isHtml || body.length() > 500) {
+            return "HTTP " + status + " — " + hint + ".";
+        }
+        return "HTTP " + status + " — " + hint + ": " + body;
     }
 
     private JsonNode readTree(String s) {
