@@ -1,0 +1,5 @@
+# Runs while the environment is being prepared — before any bean, and so before any valem-core class
+# with a limit-reading static initialiser, can be loaded. EnvironmentPostProcessor is discovered
+# through spring.factories; the META-INF/spring/*.imports mechanism covers auto-configuration only.
+org.springframework.boot.env.EnvironmentPostProcessor=\
+org.json_kula.valem.api.config.CoreLimitsEnvironmentPostProcessor

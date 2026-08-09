@@ -19,16 +19,61 @@ import java.util.Objects;
  * {@link ExpressionCache} per runtime instance amortises that cost so that
  * each distinct expression string is compiled at most once.
  *
- * <p>The cache is bounded (LRU, {@value #DEFAULT_MAX_SIZE} entries by default, overridable via the
- * {@code valem.limits.expression-cache-size} system property) so it cannot grow without limit
- * (audit MEM-2). This matters for a frequently-evolved model — whose runtimes seed forward every
- * expression they have ever had — and for the long-lived, server-lifetime shell caches. Eviction is
- * always safe: an evicted expression is simply recompiled on next use.
+ * <p>The cache is bounded (LRU, 500 entries by default — see {@link #resolveMaxSize}) so it cannot
+ * grow without limit (audit MEM-2). This matters for a frequently-evolved model — whose runtimes seed
+ * forward every expression they have ever had — and for the long-lived, server-lifetime shell caches.
+ * Eviction is always safe: an evicted expression is simply recompiled on next use.
  */
 public final class ExpressionCache {
 
-    static final int DEFAULT_MAX_SIZE =
-            Math.max(64, Integer.getInteger("valem.limits.expression-cache-size", 10_000));
+    /**
+     * Last-resort bound when nothing configures one; mirrors the default in {@code application.yml}.
+     * Declared before {@link #DEFAULT_MAX_SIZE} so it is assigned before the initialiser that reads it.
+     */
+    static final int FALLBACK_MAX_SIZE = 500;
+
+    static final int DEFAULT_MAX_SIZE = resolveMaxSize();
+
+    /**
+     * How many compiled expressions to retain, from (in precedence order) the
+     * {@code valem.limits.expression-cache-size} system property, the
+     * {@code VALEM_LIMITS_EXPRESSION_CACHE_SIZE} environment variable, or the fallback below.
+     *
+     * <p><b>The configured value lives in {@code application.yml}, not here.</b> A server deployment
+     * sets {@code valem.limits.expression-cache-size} (defaulted there to
+     * {@code ${VALEM_LIMITS_EXPRESSION_CACHE_SIZE:500}}) alongside every other {@code valem.*}
+     * setting, and {@code CoreLimitsEnvironmentPostProcessor} publishes it as the system property read
+     * here before any core class loads. This module has no Spring, so it cannot read that file itself
+     * and cannot lean on relaxed binding — hence the direct {@link System#getenv} branch, which is
+     * also what configures the Spring-less embeddings (the MCP server, the console) and what lets a
+     * platform tune a container without rebuilding its image. The constant below is only the
+     * last-resort library fallback for an embedding that configures nothing at all; keep it in step
+     * with the value in {@code application.yml}.
+     *
+     * <p><b>Why a few hundred and not the 10,000 this used to default to.</b> Each entry pins a
+     * compiled Java class and its classloader in Metaspace, which is native memory and is not covered
+     * by the heap cap a container sets. A memory-constrained host running an agent that authors specs
+     * over MCP mints novel expressions continuously, so the live set climbed toward the bound and the
+     * platform OOM-killed the container — a silent restart, with no Java error, because the heap was
+     * never the constraint. A smaller bound trades CPU for memory: an evicted expression is recompiled
+     * on next use, but the footprint stays flat because the dropped classloader becomes unreachable
+     * and can be unloaded. Raise it on a host with memory to spare; the floor of 64 keeps a
+     * pathologically small value from thrashing the compiler.
+     */
+    static int resolveMaxSize() {
+        Integer fromProperty = Integer.getInteger("valem.limits.expression-cache-size");
+        if (fromProperty != null) return Math.max(64, fromProperty);
+
+        String fromEnv = System.getenv("VALEM_LIMITS_EXPRESSION_CACHE_SIZE");
+        if (fromEnv != null && !fromEnv.isBlank()) {
+            try {
+                return Math.max(64, Integer.parseInt(fromEnv.trim()));
+            } catch (NumberFormatException ignored) {
+                // A malformed override must not stop the engine starting — fall through to the default.
+            }
+        }
+        return FALLBACK_MAX_SIZE;
+    }
 
     /** Unchecked wrapper thrown when a JSONata expression fails to compile. */
     public static final class CompilationException extends RuntimeException {
