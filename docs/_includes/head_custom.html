@@ -24,12 +24,15 @@ page-specific rather than all showing the site blurb.
 <meta name="description" content="{{ og_desc }}" />
 
 {%- comment -%}
-Canonical URL. `redirect_from` keeps the pre-restructure paths alive (via meta-refresh stubs),
-so several URLs can resolve to the same content; this tells search engines which one is the
-original and consolidates ranking signals onto it. `absolute_url` already folds in site.url +
-baseurl, so it's correct for the project-page subpath.
+Canonical URL is deliberately NOT emitted here. jekyll-seo-tag (pulled in by the theme, and by
+GitHub Pages automatically) already emits one derived from site.url + site.baseurl — so this file
+was adding a second, and a page carrying two competing canonicals gets both ignored.
+
+Setting site.url/site.baseurl is therefore the single lever: _config.yml points at the GitHub Pages
+project site, and _config.valem.yml overlays valem.run + /docs for the build that ships with the
+product. `redirect_from` still keeps pre-restructure paths alive as meta-refresh stubs, and
+SEO tag's canonical is what consolidates those onto the real page.
 {%- endcomment -%}
-<link rel="canonical" href="{{ page.url | absolute_url }}" />
 
 {%- comment -%}
 Structured data (JSON-LD). On the home page, describe the project itself as a SoftwareApplication

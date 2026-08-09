@@ -1,0 +1,17 @@
+# Overlay used ONLY when building the docs for valem.run.
+#
+#   bundle exec jekyll build --config _config.yml,_config.valem.yml --destination <out>
+#
+# The committed _config.yml stays untouched so the GitHub Pages project site keeps building and
+# navigating exactly as it does today; this file re-points the same source at the product domain.
+#
+# Why the docs are served from valem.run at all: they are 49 pages of developer-intent technical
+# content — the queries where Valem can actually compete — and every link they earn currently builds
+# authority for github.io rather than for the domain that needs it. Serving them under /docs puts
+# that content, and every future documentation backlink, on valem.run.
+#
+# `url` + `baseurl` are what jekyll-seo-tag derives its canonical from, and what `absolute_url` and
+# `relative_url` fold into every internal link, so setting them here is sufficient — no page needs a
+# per-file override.
+url: https://valem.run
+baseurl: /docs

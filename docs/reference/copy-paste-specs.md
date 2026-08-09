@@ -182,6 +182,96 @@ Before pushing a spec, an agent can vet it offline with the pure authoring tools
 committing). These always run against local core, even in remote mode. See the
 [MCP tools reference](mcp-tools.md).
 
+## 4 — A spec that proves itself: embedded tests
+
+Everything above is checked by a human reading the output. Move that check into the spec and the
+model verifies itself on every create, every evolution, and every CI run — which is what makes a
+generated spec safe to trust without reading it line by line.
+
+```jsonc
+{
+  "id": "payroll",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "gross":    { "type": "number", "minimum": 0 },
+      "taxRate":  { "type": "number", "minimum": 0, "maximum": 1 },
+      "tax":      { "type": "number", "readOnly": true },
+      "net":      { "type": "number", "readOnly": true }
+    }
+  },
+  "defaultValues": [
+    { "path": "$", "expr": "{ 'gross': 50000, 'taxRate': 0.3 }" }
+  ],
+  "derivations": [
+    { "path": "$.tax", "expr": "$round(gross * taxRate, 2)" },
+    { "path": "$.net", "expr": "$round(gross - tax, 2)" }
+  ],
+  "tests": [
+    {
+      "description": "30% on 50,000 leaves 35,000",
+      "given":  { "$.gross": 50000, "$.taxRate": 0.3 },
+      "expect": { "$.tax": 15000, "$.net": 35000 }
+    },
+    {
+      "description": "a zero rate is a no-op",
+      "given":  { "$.gross": 50000, "$.taxRate": 0 },
+      "expect": { "$.net": 50000 }
+    }
+  ]
+}
+```
+
+```jsonc
+// Run the embedded cases before creating anything — the agent-side pre-flight check. Pure, local,
+// and available even when the MCP server is pointed at a remote Valem.
+{ "name": "test_spec", "arguments": { "spec": { /* the spec above */ } } }
+```
+
+```bash
+# For a model that already exists, the same cases back the trust report:
+curl -s localhost:8080/models/payroll/verification
+#  → { "state": "green", "checkedCount": 2, "passedCount": 2, "unverifiableCount": 0, "cases": [...] }
+```
+
+Expected values must match the engine **exactly**, so the honest way to author them is to write the
+scenario, run it, and paste back what the engine produced — then read those numbers against the rule
+you are modelling. A test you derived from the model proves consistency, not correctness, and the
+verification report says so in as many words. That distinction is the whole subject of
+[how we verify the published calculators](https://valem.run/calculators/germany/net-salary/verify).
+
+## 5 — Evolve a live model without losing its state
+
+Specs are not immutable. `evolve_spec` applies a targeted diff and carries existing state forward,
+so an agent can add a field mid-conversation rather than rebuilding.
+
+```jsonc
+// tools/call → evolve_spec  (or POST /models/payroll/spec/evolve)
+{
+  "name": "evolve_spec",
+  "arguments": {
+    "id": "payroll",
+    "evolution": {
+      "newVersion": "1.1.0",
+      "expectedVersion": "1.0.0",
+      "upsertSchemaNodes": [
+        { "path": "$.pensionPct", "schema": { "type": "number", "minimum": 0, "maximum": 1 } },
+        { "path": "$.pension",    "schema": { "type": "number", "readOnly": true } }
+      ],
+      "upsertDerivations": [
+        { "path": "$.pension", "expr": "$round(gross * pensionPct, 2)" },
+        { "path": "$.net",     "expr": "$round(gross - tax - pension, 2)" }
+      ]
+    }
+  }
+}
+```
+
+`expectedVersion` makes the evolution a compare-and-swap: a concurrent edit gets a 409 rather than
+silently winning. Re-running `test_spec` afterwards is what tells you the change did not break a
+rule the model already guaranteed.
+
 ## Where to go next
 
 - Add a UI: give the spec a [`viewDefinition`](model-spec/views.md) and it renders as a reactive form.

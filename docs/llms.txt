@@ -2,6 +2,10 @@
 # Front matter (even empty) makes Jekyll process this file so the Liquid below resolves to
 # absolute, crawlable URLs. Excluded from the sitemap since llms.txt is a directive file.
 sitemap: false
+# Same trap as robots.txt: the site-wide `layout: default` wrapped this curated index in 30 KB of
+# Just-the-Docs chrome, so an agent fetching it got a nav sidebar instead of the map. llms.txt is
+# read by machines that will not strip HTML — it must be the markdown and nothing else.
+layout: none
 ---
 # Valem
 

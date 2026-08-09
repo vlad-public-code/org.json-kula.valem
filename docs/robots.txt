@@ -2,6 +2,11 @@
 # Front matter (even empty) makes Jekyll process this file so the Liquid below resolves.
 # Excluded from the sitemap since robots.txt is a directive file, not a page.
 sitemap: false
+# _config.yml defaults every path to `layout: default`, which wrapped this file in the whole
+# Just-the-Docs page — nav, search, mermaid loader, and a Jekyll SEO Tag block whose JSON-LD
+# announced robots.txt as a TechArticle with a self-referential canonical. 23 KB of HTML served
+# as text/plain, with the three real directives buried in the middle. Opt out explicitly.
+layout: none
 ---
 User-agent: *
 Allow: /
