@@ -61,7 +61,7 @@
 
         <jackson.version>2.21.2</jackson.version>
         <tracked-json.version>1.0.0</tracked-json.version>
-        <jsonata-jvm-compiler.version>1.0.5-SNAPSHOT</jsonata-jvm-compiler.version>
+        <jsonata-jvm-compiler.version>1.0.5</jsonata-jvm-compiler.version>
         <json-schema-validator.version>1.4.3</json-schema-validator.version>
         <spring-boot.version>3.3.5</spring-boot.version>
         <junit.version>5.11.4</junit.version>

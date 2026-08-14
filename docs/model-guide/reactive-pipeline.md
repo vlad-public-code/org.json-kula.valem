@@ -86,6 +86,9 @@ per section. Existing state is carried forward, unchanged expressions keep their
 - A schema change that would strand live values is refused with `422`.
 - Schema, view, and constants also accept **targeted** diffs (by `$defs` name, by component id, by
   constant name) instead of wholesale replacement.
+- `newLibrary` replaces the model's **own** [library layer](anatomy.md#sharing-values-and-computation)
+  — inherited layers stay put — and is refused if it would drop an export the evolved spec still
+  calls.
 
 That's what makes iterating on a live model — with an agent, or in the sandbox — safe enough to do
 casually. Details: [tests & spec evolution]({% link reference/model-spec/tests-and-evolution.md %}).
