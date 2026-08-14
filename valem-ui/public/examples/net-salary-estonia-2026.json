@@ -40,34 +40,38 @@
       }
     }
   },
+  "library": {
+    "description": "Money rounding and percentage-of-base, shared by every derivation.",
+    "define": "( $money := function($n) { $round($n, 2) }; $shareOf := function($base, $rate) { $money($base * $rate) }; $notBelowZero := function($n) { $n > 0 ? $n : 0 }; [\"money\", \"shareOf\", \"notBelowZero\"] )"
+  },
   "derivations": [
     {
       "path": "$.unemploymentInsurance",
-      "expr": "$round(grossMonthly * 0.016, 2)"
+      "expr": "$shareOf(grossMonthly, 0.016)"
     },
     {
       "path": "$.fundedPension",
-      "expr": "$round(grossMonthly * 0.02, 2)"
+      "expr": "$shareOf(grossMonthly, 0.02)"
     },
     {
       "path": "$.taxableIncome",
-      "expr": "($b := grossMonthly - unemploymentInsurance - fundedPension - 700; $round($b > 0 ? $b : 0, 2))"
+      "expr": "$money($notBelowZero(grossMonthly - unemploymentInsurance - fundedPension - 700))"
     },
     {
       "path": "$.incomeTax",
-      "expr": "$round(taxableIncome * 0.22, 2)"
+      "expr": "$shareOf(taxableIncome, 0.22)"
     },
     {
       "path": "$.totalDeductions",
-      "expr": "$round(unemploymentInsurance + fundedPension + incomeTax, 2)"
+      "expr": "$money(unemploymentInsurance + fundedPension + incomeTax)"
     },
     {
       "path": "$.netMonthly",
-      "expr": "$round(grossMonthly - totalDeductions, 2)"
+      "expr": "$money(grossMonthly - totalDeductions)"
     },
     {
       "path": "$.netAnnual",
-      "expr": "$round(netMonthly * 12, 2)"
+      "expr": "$money(netMonthly * 12)"
     }
   ],
   "constraints": [],

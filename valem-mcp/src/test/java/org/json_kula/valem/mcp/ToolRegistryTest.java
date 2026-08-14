@@ -80,8 +80,76 @@ class ToolRegistryTest {
                 "get_state", "get_field", "mutate", "patch_model", "explain", "get_history",
                 "get_audit", "verify_audit", "get_effective_schema", "snapshot", "restore",
                 "upload_blob", "download_blob",
-                "evolve_spec", "delete_model", "get_view",
+                "evolve_spec", "delete_model", "get_view", "get_library",
                 "get_domain_guidance", "validate_spec", "eval_expression", "test_spec", "dry_run");
+    }
+
+    // ── library ──────────────────────────────────────────────────────────────────
+
+    @Test
+    void get_library_lists_exports_with_kind_and_origin() {
+        create("""
+            { "id": "lib-model", "schema": { "type": "object" },
+              "library": "( $double := function($n){ $n * 2 }; $year := 2026; [\\"double\\", \\"year\\"] )" }
+            """);
+
+        ObjectNode args = MAPPER.createObjectNode();
+        args.put("id", "lib-model");
+        ObjectNode result = registry.call("get_library", args);
+
+        assertThat(result.path("isError").asBoolean()).isFalse();
+        JsonNode exports = payload(result).path("exports");
+        assertThat(exports).hasSize(2);
+        assertThat(exports).anySatisfy(e -> {
+            assertThat(e.path("name").asText()).isEqualTo("double");
+            assertThat(e.path("kind").asText()).isEqualTo("function");
+            assertThat(e.path("origin").asText()).isEqualTo("local");
+            assertThat(e.path("arity").asInt()).isEqualTo(1);
+        });
+        assertThat(exports).anySatisfy(e -> {
+            assertThat(e.path("name").asText()).isEqualTo("year");
+            assertThat(e.path("kind").asText()).isEqualTo("constant");
+            assertThat(e.path("value").asInt()).isEqualTo(2026);
+        });
+    }
+
+    @Test
+    void eval_expression_binds_a_supplied_library() {
+        ObjectNode args = MAPPER.createObjectNode();
+        args.put("expr", "$double(qty)");
+        args.put("library", "( $double := function($n){ $n * 2 }; [\"double\"] )");
+        ((ObjectNode) args.putObject("input")).put("qty", 21);
+
+        ObjectNode result = registry.call("eval_expression", args);
+
+        assertThat(payload(result).path("ok").asBoolean()).isTrue();
+        assertThat(payload(result).path("result").asInt()).isEqualTo(42);
+    }
+
+    @Test
+    void eval_expression_without_the_library_reports_the_undefined_function() {
+        ObjectNode args = MAPPER.createObjectNode();
+        args.put("expr", "$double(qty)");
+        ((ObjectNode) args.putObject("input")).put("qty", 21);
+
+        ObjectNode result = registry.call("eval_expression", args);
+
+        assertThat(payload(result).path("ok").asBoolean()).isFalse();
+        assertThat(payload(result).path("message").asText()).contains("double");
+    }
+
+    @Test
+    void eval_expression_binds_constants_for_a_library_that_reads_them() {
+        ObjectNode args = MAPPER.createObjectNode();
+        args.put("expr", "$withVat(net)");
+        args.put("library", "( $withVat := function($n){ $n * (1 + $const.vatRate) }; [\"withVat\"] )");
+        ((ObjectNode) args.putObject("input")).put("net", 100);
+        ((ObjectNode) args.putObject("constants")).put("vatRate", 0.2);
+
+        ObjectNode result = registry.call("eval_expression", args);
+
+        assertThat(payload(result).path("ok").asBoolean()).isTrue();
+        assertThat(payload(result).path("result").asDouble()).isEqualTo(120.0);
     }
 
     @Test

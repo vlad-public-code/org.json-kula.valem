@@ -192,6 +192,11 @@ public final class RemoteModelOperations implements ModelOperations,
         return call(() -> client.getView(id, viewId));
     }
 
+    @Override
+    public JsonNode getLibrary(String id) {
+        return call(() -> client.getLibrary(id));
+    }
+
     // ── Delete ────────────────────────────────────────────────────────────────
 
     @Override

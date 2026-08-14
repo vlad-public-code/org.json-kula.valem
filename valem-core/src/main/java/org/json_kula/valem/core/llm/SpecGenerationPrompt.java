@@ -284,6 +284,37 @@ public final class SpecGenerationPrompt {
                 "vatRate": 0.22,                     // referenced in ANY expression as $const.vatRate
                 "brackets": [ { "upTo": 10000, "rate": 0.1 } ]   // arrays/objects allowed: $const.brackets
               },
+              "library": {                          // OPTIONAL. Named JSONata functions callable from
+                                                     // EVERY expression below as $name(args).
+                "define": "( $fn := function($x){ ... }; [\\"fn\\"] )"
+                                                     // A plain JSONata expression that binds functions
+                                                     // and RETURNS THE LIST OF NAMES TO EXPORT as its
+                                                     // last value. Names it binds but does not export
+                                                     // stay internal helpers.
+              },
+              // WHEN TO USE A LIBRARY: only when the SAME calculation shape appears in 3+ expressions
+              // (a bracket walk, a proration, a rounding convention). One shared function beats five
+              // copies that drift apart. Do NOT wrap a one-line expression in a function --
+              // "$total()" is worse than "price * qty".
+              //
+              // THE ONE HARD RULE: a library function CANNOT read the document. Field names inside a
+              // function body always evaluate to NOTHING -- the function only ever sees its arguments
+              // and $const.
+              //   WRONG:  "$netTotal := function() { order.subtotal - order.discount }"
+              //           ...and the derivation "$netTotal()"   <- returns nothing; REJECTED
+              //   RIGHT:  "$netTotal := function($subtotal, $discount) { $subtotal - $discount }"
+              //           ...and the derivation "$netTotal(order.subtotal, order.discount)"
+              // Pass every document value in at the call site. The field names must appear in the
+              // DERIVATION's expr, never inside the function body.
+              //
+              // A function body that needs several statements must PARENTHESISE them:
+              //   "function($x) { $a := 1; $a }"    is a SYNTAX ERROR
+              //   "function($x) { ( $a := 1; $a ) }" is correct
+              //
+              // $const IS available inside a library ($const.vatRate works). $now / $millis / $random
+              // are NOT -- the library is evaluated ONCE at compile time, so they would freeze to one
+              // value. Never name an export after a JSONata built-in ($sum, $round, $map, ...) --
+              // the parser resolves built-ins first, so it would never be called.
               "defaultValues": [                     // seed values for newly-created containers
                 {
                   "path": "<container JsonPath>",    // "$" (whole doc, seeds at creation), an object
@@ -928,6 +959,8 @@ public final class SpecGenerationPrompt {
                 + "                  removeMetaDerivations, upsertMetaDerivations,\n"
                 + "                  removeDefaultValues, upsertDefaultValues,\n"
                 + "                  upsertConstants, removeConstants, newConstants,\n"
+                + "                  newLibrary (replaces the model's own library layer wholesale -\n"
+                + "                    there is no per-function diff; resend the whole define),\n"
                 + "                  upsertSchemaDefs, removeSchemaDefs, upsertSchemaNodes, removeSchemaNodes, newSchema";
         String viewFields =
                   ",\n                  newDefaultView, upsertViews, removeViews,\n"

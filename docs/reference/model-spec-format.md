@@ -19,7 +19,7 @@ harder to search than five focused ones.
 
 | Section pages | Covers |
 |---|---|
-| [Schema, constants & defaults](model-spec/schema-and-values.md) | `schema` (with `$defs` / `$ref`), `constants`, `defaultValues` |
+| [Schema, constants, library & defaults](model-spec/schema-and-values.md) | `schema` (with `$defs` / `$ref`), `constants`, `library`, `defaultValues` |
 | [Derivations, meta & constraints](model-spec/derivations-and-constraints.md) | `derivations`, `metaDerivations`, `constraints` |
 | [Effects](model-spec/effects.md) | `effects` — executors, triggers, dedupe, status paths, fold-back |
 | [Tests & spec evolution](model-spec/tests-and-evolution.md) | `tests`, `SpecEvolution`, targeted section diffs |
@@ -41,6 +41,7 @@ concept rather than by field.
   "lineage":          [ ... ],
   "schema":           { ... },
   "constants":        { "name": <any JSON value>, ... },
+  "library":          { "define": "<JSONata definition expression>" },
   "defaultValues":    [ ... ],
   "derivations":      [ ... ],
   "metaDerivations":  [ ... ],
@@ -59,6 +60,7 @@ concept rather than by field.
 | `lineage` | no | `[]` | Read-only, materializer-written: the pinned ancestor chain this model was branched from (`[]` for a non-branch model). Validated acyclic. Exposed at `GET /models/{id}/lineage`. |
 | `schema` | yes | — | JSON Schema (Draft 2020-12) for the base document |
 | `constants` | no | `{}` | Named immutable values (any JSON type), bound as `$const` in every expression |
+| `library` | no | — | Named JSONata functions/values callable from every expression as `$name(...)`. Computes only from its arguments and `$const` — it cannot read the model document |
 | `defaultValues` | no | `[]` | Default rules for newly-created containers; a `$` rule seeds at creation |
 | `derivations` | no | `[]` | Computed read-only fields |
 | `metaDerivations` | no | `[]` | Per-field metadata (min/max/required/…) |

@@ -59,8 +59,11 @@ cannot express; the JSONata rules the model reliably fumbles are each stated onc
 duplicates); and it uses plain section headers rather than decorative ASCII frames. It contains:
 
 1. A description of what Valem is and the full JSON structure of a `ModelSpec` with
-   field-level comments (including `constants`/`$const`, `defaultValues`, `effects` —
-   `actions` is not mentioned as current syntax).
+   field-level comments (including `constants`/`$const`, `library`, `defaultValues`, `effects` —
+   `actions` is not mentioned as current syntax). The `library` block states when a library is
+   worth declaring (the same shape in 3+ expressions), the hard rule that a library function
+   cannot read the document — with the wrong/right pair spelled out, because the ambient-state
+   form is what a model naturally writes — and the parenthesised multi-statement lambda body.
 2. A per-expression-type context-binding table: what `$`, `$parent`, `$self`, and `$const`
    resolve to for each of `derivations` / `metaDerivations` / `constraints` /
    `defaultValues` / view expressions.

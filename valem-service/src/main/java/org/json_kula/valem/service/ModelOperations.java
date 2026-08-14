@@ -108,6 +108,17 @@ public interface ModelOperations {
      */
     JsonNode getView(String id, String viewId);
 
+    /**
+     * The model's library vocabulary: what it exports, of what kind, with what signature and arity,
+     * and which layer each export came from. {@code null} when the model declares no library.
+     *
+     * <p>Exists so tooling — editor autocomplete, an agent about to write an expression — can ask
+     * "what may I call here" without re-deriving it from the definition text.
+     *
+     * @see ModelService#getLibrary(String)
+     */
+    JsonNode getLibrary(String id);
+
     // ── Delete ────────────────────────────────────────────────────────────────
 
     /** @see ModelService#deleteModel(String) */

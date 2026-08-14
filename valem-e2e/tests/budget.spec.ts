@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createModel, deleteModel, fillAndBlur, openModel, switchTab, uid, BACKEND } from './helpers';
+import { createModel, deleteModel, expectTile, fillAndBlur, openModel, switchTab, uid, BACKEND } from './helpers';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -133,8 +133,8 @@ test.describe('Personal Budget Tracker — multi-view navigation', () => {
 
     await page.getByRole('button', { name: 'Summary' }).first().click();
 
-    await expect(page.getByTestId('totalIncomeLabel')).toContainText('3000', { timeout: 10000 });
-    await expect(page.getByTestId('totalExpensesLabel')).toContainText('0');
+    await expectTile(page, 'totalIncomeLabel', '3000');
+    await expectTile(page, 'totalExpensesLabel', '0');
   });
 
   test('balance = totalIncome − totalExpenses across views', async ({ page }) => {
@@ -153,9 +153,9 @@ test.describe('Personal Budget Tracker — multi-view navigation', () => {
     // Navigate to Summary
     await page.getByRole('button', { name: 'Summary' }).first().click();
 
-    await expect(page.getByTestId('totalIncomeLabel')).toContainText('5000', { timeout: 10000 });
-    await expect(page.getByTestId('totalExpensesLabel')).toContainText('1500', { timeout: 10000 });
-    await expect(page.getByTestId('balanceLabel')).toContainText('3500', { timeout: 10000 });
+    await expectTile(page, 'totalIncomeLabel', '5000');
+    await expectTile(page, 'totalExpensesLabel', '1500');
+    await expectTile(page, 'balanceLabel', '3500');
   });
 
   // ── Status badge ──────────────────────────────────────────────────────────

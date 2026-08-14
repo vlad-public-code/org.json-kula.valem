@@ -9,6 +9,8 @@ import org.json_kula.valem.core.model.ConstraintSpec;
 import org.json_kula.valem.core.model.DefaultValueSpec;
 import org.json_kula.valem.core.model.DerivationSpec;
 import org.json_kula.valem.core.model.EffectSpec;
+import org.json_kula.valem.core.model.LibraryLayer;
+import org.json_kula.valem.core.model.LibrarySpec;
 import org.json_kula.valem.core.model.MetaDerivationSpec;
 import org.json_kula.valem.core.model.ModelSpec;
 import org.json_kula.valem.core.model.TestCase;
@@ -64,7 +66,9 @@ public record SpecEvolution(
         List<ComponentRemove>   removeComponents,   // per-view component removals (by component id)
         Map<String, JsonNode>   upsertConstants,    // constant name → value (wholesale per name)
         List<String>            removeConstants,    // constant names to drop (rejected if referenced)
-        List<TestCase>          newTests            // full replacement of the embedded test list (null = keep)
+        List<TestCase>          newTests,           // full replacement of the embedded test list (null = keep)
+        LibraryLayer            newLibrary,         // replaces THIS MODEL'S OWN library layer (null = keep)
+        boolean                 clearLibrary        // true drops the own layer (newLibrary must be null)
 ) {
     /** A component upsert: place {@code component} within {@code viewId} at the given location. */
     public record ComponentUpsert(String viewId, String parentId, String beforeId, JsonNode component) {
@@ -132,7 +136,8 @@ public record SpecEvolution(
             @JsonProperty("removeComponents")      List<ComponentRemove>    removeComponents,
             @JsonProperty("upsertConstants")       Map<String, JsonNode>    upsertConstants,
             @JsonProperty("removeConstants")       List<String>             removeConstants,
-            @JsonProperty("newTests")              List<TestCase>           newTests) {
+            @JsonProperty("newTests")              List<TestCase>           newTests,
+            @JsonProperty("newLibrary")            JsonNode                 newLibrary) {
         return new SpecEvolution(
                 newVersion,
                 removeDerivations     != null ? List.copyOf(removeDerivations)     : List.of(),
@@ -167,12 +172,32 @@ public record SpecEvolution(
                 removeComponents      != null ? List.copyOf(removeComponents)      : List.of(),
                 upsertConstants       != null ? new LinkedHashMap<>(upsertConstants) : Map.of(),
                 removeConstants       != null ? List.copyOf(removeConstants)       : List.of(),
-                newTests              != null ? List.copyOf(newTests)              : null);
+                newTests              != null ? List.copyOf(newTests)              : null,
+                readOwnLayer(newLibrary),
+                newLibrary != null && newLibrary.isNull());
     }
 
     /** Normalizes an explicit JSON {@code null} ({@link JsonNode#isNull()}) to a Java {@code null}. */
     private static JsonNode absentIfNull(JsonNode node) {
         return node == null || node.isNull() ? null : node;
+    }
+
+    /**
+     * Reads {@code newLibrary} as the model's own layer. Accepts a bare definition string or an
+     * object with {@code define}; an explicit JSON {@code null} means "clear" and is carried by the
+     * separate {@code clearLibrary} flag, because a record cannot distinguish absent from null-valued.
+     */
+    private static LibraryLayer readOwnLayer(JsonNode node) {
+        if (node == null || node.isNull() || node.isMissingNode()) return null;
+        LibrarySpec parsed = LibrarySpec.from(node);
+        if (parsed == null) return null;
+        LibraryLayer own = parsed.ownLayer();
+        if (own == null) {
+            throw new IllegalArgumentException(
+                    "SpecEvolution: newLibrary must carry a \"define\" expression — inherited layers "
+                    + "are changed by re-materializing against a new version, never by an evolution");
+        }
+        return own;
     }
 
     /** True when this evolution changes the schema (wholesale or via any diff tier). */
@@ -203,6 +228,7 @@ public record SpecEvolution(
                 base.effects(), upsertEffects, removeEffects, EffectSpec::id);
         Map<String, JsonNode>    constants       = evolveConstants(base);
         List<TestCase>           tests           = newTests != null ? newTests : base.tests();
+        LibrarySpec              library         = evolveLibrary(base);
 
         ModelSpec evolved = ModelSpec.of(
                 base.id(), version, schema,
@@ -212,7 +238,11 @@ public record SpecEvolution(
                 base.template(),   // carry the branch parent forward
                 base.lineage(),    // carry pinned provenance forward
                 null,   // initialState (removed)
-                null);  // actions (removed)
+                null,   // actions (removed)
+                library);
+
+        // Against the EVOLVED spec, so one evolution may retire a function and rewrite its callers.
+        guardLibraryDrops(base, evolved);
 
         ModelSpecValidator.ValidationResult validation = ModelSpecValidator.validate(evolved);
         if (!validation.isValid()) {
@@ -495,6 +525,62 @@ public record SpecEvolution(
             parent.set(key, created);
             return created;
         }
+    }
+
+    // ── Library evolution ────────────────────────────────────────────────────────
+
+    /**
+     * Applies {@code newLibrary} / {@code clearLibrary} to the base spec's library.
+     *
+     * <p>Only the model's <b>own</b> layer is evolvable. Inherited layers are pinned provenance
+     * (ref + version + digest); changing one in place would unpin it from the digest recorded in
+     * {@code lineage}, so they change only by re-materializing against a new version range —
+     * the same rule the references design states for templates.
+     *
+     * <p>Dropping or replacing the own layer is guarded: any export the new library no longer
+     * provides but the spec still calls is reported by name and location, rather than being left to
+     * surface as a per-expression "not defined" error (or, worse, a blank field at runtime).
+     */
+    private LibrarySpec evolveLibrary(ModelSpec base) {
+        if (newLibrary != null && clearLibrary) {
+            throw new IllegalArgumentException(
+                    "SpecEvolution: newLibrary cannot be combined with an explicit null (clear)");
+        }
+        if (newLibrary == null && !clearLibrary) return base.library();     // absent = keep
+
+        return base.library() == null
+                ? (newLibrary == null ? null : new LibrarySpec(List.of(newLibrary), List.of(), null))
+                : base.library().withOwnLayer(newLibrary);
+    }
+
+    /**
+     * Rejects an evolution that drops a library export the <b>evolved</b> spec still calls.
+     *
+     * <p>Scanning the evolved spec rather than the base is what lets one evolution both retire a
+     * function and rewrite the expressions that used it. A dropped-but-still-called export would fail
+     * validation anyway (as an unresolvable name per expression); this guard exists because
+     * "newLibrary drops $marginal, still called at derivations[1]" is far more actionable than that
+     * list.
+     */
+    private void guardLibraryDrops(ModelSpec base, ModelSpec evolved) {
+        if (newLibrary == null && !clearLibrary) return;         // the library was not touched
+
+        ObjectNode constants = LibraryExports.constantsNodeOf(base);
+        Set<String> before = LibraryExports.namesOf(base.library(), constants);
+        Set<String> after  = LibraryExports.namesOf(evolved.library(),
+                LibraryExports.constantsNodeOf(evolved));
+        List<String> dropped = before.stream().filter(n -> !after.contains(n)).sorted().toList();
+        if (dropped.isEmpty()) return;
+
+        Map<String, List<String>> stillUsed = LibraryExports.referenceLocations(evolved, dropped);
+        if (stillUsed.isEmpty()) return;
+
+        String detail = stillUsed.entrySet().stream()
+                .map(e -> "$" + e.getKey() + " at " + String.join(", ", e.getValue()))
+                .collect(Collectors.joining("; "));
+        throw new IllegalArgumentException(
+                "SpecEvolution: newLibrary drops " + detail
+                + ". Keep the export, or remove the expressions that call it in the same evolution.");
     }
 
     // ── Constants evolution ──────────────────────────────────────────────────────

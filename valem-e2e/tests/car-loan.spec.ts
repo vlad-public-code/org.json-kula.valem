@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createModel, deleteModel, fillAndBlur, openModel, switchTab, uid } from './helpers';
+import { createModel, deleteModel, expectTile, fillAndBlur, openModel, switchTab, uid } from './helpers';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -50,10 +50,10 @@ test.describe('Car Loan Calculator view', () => {
     await fillAndBlur(page, 'Term (months)', '60');
 
     // Total payment = 386.66 * 60 = 23 199.60
-    await expect(page.getByTestId('totalLabel')).toContainText('23199.6');
+    await expectTile(page, 'totalLabel', '23199.60');
 
     // Total interest = 23 199.60 - 20 000 = 3 199.60
-    await expect(page.getByTestId('interestLabel')).toContainText('3199.6');
+    await expectTile(page, 'interestLabel', '3199.60');
   });
 
   test('amortization schedule table has one row per month', async ({ page }) => {

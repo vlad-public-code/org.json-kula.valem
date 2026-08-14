@@ -48,38 +48,42 @@
       }
     }
   },
+  "library": {
+    "description": "Money rounding and the excess-over-threshold rule, shared by every derivation.",
+    "define": "( $money := function($n) { $round($n, 2) }; $excessOver := function($value, $threshold) { ( $x := $value - $threshold; $money($x > 0 ? $x : 0) ) }; [\"money\", \"excessOver\"] )"
+  },
   "derivations": [
     {
       "path": "$.co2Over",
-      "expr": "($x := co2 - 117; $round($x > 0 ? $x : 0, 2))"
+      "expr": "$excessOver(co2, 117)"
     },
     {
       "path": "$.massOver",
-      "expr": "($x := mass - 2000; $round($x > 0 ? $x : 0, 2))"
+      "expr": "$excessOver(mass, 2000)"
     },
     {
       "path": "$.annualCo2",
-      "expr": "$round(3 * co2Over, 2)"
+      "expr": "$money(3 * co2Over)"
     },
     {
       "path": "$.annualWeight",
-      "expr": "$round(0.2 * massOver, 2)"
+      "expr": "$money(0.2 * massOver)"
     },
     {
       "path": "$.annualTax",
-      "expr": "$round(50 + annualCo2 + annualWeight, 2)"
+      "expr": "$money(50 + annualCo2 + annualWeight)"
     },
     {
       "path": "$.regCo2",
-      "expr": "$round(5 * co2Over, 2)"
+      "expr": "$money(5 * co2Over)"
     },
     {
       "path": "$.registrationTax",
-      "expr": "$round(300 + regCo2, 2)"
+      "expr": "$money(300 + regCo2)"
     },
     {
       "path": "$.firstYearTotal",
-      "expr": "$round(annualTax + registrationTax, 2)"
+      "expr": "$money(annualTax + registrationTax)"
     }
   ],
   "constraints": [],

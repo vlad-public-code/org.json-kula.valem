@@ -3,6 +3,7 @@ package org.json_kula.valem.view.engine;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.json_kula.jsonata_jvm.JsonataBindings;
+import org.json_kula.jsonata_jvm.JsonataBoundFunction;
 import org.json_kula.valem.core.engine.ExpressionCache;
 import org.json_kula.valem.core.state.PathConverter;
 import org.json_kula.valem.view.model.BadgeSpec;
@@ -73,12 +74,56 @@ public final class ViewEvaluator {
             ExpressionCache exprCache,
             ObjectNode constants
     ) {
-        JsonataBindings bindings = constants != null
-                ? new JsonataBindings().bindValue("const", constants) : null;
+        return evaluate(modelId, view, mergedDocument, metaCache, exprCache, constants, null, null);
+    }
+
+    /**
+     * Same as above, additionally binding the model's library exports so a view expression can call
+     * {@code $myFn(...)} exactly as a derivation does.
+     *
+     * <p>Note that {@code $const} is bound <b>whenever a library is present</b>, even if the model
+     * declares no constants. A library function that reads {@code $const} resolves it against the
+     * calling evaluation, not against the bindings the library was compiled with — so a view that
+     * skipped the binding would make that function silently return nothing here while working
+     * everywhere else.
+     *
+     * @param libraryFunctions library exports that are callable functions; may be {@code null}
+     * @param libraryConstants library exports that evaluated to values; may be {@code null}
+     */
+    public static EvaluatedView evaluate(
+            String modelId,
+            ViewSpec view,
+            ObjectNode mergedDocument,
+            Map<String, JsonNode> metaCache,
+            ExpressionCache exprCache,
+            ObjectNode constants,
+            Map<String, JsonataBoundFunction> libraryFunctions,
+            Map<String, JsonNode> libraryConstants
+    ) {
+        boolean hasLibrary = (libraryFunctions != null && !libraryFunctions.isEmpty())
+                || (libraryConstants != null && !libraryConstants.isEmpty());
+
+        JsonataBindings bindings = buildBindings(constants, libraryFunctions, libraryConstants, hasLibrary,
+                mergedDocument);
         List<EvaluatedComponent> components = view.components().stream()
                 .map(c -> evaluateComponent(c, mergedDocument, metaCache, exprCache, bindings))
                 .toList();
         return new EvaluatedView(modelId, view.id(), view.label(), view.layout(), components);
+    }
+
+    /** Builds the shared bindings for one view evaluation, or {@code null} when there are none. */
+    private static JsonataBindings buildBindings(
+            ObjectNode constants,
+            Map<String, JsonataBoundFunction> libraryFunctions,
+            Map<String, JsonNode> libraryConstants,
+            boolean hasLibrary,
+            ObjectNode mergedDocument) {
+        if (constants == null && !hasLibrary) return null;
+        JsonataBindings bindings = new JsonataBindings().bindValue("const",
+                constants != null ? constants : mergedDocument.objectNode());
+        if (libraryFunctions != null) bindings.bindFunctions(libraryFunctions);
+        if (libraryConstants != null) libraryConstants.forEach(bindings::bindValue);
+        return bindings;
     }
 
     static EvaluatedComponent evaluateComponent(

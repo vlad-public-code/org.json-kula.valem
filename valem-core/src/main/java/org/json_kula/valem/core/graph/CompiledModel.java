@@ -2,6 +2,7 @@ package org.json_kula.valem.core.graph;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.json_kula.valem.core.engine.LibraryCache;
 import org.json_kula.valem.core.model.ConstraintSpec;
 import org.json_kula.valem.core.model.DerivationSpec;
 import org.json_kula.valem.core.model.MetaDerivationSpec;
@@ -36,6 +37,10 @@ public final class CompiledModel {
     // Named constants materialized into a single object node, bound as $const in every expression.
     private final ObjectNode constantsNode;
 
+    // The model's compiled library layers and their merged exports, bound in every expression.
+    // Compiled once here (through the process-wide LibraryCache) rather than per evaluation.
+    private final LibraryCache.Compiled library;
+
     // Bounded LRU of resolved static schema fragments keyed by concrete field path (audit CPU-10):
     // repeated reads/mutations of the same field skip the SchemaPaths navigation + deep copy. Values
     // are the canonical resolved fragment; callers get a deep copy so they may mutate it freely.
@@ -60,6 +65,9 @@ public final class CompiledModel {
         this.metaDerivationByKey = Collections.unmodifiableMap(metaDerivationByKey);
         this.constraints         = Collections.unmodifiableList(constraints);
         this.constantsNode       = buildConstantsNode(spec);
+        // After constants: a layer is defined with $const bound, and the constants are part of its
+        // cache key (an exported *value* is computed at definition time).
+        this.library             = LibraryCache.compile(spec.libraryLayers(), this.constantsNode);
     }
 
     private static ObjectNode buildConstantsNode(ModelSpec spec) {
@@ -79,6 +87,29 @@ public final class CompiledModel {
      * JSONata evaluation. Always non-null (empty object when no constants are declared).
      */
     public ObjectNode constantsNode()          { return constantsNode; }
+
+    /**
+     * Returns the model's library exports that are callable functions, keyed without the leading
+     * {@code $} and ready for {@code JsonataBindings.bindFunctions}. Empty when no library is
+     * declared. A later layer's export has already displaced an earlier one of the same name.
+     */
+    public Map<String, org.json_kula.jsonata_jvm.JsonataBoundFunction> libraryFunctions() {
+        return library.functions();
+    }
+
+    /**
+     * Returns the model's library exports that evaluated to values rather than functions, keyed the
+     * same way and ready for {@code JsonataBindings.bindValue}. They are values, not expressions:
+     * each layer's definition ran once, when it was compiled.
+     */
+    public Map<String, com.fasterxml.jackson.databind.JsonNode> libraryConstants() {
+        return library.constants();
+    }
+
+    /** Every library export name, functions and values alike. Empty when no library is declared. */
+    public java.util.Set<String> libraryExports() {
+        return library.names();
+    }
 
     /**
      * Returns the {@link DerivationSpec} for the given field path, or {@code null}

@@ -44,6 +44,7 @@ exactly as the REST API and console are.
 | `evolve_spec` | `POST /models/{id}/spec/evolve` | `id`, `evolution` (a SpecEvolution) | — |
 | `delete_model` | `DELETE /models/{id}` | `id` | — |
 | `get_view` | `GET /models/{id}/view[/{viewId}]` | `id` | `viewId` |
+| `get_library` | `GET /models/{id}/library` | `id` | — |
 | `upload_blob` | `POST /models/blobs` | `data` (base64) | `mediaType` |
 | `download_blob` | `GET /models/{id}/blobs/{blobId}` | `blobId` | `modelId` |
 | `pair_browser` | `POST /sandbox/pair` + `/token` | — | — |
@@ -93,7 +94,7 @@ core even in remote mode.
 |---|---|---|
 | `get_domain_guidance` | `DomainGuidanceCatalog` | Read the model description in **any language**, pass the matching topic ids (a fixed menu enumerated in the tool's schema — amortization schedules, progressive tax/fee charges, classification, date math, percentages, unit conversion, compound growth, weighted averages, eligibility, proration, …) → vetted "hard shape" instructions to follow. Call it **before** authoring. Topics are extensible via `valem.llm.domain-guidance.topics-file` / `VALEM_DOMAIN_GUIDANCE_TOPICS_FILE` (see [configuration](../deployment/configuration.md)). |
 | `validate_spec` | `ModelSpecValidator` | Validate a spec **without creating it** → `{valid, errors[], warnings[]}` (each finding has a `location` + `message`). Draft → validate → fix → repeat. |
-| `eval_expression` | the runtime's JSONata compiler | Evaluate one JSONata expression against a sample input → the computed value or the exact compile/eval error. Verify a derivation/constraint expression before committing it. |
+| `eval_expression` | the runtime's JSONata compiler | Evaluate one JSONata expression against a sample input → the computed value or the exact compile/eval error. Verify a derivation/constraint expression before committing it. Pass `library` (a definition expression) and `constants` when the expression calls `$myFn(...)` — without them every library call fails as undefined. |
 | `test_spec` | `TestCaseRunner` | Run a spec's embedded tests (or ad-hoc `given`→`expect` cases, keyed by canonical JSON Path) in a throwaway runtime → pass/fail + per-field failures. Certify domain behavior before promotion. |
 | `dry_run` | throwaway `ModelService` | Compile a candidate spec in an isolated runtime, apply optional sample mutations, return the resulting merged state — preview the full reactive cascade without registering anything. |
 

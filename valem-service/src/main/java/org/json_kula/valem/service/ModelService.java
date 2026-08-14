@@ -3,6 +3,7 @@ package org.json_kula.valem.service;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.json_kula.tracked_json.json_patch.JsonPatch;
 import org.json_kula.tracked_json.json_patch.JsonPatchException;
@@ -22,6 +23,9 @@ import org.json_kula.valem.core.graph.ModelSpecCompiler;
 import org.json_kula.valem.core.graph.ModelSpecValidator;
 import org.json_kula.valem.core.graph.SpecEvolution;
 import org.json_kula.valem.core.graph.SpecExpressions;
+import org.json_kula.valem.core.engine.LibraryCache;
+import org.json_kula.valem.core.model.LibraryLayer;
+import org.json_kula.valem.core.model.LibrarySpec;
 import org.json_kula.valem.core.model.BlobRef;
 import org.json_kula.valem.core.model.ModelSpec;
 import org.json_kula.valem.core.state.ModelState;
@@ -817,6 +821,100 @@ public class ModelService implements ModelOperations, ChangeSubscribable {
         return VIEW_MAPPER.valueToTree(getEvaluatedView(id, viewId));
     }
 
+    /**
+     * Returns the model's library vocabulary, or {@code null} when it declares no library.
+     *
+     * <p>Shape: {@code { description, layers: [...], exports: [{name, kind, signature, arity,
+     * origin, value?}] }}. Exports are read from the <em>compiled</em> library, so the list is what
+     * an expression can actually call — not a re-parse of the definition text, which cannot know
+     * which of the bound names a computed export list actually named.
+     */
+    @Override
+    public JsonNode getLibrary(String id) {
+        ModelRuntime rt = requireRuntime(id);
+        LibrarySpec library = rt.model().spec().library();
+        if (library == null) return null;
+
+        ObjectNode out = VIEW_MAPPER.createObjectNode();
+        if (library.description() != null) out.put("description", library.description());
+
+        ArrayNode layers = out.putArray("layers");
+        for (LibraryLayer layer : library.layers()) {
+            ObjectNode l = layers.addObject();
+            l.put("origin", layer.origin());
+            if (layer.ref() != null)     l.put("ref", layer.ref());
+            if (layer.version() != null) l.put("version", layer.version());
+            if (layer.digest() != null)  l.put("digest", layer.digest());
+            l.put("define", layer.define());
+        }
+
+        // Which layer an export came from: the last layer that exports the name wins, matching the
+        // bind order (a later layer's export displaces an earlier one).
+        Map<String, String> originByName = new HashMap<>();
+        ObjectNode constantsNode = rt.model().constantsNode();
+        for (LibraryLayer layer : library.layers()) {
+            try {
+                LibraryCache.compile(List.of(layer), constantsNode).names()
+                        .forEach(name -> originByName.put(name, layer.origin()));
+            } catch (RuntimeException ignored) {
+                // A layer that no longer compiles cannot contribute exports; the merged maps below
+                // are the authority, and validation reports the failure separately.
+            }
+        }
+
+        ArrayNode exports = out.putArray("exports");
+        rt.model().libraryFunctions().forEach((name, fn) -> {
+            ObjectNode e = exports.addObject();
+            e.put("name", name);
+            e.put("kind", "function");
+            String signature = fn.getFunctionSignature();
+            if (signature != null) {
+                e.put("signature", signature);
+                int arity = signatureArity(signature);
+                if (arity >= 0) e.put("arity", arity);
+            }
+            e.put("origin", originByName.getOrDefault(name, "local"));
+        });
+        rt.model().libraryConstants().forEach((name, value) -> {
+            ObjectNode e = exports.addObject();
+            e.put("name", name);
+            e.put("kind", "constant");
+            e.set("value", value);
+            e.put("origin", originByName.getOrDefault(name, "local"));
+        });
+        return out;
+    }
+
+    /**
+     * Parameter count of a {@code <params:return>} signature, or {@code -1} when it is absent or not
+     * a fixed arity (variadic {@code +}, or an unparseable override).
+     */
+    private static int signatureArity(String signature) {
+        int close = signature.indexOf(':');
+        if (!signature.startsWith("<") || close < 0) return -1;
+        String params = signature.substring(1, close);
+        if (params.indexOf('+') >= 0) return -1;
+        int count = 0;
+        for (int i = 0; i < params.length(); i++) {
+            char c = params.charAt(i);
+            if (c == '<') {                            // a parametrised type: a<s>, f<n:n>
+                int depth = 1;
+                while (++i < params.length() && depth > 0) {
+                    if (params.charAt(i) == '<') depth++;
+                    else if (params.charAt(i) == '>') depth--;
+                }
+                continue;                              // already counted by its base symbol
+            }
+            if (c == '(') {                            // a union type: (sao)
+                while (i < params.length() && params.charAt(i) != ')') i++;
+                count++;
+            } else if (c != '?' && c != '-') {
+                count++;
+            }
+        }
+        return count;
+    }
+
     private EvaluatedView getEvaluatedViewInternal(String id, String viewId, ModelRuntime rt, JsonNode rawView) {
         ViewDefinition vd;
         try {
@@ -827,7 +925,8 @@ public class ModelService implements ModelOperations, ChangeSubscribable {
         ViewSpec view = viewId == null ? findDefaultView(vd, id) : findView(vd, viewId, id);
         return ViewEvaluator.evaluate(
                 id, view, rt.fullState(), rt.stateView().metaCache(),
-                rt.expressionCache(), rt.model().constantsNode());
+                rt.expressionCache(), rt.model().constantsNode(),
+                rt.model().libraryFunctions(), rt.model().libraryConstants());
     }
 
     /**
@@ -854,7 +953,8 @@ public class ModelService implements ModelOperations, ChangeSubscribable {
         }
         EvaluatedView evaluated = ViewEvaluator.evaluate(
                 id, view, rt.fullState(), rt.stateView().metaCache(),
-                rt.expressionCache(), rt.model().constantsNode());
+                rt.expressionCache(), rt.model().constantsNode(),
+                rt.model().libraryFunctions(), rt.model().libraryConstants());
         Map<String, EvaluatedComponent> delta = new HashMap<>();
         flatComponents(evaluated.components())
                 .filter(c -> c.bind() != null && changedPaths.contains(c.bind()))

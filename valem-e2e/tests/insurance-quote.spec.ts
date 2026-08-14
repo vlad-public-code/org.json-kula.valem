@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { createModel, deleteModel, fillAndBlur, openModel, switchTab, uid } from './helpers';
+import {
+  createModel, deleteModel, expectStateNumber, expectTile, fillAndBlur, openModel, switchTab, uid,
+} from './helpers';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -41,11 +43,11 @@ test.describe('Term Life Insurance Quote view', () => {
     await fillAndBlur(page, 'Coverage amount', '100000');
 
     await expect(page.getByTestId('decision')).toContainText('quoted');
-    await expect(page.getByTestId('annual')).toContainText('150');
-    await expect(page.getByTestId('monthly')).toContainText('12.5');
+    await expectTile(page, 'annual', '150');
+    await expectTile(page, 'monthly', '12.5');
   });
 
-  test('smoker aged 55, $250k -> $787.50/yr', async ({ page }) => {
+  test('smoker aged 55, $250k -> $787.50/yr', async ({ page, request }) => {
     await openModel(page, modelId);
     await switchTab(page, 'view');
 
@@ -53,8 +55,11 @@ test.describe('Term Life Insurance Quote view', () => {
     await page.getByLabel('Smoker').click();
     await fillAndBlur(page, 'Coverage amount', '250000');
 
-    await expect(page.getByTestId('annual')).toContainText('787.5');
-    await expect(page.getByTestId('monthly')).toContainText('65.625');
+    await expectTile(page, 'annual', '787.50');
+    await expectTile(page, 'monthly', '65.63');        // tile rounds to 2 dp; exact is 65.625
+
+    // The monthly premium is the golden value this case exists for, so check it unrounded.
+    await expectStateNumber(request, modelId, '/quote/monthlyPremium', 65.625);
   });
 
   test('applicant over the maximum insurable age is declined', async ({ page }) => {

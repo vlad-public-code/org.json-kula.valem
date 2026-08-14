@@ -5,6 +5,8 @@ import org.json_kula.valem.core.model.ConstraintSpec;
 import org.json_kula.valem.core.model.DefaultValueSpec;
 import org.json_kula.valem.core.model.DerivationSpec;
 import org.json_kula.valem.core.model.EffectSpec;
+import org.json_kula.valem.core.model.LibraryLayer;
+import org.json_kula.valem.core.model.LibrarySpec;
 import org.json_kula.valem.core.model.LineageEntry;
 import org.json_kula.valem.core.model.MetaDerivationSpec;
 import org.json_kula.valem.core.model.ModelCoordinate;
@@ -159,7 +161,36 @@ public class TemplateMaterializer {
                 mergeByKey(base.effects(), overlay.effects(), EffectSpec::id),
                 null,   // template resolved away
                 null,   // lineage set at the end
-                null, null);
+                null, null,
+                mergeLibraries(base.library(), overlay.library()));
+    }
+
+    /**
+     * Concatenates the base's library layers before the overlay's own, so a branch both inherits and
+     * may override its template's vocabulary (design §20.2). Deliberately <em>not</em> the
+     * "overlay wins wholesale" rule the other single-valued sections use: restating the parent's
+     * definition to extend it is exactly the duplication a library exists to remove.
+     *
+     * <p>The base's own layer becomes an inherited layer of the merged spec only in the sense of
+     * ordering — pinning (ref/version/digest) is written by the caller that resolved the template,
+     * not here, since {@code mergeOver} does not know the coordinate it resolved from.
+     */
+    private static LibrarySpec mergeLibraries(LibrarySpec base, LibrarySpec overlay) {
+        if (base == null)    return overlay;
+        if (overlay == null) return base;
+
+        List<LibraryLayer> layers = new ArrayList<>(base.layers());
+        for (LibraryLayer l : overlay.layers()) {
+            // An inherited layer the overlay already carries (same coordinate) is not duplicated —
+            // a diamond in the template graph must contribute one layer, not two.
+            boolean duplicate = l.isInherited()
+                    && layers.stream().anyMatch(k -> l.ref().equals(k.ref()));
+            if (!duplicate) layers.add(l);
+        }
+        List<String> refs = new ArrayList<>(base.extendsRefs());
+        overlay.extendsRefs().stream().filter(r -> !refs.contains(r)).forEach(refs::add);
+        return new LibrarySpec(List.copyOf(layers), List.copyOf(refs),
+                overlay.description() != null ? overlay.description() : base.description());
     }
 
     /** Overlay entries replace base entries with the same key (base order preserved), new ones appended. */
@@ -180,7 +211,8 @@ public class TemplateMaterializer {
                 effects,
                 null,        // template inlined away — the model is now self-contained
                 lineage,
-                null, null);
+                null, null,
+                merged.library());
     }
 
     private static boolean isEmptyObject(JsonNode n) {
