@@ -1,0 +1,248 @@
+{
+  "_name": "Retirement / FIRE Planner",
+  "_description": "When you can stop working: savings rate, the real (inflation-adjusted) return, the portfolio you need at your withdrawal rate, and the age your projection crosses it.",
+  "id": "fire-planner",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "currentAge": { "type": "integer", "minimum": 16, "maximum": 80 },
+      "currentPortfolio": { "type": "number", "minimum": 0, "description": "What you have invested today" },
+      "annualIncome": { "type": "number", "minimum": 0, "description": "Take-home income per year" },
+      "annualSpending": { "type": "number", "minimum": 0, "description": "What you spend per year today" },
+      "retirementSpending": { "type": "number", "minimum": 0, "description": "What you want to spend each year in retirement, in today's money" },
+      "nominalReturnPct": { "type": "number", "minimum": 0, "maximum": 20, "description": "Expected investment return before inflation" },
+      "inflationPct": { "type": "number", "minimum": 0, "maximum": 20 },
+      "swrPct": { "type": "number", "minimum": 0.5, "maximum": 10, "description": "Safe withdrawal rate — the 4% rule is the usual starting point" },
+      "pensionAnnual": { "type": "number", "minimum": 0, "description": "State or workplace pension you expect each year" },
+      "targetRetirementAge": { "type": "integer", "minimum": 30, "maximum": 90 },
+      "horizonYears": { "type": "integer", "minimum": 1, "maximum": 60 },
+
+      "annualContribution": { "type": "number", "readOnly": true },
+      "savingsRatePct": { "type": "number", "readOnly": true },
+      "realReturnPct": { "type": "number", "readOnly": true },
+      "fiNumber": { "type": "number", "readOnly": true },
+      "coastNumber": { "type": "number", "readOnly": true },
+      "projection": {
+        "type": "array",
+        "readOnly": true,
+        "items": {
+          "type": "object",
+          "properties": {
+            "year": { "type": "integer" },
+            "age": { "type": "integer" },
+            "contributed": { "type": "number" },
+            "portfolio": { "type": "number" },
+            "target": { "type": "number" }
+          }
+        }
+      },
+      "fiAge": { "type": "integer", "readOnly": true, "description": "Age the projection first reaches the FI number; 0 if it never does" },
+      "yearsToFi": { "type": "integer", "readOnly": true },
+      "fiReached": { "type": "boolean", "readOnly": true },
+      "finalPortfolio": { "type": "number", "readOnly": true },
+      "sustainableWithdrawal": { "type": "number", "readOnly": true }
+    },
+    "required": ["currentAge", "annualIncome", "annualSpending", "retirementSpending"]
+  },
+  "library": {
+    "layers": [
+      {
+        "define": "( $grow := function($start, $contribution, $rate, $years) { $rate = 0 ? $start + $contribution * $years : $start * $power(1 + $rate, $years) + $contribution * ($power(1 + $rate, $years) - 1) / $rate }; [\"grow\"] )"
+      }
+    ]
+  },
+  "defaultValues": [
+    {
+      "path": "$",
+      "expr": "{\"currentAge\": 30, \"currentPortfolio\": 100000, \"annualIncome\": 100000, \"annualSpending\": 60000, \"retirementSpending\": 60000, \"nominalReturnPct\": 7, \"inflationPct\": 3, \"swrPct\": 4, \"pensionAnnual\": 0, \"targetRetirementAge\": 60, \"horizonYears\": 40}"
+    }
+  ],
+  "derivations": [
+    { "path": "$.annualContribution", "expr": "$round(annualIncome - annualSpending, 2)" },
+    { "path": "$.savingsRatePct", "expr": "annualIncome <= 0 ? 0 : $round((annualIncome - annualSpending) / annualIncome * 100, 1)" },
+    { "path": "$.realReturnPct", "expr": "$round(((1 + nominalReturnPct / 100) / (1 + inflationPct / 100) - 1) * 100, 4)" },
+    { "path": "$.fiNumber", "expr": "$max([0, $round((retirementSpending - pensionAnnual) / (swrPct / 100), 2)])" },
+    { "path": "$.coastNumber", "expr": "( $n := targetRetirementAge - currentAge; $n <= 0 ? fiNumber : $round(fiNumber / $power(1 + realReturnPct / 100, $n), 2) )" },
+    {
+      "path": "$.projection",
+      "expr": "$map([0..horizonYears], function($y) { { \"year\": $y, \"age\": currentAge + $y, \"contributed\": $round(currentPortfolio + annualContribution * $y, 2), \"portfolio\": $round($grow(currentPortfolio, annualContribution, realReturnPct / 100, $y), 2), \"target\": fiNumber } })"
+    },
+    { "path": "$.fiAge", "expr": "( $hits := $map(projection, function($p) { $p.portfolio >= $p.target ? $p.age : 0 })[$ > 0]; $count($hits) = 0 ? 0 : $min($hits) )" },
+    { "path": "$.fiReached", "expr": "fiAge > 0" },
+    { "path": "$.yearsToFi", "expr": "fiAge > 0 ? fiAge - currentAge : 0" },
+    { "path": "$.finalPortfolio", "expr": "( $p := $map(projection, function($r) { $r.portfolio }); $i := $count($p) - 1; $p[$i] )" },
+    { "path": "$.sustainableWithdrawal", "expr": "$round(finalPortfolio * swrPct / 100, 2)" }
+  ],
+  "constraints": [
+    { "id": "swr-positive", "expr": "swrPct > 0", "message": "The withdrawal rate must be above zero — it is what turns a pot into an income", "policy": "rollback" },
+    { "id": "retire-after-now", "expr": "targetRetirementAge > currentAge", "message": "Target retirement age must be later than your current age", "policy": "rollback" },
+    { "id": "spending-within-income", "expr": "annualSpending <= annualIncome", "message": "You are spending more than you earn, so the portfolio is being drawn down rather than built", "policy": "flag" }
+  ],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "FIRE planner",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "assumptions",
+            "type": "alert",
+            "variant": "info",
+            "label": "This is a projection from your assumptions",
+            "text": "Everything here follows from the return, inflation and withdrawal rate you choose. Real markets do not deliver a steady return, and the order of good and bad years matters as much as the average. Figures are in today's money throughout — the projection grows the portfolio at the real return, not the nominal one. Not financial advice."
+          },
+          {
+            "id": "todaySet",
+            "type": "fieldSet",
+            "legend": "Where you are now",
+            "components": [
+              { "id": "ageField", "type": "numericField", "label": "Your age", "bind": "$.currentAge", "placeholder": "30" },
+              { "id": "portfolioField", "type": "numericField", "label": "Invested today", "bind": "$.currentPortfolio", "placeholder": "100000" },
+              { "id": "incomeField", "type": "numericField", "label": "Take-home income / yr", "bind": "$.annualIncome", "placeholder": "100000" },
+              { "id": "spendingField", "type": "numericField", "label": "Spending / yr", "bind": "$.annualSpending", "placeholder": "60000" }
+            ]
+          },
+          {
+            "id": "targetSet",
+            "type": "fieldSet",
+            "legend": "What you are aiming at",
+            "components": [
+              { "id": "retSpendField", "type": "numericField", "label": "Retirement spending / yr (today's money)", "bind": "$.retirementSpending", "placeholder": "60000" },
+              { "id": "pensionField", "type": "numericField", "label": "State or workplace pension / yr", "bind": "$.pensionAnnual", "placeholder": "0" },
+              { "id": "targetAgeField", "type": "numericField", "label": "Target retirement age (for Coast FI)", "bind": "$.targetRetirementAge", "placeholder": "60" },
+              { "id": "swrField", "type": "sliderField", "label": "Safe withdrawal rate (%)", "bind": "$.swrPct", "min": 2, "max": 8, "step": 0.1 }
+            ]
+          },
+          {
+            "id": "marketSet",
+            "type": "fieldSet",
+            "legend": "Market assumptions",
+            "components": [
+              { "id": "returnField", "type": "sliderField", "label": "Nominal return per year (%)", "bind": "$.nominalReturnPct", "min": 0, "max": 15, "step": 0.5 },
+              { "id": "inflationField", "type": "sliderField", "label": "Inflation per year (%)", "bind": "$.inflationPct", "min": 0, "max": 10, "step": 0.5 },
+              { "id": "horizonField", "type": "sliderField", "label": "Project this many years", "bind": "$.horizonYears", "min": 5, "max": 60, "step": 1 }
+            ]
+          },
+          { "id": "sep1", "type": "separatorLine" },
+          {
+            "id": "headline",
+            "type": "group",
+            "layout": "horizontal",
+            "components": [
+              { "id": "fiAgeTile", "type": "statTile", "label": "Financially independent at", "bind": "$.fiAge", "format": "number", "caption": "0 means not within your projection" },
+              { "id": "yearsTile", "type": "statTile", "label": "Years to get there", "bind": "$.yearsToFi", "format": "number" },
+              { "id": "fiNumberTile", "type": "statTile", "label": "The number you need", "bind": "$.fiNumber", "format": "number", "caption": "spending divided by your withdrawal rate" },
+              { "id": "savingsRateTile", "type": "statTile", "label": "Savings rate", "bind": "$.savingsRatePct", "format": "number", "caption": "% of take-home saved" }
+            ]
+          },
+          {
+            "id": "secondary",
+            "type": "group",
+            "layout": "horizontal",
+            "components": [
+              { "id": "realReturnTile", "type": "statTile", "label": "Real return", "bind": "$.realReturnPct", "format": "number", "caption": "% after inflation — the one that matters" },
+              { "id": "coastTile", "type": "statTile", "label": "Coast FI number", "bind": "$.coastNumber", "format": "number", "caption": "have this and you can stop contributing" },
+              { "id": "contributionTile", "type": "statTile", "label": "Saved per year", "bind": "$.annualContribution", "format": "number" },
+              { "id": "withdrawalTile", "type": "statTile", "label": "Income at the end", "bind": "$.sustainableWithdrawal", "format": "number", "caption": "final portfolio at your withdrawal rate" }
+            ]
+          },
+          { "id": "sep2", "type": "separatorLine" },
+          {
+            "id": "projectionChart",
+            "type": "dataChart",
+            "label": "Portfolio against the number you need (today's money)",
+            "chartType": "line",
+            "bind": "$.projection",
+            "chartX": "age",
+            "chartSeries": [
+              { "field": "portfolio", "label": "Portfolio" },
+              { "field": "target", "label": "FI number" },
+              { "field": "contributed", "label": "Contributed" }
+            ]
+          },
+          {
+            "id": "projectionTable",
+            "type": "dataTable",
+            "label": "Year by year",
+            "bind": "$.projection",
+            "tableColumns": [
+              { "field": "year", "header": "Year", "width": "12%" },
+              { "field": "age", "header": "Age", "width": "12%" },
+              { "field": "contributed", "header": "Put in", "format": "number", "width": "25%" },
+              { "field": "portfolio", "header": "Portfolio", "format": "number", "width": "26%" },
+              { "field": "target", "header": "Target", "format": "number", "width": "25%" }
+            ],
+            "pageSize": 15
+          }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "age 30 with 100k invested, saving 40k of 100k, 7% nominal against 3% inflation, 4% withdrawal rate",
+      "given": {
+        "$.currentAge": 30,
+        "$.currentPortfolio": 100000,
+        "$.annualIncome": 100000,
+        "$.annualSpending": 60000,
+        "$.retirementSpending": 60000,
+        "$.nominalReturnPct": 7,
+        "$.inflationPct": 3,
+        "$.swrPct": 4
+      },
+      "expect": {
+        "$.annualContribution": 40000,
+        "$.savingsRatePct": 40,
+        "$.realReturnPct": 3.8835,
+        "$.fiNumber": 1500000,
+        "$.coastNumber": 478293.04,
+        "$.projection[0].portfolio": 100000,
+        "$.projection[1].portfolio": 143883.5,
+        "$.projection[22].portfolio": 1582779.59,
+        "$.fiAge": 52,
+        "$.yearsToFi": 22,
+        "$.fiReached": true,
+        "$.finalPortfolio": 4157295.48,
+        "$.sustainableWithdrawal": 166291.82
+      }
+    },
+    {
+      "description": "saving 60% instead of 40% brings independence forward five years",
+      "given": { "$.annualSpending": 40000 },
+      "expect": {
+        "$.annualContribution": 60000,
+        "$.savingsRatePct": 60,
+        "$.fiNumber": 1500000,
+        "$.fiAge": 47,
+        "$.yearsToFi": 17
+      }
+    },
+    {
+      "description": "a 12,000 pension cuts the number you need by exactly the pension capitalised at the withdrawal rate",
+      "given": { "$.pensionAnnual": 12000 },
+      "expect": {
+        "$.fiNumber": 1200000,
+        "$.coastNumber": 382634.43,
+        "$.fiAge": 48,
+        "$.yearsToFi": 18
+      }
+    },
+    {
+      "description": "spending everything you earn — the pot still compounds, but never reaches the target in the horizon",
+      "given": { "$.annualSpending": 100000 },
+      "expect": {
+        "$.annualContribution": 0,
+        "$.savingsRatePct": 0,
+        "$.fiAge": 0,
+        "$.fiReached": false,
+        "$.yearsToFi": 0,
+        "$.finalPortfolio": 459053.11
+      }
+    }
+  ]
+}

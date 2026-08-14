@@ -1,0 +1,292 @@
+{
+  "_name": "Car Total Cost of Ownership",
+  "_description": "What a car really costs to own: depreciation, financing interest, fuel or electricity, insurance, servicing, tyres, tax and the incidentals — as a total, a cost per kilometre, and a year-by-year breakdown.",
+  "id": "car-tco",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "purchasePrice": { "type": "number", "minimum": 0, "description": "List price paid for the car" },
+      "deposit": { "type": "number", "minimum": 0, "description": "Cash paid up front" },
+      "tradeIn": { "type": "number", "minimum": 0, "description": "Value of a car traded in" },
+      "aprPct": { "type": "number", "minimum": 0, "maximum": 40, "description": "Finance APR, percent" },
+      "loanTermMonths": { "type": "integer", "minimum": 0, "maximum": 120 },
+      "years": { "type": "integer", "minimum": 1, "maximum": 15, "description": "How long you keep the car" },
+      "annualDistance": { "type": "number", "minimum": 0, "description": "Distance driven per year" },
+      "fuelType": { "type": "string", "enum": ["petrol", "diesel", "hybrid", "ev"] },
+      "consumptionPer100": { "type": "number", "minimum": 0, "description": "Litres per 100 km, or kWh per 100 km for an EV" },
+      "unitPrice": { "type": "number", "minimum": 0, "description": "Price per litre, or per kWh for an EV" },
+      "insurancePerYear": { "type": "number", "minimum": 0 },
+      "servicingPerYear": { "type": "number", "minimum": 0 },
+      "repairsPerYear": { "type": "number", "minimum": 0, "description": "Allowance for unscheduled repairs" },
+      "tyreSetCost": { "type": "number", "minimum": 0 },
+      "tyreLifeKm": { "type": "number", "minimum": 1 },
+      "roadTaxPerYear": { "type": "number", "minimum": 0 },
+      "inspectionPerYear": { "type": "number", "minimum": 0 },
+      "parkingPerYear": { "type": "number", "minimum": 0 },
+      "tollsPerYear": { "type": "number", "minimum": 0 },
+      "breakdownCoverPerYear": { "type": "number", "minimum": 0 },
+
+      "financedAmount": { "type": "number", "readOnly": true },
+      "monthlyRate": { "type": "number", "readOnly": true },
+      "compoundFactor": { "type": "number", "readOnly": true },
+      "monthlyPayment": { "type": "number", "readOnly": true },
+      "totalInterest": { "type": "number", "readOnly": true },
+      "residualValue": { "type": "number", "readOnly": true },
+      "totalDepreciation": { "type": "number", "readOnly": true },
+      "energyCostPerYear": { "type": "number", "readOnly": true },
+      "tyreCostPerYear": { "type": "number", "readOnly": true },
+      "fixedCostPerYear": { "type": "number", "readOnly": true },
+      "yearly": {
+        "type": "array",
+        "readOnly": true,
+        "items": {
+          "type": "object",
+          "properties": {
+            "year": { "type": "integer" },
+            "depreciation": { "type": "number" },
+            "interest": { "type": "number" },
+            "energy": { "type": "number" },
+            "tyres": { "type": "number" },
+            "fixed": { "type": "number" },
+            "total": { "type": "number" },
+            "cumulative": { "type": "number" }
+          }
+        }
+      },
+      "totalCost": { "type": "number", "readOnly": true },
+      "costPerKm": { "type": "number", "readOnly": true },
+      "costPerMonth": { "type": "number", "readOnly": true },
+      "depreciationShare": { "type": "number", "readOnly": true }
+    },
+    "required": ["purchasePrice", "years", "annualDistance"]
+  },
+  "constants": {
+    "residualCurve": [0.80, 0.70, 0.62, 0.55, 0.49, 0.44, 0.39, 0.35, 0.31, 0.28],
+    "tailDepreciation": 0.10
+  },
+  "library": {
+    "layers": [
+      {
+        "define": "( $residualPct := function($year, $curve, $tail) { $year <= 0 ? 1 : ($year <= 10 ? $curve[$year - 1] : $curve[9] * $power(1 - $tail, $year - 10)) }; $balanceAt := function($m, $principal, $rate, $factor, $term) { ($term <= 0 or $principal <= 0) ? 0 : ($rate = 0 ? $principal * (1 - $m / $term) : $principal * ($factor - $power(1 + $rate, $m)) / ($factor - 1)) }; [\"residualPct\", \"balanceAt\"] )"
+      }
+    ]
+  },
+  "defaultValues": [
+    {
+      "path": "$",
+      "expr": "{\"purchasePrice\": 32000, \"deposit\": 6000, \"tradeIn\": 0, \"aprPct\": 6.5, \"loanTermMonths\": 60, \"years\": 5, \"annualDistance\": 15000, \"fuelType\": \"petrol\", \"consumptionPer100\": 6.5, \"unitPrice\": 1.75, \"insurancePerYear\": 650, \"servicingPerYear\": 400, \"repairsPerYear\": 250, \"tyreSetCost\": 480, \"tyreLifeKm\": 40000, \"roadTaxPerYear\": 180, \"inspectionPerYear\": 40, \"parkingPerYear\": 300, \"tollsPerYear\": 60, \"breakdownCoverPerYear\": 80}"
+    }
+  ],
+  "derivations": [
+    { "path": "$.financedAmount", "expr": "$max([0, $round(purchasePrice - deposit - tradeIn, 2)])" },
+    { "path": "$.monthlyRate", "expr": "aprPct / 1200" },
+    { "path": "$.energyCostPerYear", "expr": "$round(annualDistance / 100 * consumptionPer100 * unitPrice, 2)" },
+    { "path": "$.tyreCostPerYear", "expr": "$round($ceil(annualDistance * years / tyreLifeKm) * tyreSetCost / years, 2)" },
+    { "path": "$.fixedCostPerYear", "expr": "$round(insurancePerYear + servicingPerYear + repairsPerYear + roadTaxPerYear + inspectionPerYear + parkingPerYear + tollsPerYear + breakdownCoverPerYear, 2)" },
+    { "path": "$.residualValue", "expr": "$round(purchasePrice * $residualPct(years, $const.residualCurve, $const.tailDepreciation), 2)" },
+    { "path": "$.compoundFactor", "expr": "$power(1 + monthlyRate, loanTermMonths)" },
+    { "path": "$.totalDepreciation", "expr": "$round(purchasePrice - residualValue, 2)" },
+    { "path": "$.monthlyPayment", "expr": "(financedAmount <= 0 or loanTermMonths <= 0) ? 0 : (monthlyRate = 0 ? $round(financedAmount / loanTermMonths, 2) : $round(financedAmount * monthlyRate * compoundFactor / (compoundFactor - 1), 2))" },
+    { "path": "$.totalInterest", "expr": "$max([0, $round(monthlyPayment * loanTermMonths - financedAmount, 2)])" },
+    {
+      "path": "$.yearly",
+      "expr": "$map([1..years], function($y) { ( $m1 := $min([($y - 1) * 12, loanTermMonths]); $m2 := $min([$y * 12, loanTermMonths]); $b1 := $balanceAt($m1, financedAmount, monthlyRate, compoundFactor, loanTermMonths); $b2 := $balanceAt($m2, financedAmount, monthlyRate, compoundFactor, loanTermMonths); $int := $max([0, $round(monthlyPayment * ($m2 - $m1) - ($b1 - $b2), 2)]); $v0 := $round(purchasePrice * $residualPct($y - 1, $const.residualCurve, $const.tailDepreciation), 2); $v1 := $round(purchasePrice * $residualPct($y, $const.residualCurve, $const.tailDepreciation), 2); $dep := $round($v0 - $v1, 2); $cumInt := $max([0, $round(monthlyPayment * $m2 - (financedAmount - $b2), 2)]); {\"year\": $y, \"depreciation\": $dep, \"interest\": $int, \"energy\": energyCostPerYear, \"tyres\": tyreCostPerYear, \"fixed\": fixedCostPerYear, \"total\": $round($dep + $int + energyCostPerYear + tyreCostPerYear + fixedCostPerYear, 2), \"cumulative\": $round(purchasePrice - $v1 + $cumInt + $y * (energyCostPerYear + tyreCostPerYear + fixedCostPerYear), 2)} ) })"
+    },
+    { "path": "$.totalCost", "expr": "$round($sum($map(yearly, function($r) { $r.total })), 2)" },
+    { "path": "$.costPerKm", "expr": "annualDistance <= 0 ? 0 : $round(totalCost / (annualDistance * years), 4)" },
+    { "path": "$.costPerMonth", "expr": "$round(totalCost / (years * 12), 2)" },
+    { "path": "$.depreciationShare", "expr": "totalCost <= 0 ? 0 : $round(totalDepreciation / totalCost * 100, 1)" }
+  ],
+  "constraints": [
+    { "id": "price-positive", "expr": "purchasePrice > 0", "message": "Purchase price must be positive", "policy": "rollback" },
+    { "id": "deposit-within-price", "expr": "deposit + tradeIn <= purchasePrice", "message": "Deposit plus trade-in cannot exceed the purchase price", "policy": "rollback" },
+    { "id": "term-within-ownership", "expr": "loanTermMonths <= years * 12", "message": "The finance term runs longer than you plan to keep the car — the figures below only count interest paid while you own it", "policy": "flag" }
+  ],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "Car cost of ownership",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "assumptions",
+            "type": "alert",
+            "variant": "info",
+            "label": "This is a projection from your assumptions",
+            "text": "Every figure below follows from the numbers you enter. Depreciation uses a typical retained-value curve, not your car's actual resale price, and finance interest assumes the payment is never missed or overpaid. Change any input to see the whole breakdown re-price. Not financial advice."
+          },
+          {
+            "id": "purchaseSet",
+            "type": "fieldSet",
+            "legend": "Buying and financing",
+            "components": [
+              { "id": "purchasePriceField", "type": "numericField", "label": "Purchase price", "bind": "$.purchasePrice", "placeholder": "32000" },
+              { "id": "depositField", "type": "numericField", "label": "Deposit", "bind": "$.deposit", "placeholder": "6000" },
+              { "id": "tradeInField", "type": "numericField", "label": "Trade-in value", "bind": "$.tradeIn", "placeholder": "0" },
+              { "id": "aprField", "type": "numericField", "label": "Finance APR (%)", "bind": "$.aprPct", "placeholder": "6.5" },
+              { "id": "termField", "type": "numericField", "label": "Finance term (months)", "bind": "$.loanTermMonths", "placeholder": "60" },
+              { "id": "yearsField", "type": "sliderField", "label": "Years you keep it", "bind": "$.years", "min": 1, "max": 15, "step": 1 }
+            ]
+          },
+          {
+            "id": "runningSet",
+            "type": "fieldSet",
+            "legend": "Driving and energy",
+            "components": [
+              { "id": "distanceField", "type": "numericField", "label": "Distance per year (km)", "bind": "$.annualDistance", "placeholder": "15000" },
+              {
+                "id": "fuelTypeField",
+                "type": "selectField",
+                "label": "Fuel type",
+                "bind": "$.fuelType",
+                "options": [
+                  { "value": "petrol", "label": "Petrol" },
+                  { "value": "diesel", "label": "Diesel" },
+                  { "value": "hybrid", "label": "Hybrid" },
+                  { "value": "ev", "label": "Electric" }
+                ]
+              },
+              { "id": "consumptionField", "type": "numericField", "label": "Consumption per 100 km (L, or kWh for an EV)", "bind": "$.consumptionPer100", "placeholder": "6.5" },
+              { "id": "unitPriceField", "type": "numericField", "label": "Price per litre (or per kWh)", "bind": "$.unitPrice", "placeholder": "1.75" }
+            ]
+          },
+          {
+            "id": "upkeepSet",
+            "type": "fieldSet",
+            "legend": "Upkeep and standing costs",
+            "components": [
+              { "id": "insuranceField", "type": "numericField", "label": "Insurance per year", "bind": "$.insurancePerYear", "placeholder": "650" },
+              { "id": "servicingField", "type": "numericField", "label": "Servicing per year", "bind": "$.servicingPerYear", "placeholder": "400" },
+              { "id": "repairsField", "type": "numericField", "label": "Repairs allowance per year", "bind": "$.repairsPerYear", "placeholder": "250" },
+              { "id": "tyreCostField", "type": "numericField", "label": "Cost of a set of tyres", "bind": "$.tyreSetCost", "placeholder": "480" },
+              { "id": "tyreLifeField", "type": "numericField", "label": "Tyre life (km)", "bind": "$.tyreLifeKm", "placeholder": "40000" },
+              { "id": "roadTaxField", "type": "numericField", "label": "Road tax per year", "bind": "$.roadTaxPerYear", "placeholder": "180" },
+              { "id": "inspectionField", "type": "numericField", "label": "Inspection per year", "bind": "$.inspectionPerYear", "placeholder": "40" },
+              { "id": "parkingField", "type": "numericField", "label": "Parking per year", "bind": "$.parkingPerYear", "placeholder": "300" },
+              { "id": "tollsField", "type": "numericField", "label": "Tolls per year", "bind": "$.tollsPerYear", "placeholder": "60" },
+              { "id": "breakdownField", "type": "numericField", "label": "Breakdown cover per year", "bind": "$.breakdownCoverPerYear", "placeholder": "80" }
+            ]
+          },
+          { "id": "sep1", "type": "separatorLine" },
+          {
+            "id": "headline",
+            "type": "group",
+            "layout": "horizontal",
+            "components": [
+              { "id": "totalTile", "type": "statTile", "label": "Total cost of ownership", "bind": "$.totalCost", "format": "number", "caption": "over the whole period" },
+              { "id": "perMonthTile", "type": "statTile", "label": "Cost per month", "bind": "$.costPerMonth", "format": "number" },
+              { "id": "perKmTile", "type": "statTile", "label": "Cost per km", "bind": "$.costPerKm", "format": "number" },
+              { "id": "depShareTile", "type": "statTile", "label": "Depreciation share", "bind": "$.depreciationShare", "format": "number", "caption": "% of the total" }
+            ]
+          },
+          {
+            "id": "secondary",
+            "type": "group",
+            "layout": "horizontal",
+            "components": [
+              { "id": "depTile", "type": "statTile", "label": "Depreciation", "bind": "$.totalDepreciation", "format": "number" },
+              { "id": "interestTile", "type": "statTile", "label": "Finance interest", "bind": "$.totalInterest", "format": "number" },
+              { "id": "residualTile", "type": "statTile", "label": "Resale value at the end", "bind": "$.residualValue", "format": "number" },
+              { "id": "paymentTile", "type": "statTile", "label": "Monthly finance payment", "bind": "$.monthlyPayment", "format": "number" }
+            ]
+          },
+          { "id": "sep2", "type": "separatorLine" },
+          {
+            "id": "breakdownChart",
+            "type": "dataChart",
+            "label": "What you pay each year, by cost category",
+            "chartType": "bar",
+            "bind": "$.yearly",
+            "chartX": "year",
+            "chartSeries": [
+              { "field": "depreciation", "label": "Depreciation" },
+              { "field": "interest", "label": "Finance interest" },
+              { "field": "energy", "label": "Fuel / electricity" },
+              { "field": "tyres", "label": "Tyres" },
+              { "field": "fixed", "label": "Insurance, tax and upkeep" }
+            ]
+          },
+          {
+            "id": "breakdownTable",
+            "type": "dataTable",
+            "label": "Year by year",
+            "bind": "$.yearly",
+            "tableColumns": [
+              { "field": "year", "header": "Year", "width": "10%" },
+              { "field": "depreciation", "header": "Depreciation", "format": "number", "width": "16%" },
+              { "field": "interest", "header": "Interest", "format": "number", "width": "14%" },
+              { "field": "energy", "header": "Energy", "format": "number", "width": "14%" },
+              { "field": "tyres", "header": "Tyres", "format": "number", "width": "12%" },
+              { "field": "fixed", "header": "Upkeep", "format": "number", "width": "14%" },
+              { "field": "total", "header": "Year total", "format": "number", "width": "20%" }
+            ],
+            "pageSize": 15
+          }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "32,000 petrol car on 6.5% finance over 60 months, 15,000 km a year, kept five years",
+      "given": {
+        "$.purchasePrice": 32000,
+        "$.deposit": 6000,
+        "$.aprPct": 6.5,
+        "$.loanTermMonths": 60,
+        "$.years": 5,
+        "$.annualDistance": 15000
+      },
+      "expect": {
+        "$.financedAmount": 26000,
+        "$.monthlyPayment": 508.72,
+        "$.totalInterest": 4523.2,
+        "$.residualValue": 15680,
+        "$.totalDepreciation": 16320,
+        "$.energyCostPerYear": 1706.25,
+        "$.tyreCostPerYear": 192,
+        "$.fixedCostPerYear": 1960,
+        "$.yearly[0].depreciation": 6400,
+        "$.yearly[0].interest": 1556.08,
+        "$.yearly[0].total": 11814.33,
+        "$.yearly[4].cumulative": 40134.45,
+        "$.totalCost": 40134.45,
+        "$.costPerKm": 0.5351,
+        "$.costPerMonth": 668.91,
+        "$.depreciationShare": 40.7
+      }
+    },
+    {
+      "description": "the same car bought for cash — the total falls by exactly the finance interest",
+      "given": { "$.deposit": 32000 },
+      "expect": {
+        "$.financedAmount": 0,
+        "$.monthlyPayment": 0,
+        "$.totalInterest": 0,
+        "$.totalCost": 35611.25,
+        "$.costPerKm": 0.4748,
+        "$.costPerMonth": 593.52
+      }
+    },
+    {
+      "description": "the same car as an EV at 17 kWh/100 km and 0.28 per kWh — only the energy line changes",
+      "given": {
+        "$.fuelType": "ev",
+        "$.consumptionPer100": 17,
+        "$.unitPrice": 0.28
+      },
+      "expect": {
+        "$.energyCostPerYear": 714,
+        "$.totalInterest": 4523.2,
+        "$.totalDepreciation": 16320,
+        "$.totalCost": 35173.2,
+        "$.costPerKm": 0.469,
+        "$.depreciationShare": 46.4
+      }
+    }
+  ]
+}

@@ -1,0 +1,217 @@
+{
+  "_name": "Debt Payoff — snowball vs avalanche",
+  "_description": "A month-by-month payoff simulation over a list of debts you edit, run twice: smallest balance first (snowball) against highest rate first (avalanche), showing which clears sooner and what the choice costs in interest.",
+  "id": "debt-payoff",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "debts": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 8,
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "balance": { "type": "number", "minimum": 0 },
+            "aprPct": { "type": "number", "minimum": 0, "maximum": 60 },
+            "minPayment": { "type": "number", "minimum": 1 }
+          }
+        }
+      },
+      "monthlyBudget": { "type": "number", "minimum": 0, "description": "Total you can put toward debt each month" },
+      "strategy": { "type": "string", "enum": ["avalanche", "snowball"] },
+
+      "totalBalance": { "type": "number", "readOnly": true },
+      "totalMinimums": { "type": "number", "readOnly": true },
+      "avalanche": { "type": "object", "readOnly": true },
+      "snowball": { "type": "object", "readOnly": true },
+      "monthsToFree": { "type": "integer", "readOnly": true },
+      "totalInterest": { "type": "number", "readOnly": true },
+      "payoffOrder": { "type": "string", "readOnly": true },
+      "interestSaved": { "type": "number", "readOnly": true, "description": "What avalanche saves against snowball on these debts" },
+      "clearsInHorizon": { "type": "boolean", "readOnly": true },
+      "schedule": {
+        "type": "array",
+        "readOnly": true,
+        "items": {
+          "type": "object",
+          "properties": {
+            "month": { "type": "integer" },
+            "balance": { "type": "number" },
+            "interest": { "type": "number" }
+          }
+        }
+      }
+    },
+    "required": ["debts", "monthlyBudget"]
+  },
+  "constants": {
+    "maxMonths": 120
+  },
+  "library": {
+    "layers": [
+      {
+        "define": "( $monthStep := function($rows, $budget) { ( $grown := $map($rows, function($r) { ( $acc := $r.balance <= 0 ? 0 : $round($r.balance * $r.aprPct / 1200, 2); $nb := $round($r.balance + $acc, 2); $merge([$r, {\"accrued\": $acc, \"balance\": $nb, \"due\": $nb <= 0 ? 0 : $min([$r.minPayment, $nb])}]) ) }); $surplus := $max([0, $budget - $sum($grown.due)]); $alloc := $reduce($grown, function($s, $r) { ( $extra := ($r.balance > 0 and $s.hit = false) ? $min([$s.rem, $r.balance - $r.due]) : 0; { \"rem\": $s.rem - $extra, \"hit\": $s.hit or $r.balance > 0, \"out\": $append($s.out, [$merge([$r, {\"balance\": $round($r.balance - $r.due - $extra, 2)}])]) } ) }, {\"rem\": $surplus, \"hit\": false, \"out\": []}); { \"rows\": [$alloc.out], \"interest\": $round($sum($grown.accrued), 2), \"paid\": $round($sum($grown.due) + ($surplus - $alloc.rem), 2) } ) }; $simulate := function($ordered, $budget, $maxMonths) { ( $r := $reduce([1..$maxMonths], function($a, $m) { $a.done ? $a : ( $step := $monthStep($a.rows, $a.budget); { \"rows\": $step.rows, \"budget\": $a.budget, \"interest\": $round($a.interest + $step.interest, 2), \"paid\": $round($a.paid + $step.paid, 2), \"months\": $m, \"done\": $sum($step.rows.balance) <= 0, \"history\": $append($a.history, [{\"month\": $m, \"balance\": $round($sum($step.rows.balance), 2), \"interest\": $step.interest}]) } ) }, {\"rows\": [$ordered], \"budget\": $budget, \"interest\": 0, \"paid\": 0, \"months\": 0, \"done\": false, \"history\": []}); { \"order\": [$map($ordered, function($d) { $d.name })], \"months\": $r.months, \"interest\": $r.interest, \"paid\": $r.paid, \"cleared\": $r.done, \"history\": [$r.history] } ) }; [\"monthStep\", \"simulate\"] )"
+      }
+    ]
+  },
+  "defaultValues": [
+    {
+      "path": "$",
+      "expr": "{\"debts\": [{\"name\": \"Store card\", \"balance\": 500, \"aprPct\": 6, \"minPayment\": 25}, {\"name\": \"Credit card\", \"balance\": 3000, \"aprPct\": 24, \"minPayment\": 60}, {\"name\": \"Car loan\", \"balance\": 8000, \"aprPct\": 12, \"minPayment\": 180}], \"monthlyBudget\": 600, \"strategy\": \"avalanche\"}"
+    }
+  ],
+  "derivations": [
+    { "path": "$.totalBalance", "expr": "$round($sum($map(debts, function($d) { $d.balance })), 2)" },
+    { "path": "$.totalMinimums", "expr": "$round($sum($map(debts, function($d) { $d.minPayment })), 2)" },
+    { "path": "$.avalanche", "expr": "$simulate($sort(debts, function($x, $y) { $x.aprPct < $y.aprPct }), monthlyBudget, $const.maxMonths)" },
+    { "path": "$.snowball", "expr": "$simulate($sort(debts, function($x, $y) { $x.balance > $y.balance }), monthlyBudget, $const.maxMonths)" },
+    { "path": "$.monthsToFree", "expr": "( $s := strategy = \"snowball\" ? snowball : avalanche; $s.months )" },
+    { "path": "$.totalInterest", "expr": "( $s := strategy = \"snowball\" ? snowball : avalanche; $s.interest )" },
+    { "path": "$.clearsInHorizon", "expr": "( $s := strategy = \"snowball\" ? snowball : avalanche; $s.cleared )" },
+    { "path": "$.payoffOrder", "expr": "( $s := strategy = \"snowball\" ? snowball : avalanche; $join($s.order, \" → \") )" },
+    { "path": "$.interestSaved", "expr": "( $s := snowball; $a := avalanche; $round($s.interest - $a.interest, 2) )" },
+    { "path": "$.schedule", "expr": "( $s := strategy = \"snowball\" ? snowball : avalanche; [$s.history] )" }
+  ],
+  "constraints": [
+    { "id": "budget-covers-minimums", "expr": "monthlyBudget >= totalMinimums", "message": "Your monthly budget is below the total of the minimum payments — the balances would grow rather than fall", "policy": "flag" },
+    { "id": "has-a-debt", "expr": "$count(debts) >= 1", "message": "Add at least one debt", "policy": "rollback" }
+  ],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "Debt payoff",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "assumptions",
+            "type": "alert",
+            "variant": "info",
+            "label": "This is a projection from your assumptions",
+            "text": "The simulation charges interest monthly, pays every minimum, and throws whatever is left at one debt at a time. It assumes you never miss or change a payment and that no new borrowing happens. Both strategies are run on the same numbers, so the comparison between them is exact even where the absolute months are not."
+          },
+          {
+            "id": "debtsList",
+            "type": "sectionList",
+            "label": "Your debts",
+            "bind": "$.debts",
+            "itemView": "debtItem",
+            "addLabel": "Add a debt",
+            "removeLabel": "Remove"
+          },
+          {
+            "id": "planSet",
+            "type": "fieldSet",
+            "legend": "Your plan",
+            "components": [
+              { "id": "budgetField", "type": "numericField", "label": "Total you can pay each month", "bind": "$.monthlyBudget", "placeholder": "600" },
+              {
+                "id": "strategyField",
+                "type": "radioField",
+                "label": "Which debt gets the extra money",
+                "bind": "$.strategy",
+                "options": [
+                  { "value": "avalanche", "label": "Avalanche — highest interest rate first (cheapest)" },
+                  { "value": "snowball", "label": "Snowball — smallest balance first (fastest first win)" }
+                ]
+              }
+            ]
+          },
+          { "id": "sep1", "type": "separatorLine" },
+          {
+            "id": "headline",
+            "type": "group",
+            "layout": "horizontal",
+            "components": [
+              { "id": "monthsTile", "type": "statTile", "label": "Months to debt free", "bind": "$.monthsToFree", "format": "number" },
+              { "id": "interestTile", "type": "statTile", "label": "Interest you pay", "bind": "$.totalInterest", "format": "number" },
+              { "id": "savedTile", "type": "statTile", "label": "Avalanche saves", "bind": "$.interestSaved", "format": "number", "caption": "vs snowball, same budget" },
+              { "id": "balanceTile", "type": "statTile", "label": "Total owed today", "bind": "$.totalBalance", "format": "number" }
+            ]
+          },
+          {
+            "id": "orderText",
+            "type": "staticText",
+            "text": "'You clear them in this order: ' & payoffOrder"
+          },
+          { "id": "sep2", "type": "separatorLine" },
+          {
+            "id": "balanceChart",
+            "type": "dataChart",
+            "label": "What you still owe, month by month",
+            "chartType": "line",
+            "bind": "$.schedule",
+            "chartX": "month",
+            "chartSeries": [
+              { "field": "balance", "label": "Balance remaining" }
+            ]
+          },
+          {
+            "id": "scheduleTable",
+            "type": "dataTable",
+            "label": "Month by month",
+            "bind": "$.schedule",
+            "tableColumns": [
+              { "field": "month", "header": "Month", "width": "25%" },
+              { "field": "balance", "header": "Balance left", "format": "number", "width": "40%" },
+              { "field": "interest", "header": "Interest charged", "format": "number", "width": "35%" }
+            ],
+            "pageSize": 12
+          }
+        ]
+      },
+      {
+        "id": "debtItem",
+        "label": "Debt",
+        "layout": "horizontal",
+        "components": [
+          { "id": "debtName", "type": "textField", "label": "Name", "bind": "$.debts[*].name", "placeholder": "Credit card" },
+          { "id": "debtBalance", "type": "numericField", "label": "Balance", "bind": "$.debts[*].balance", "placeholder": "3000" },
+          { "id": "debtApr", "type": "numericField", "label": "APR (%)", "bind": "$.debts[*].aprPct", "placeholder": "24" },
+          { "id": "debtMin", "type": "numericField", "label": "Minimum payment", "bind": "$.debts[*].minPayment", "placeholder": "60" }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "three debts totalling 11,500 on a 600 budget, avalanche — highest rate first",
+      "given": { "$.monthlyBudget": 600, "$.strategy": "avalanche" },
+      "expect": {
+        "$.totalBalance": 11500,
+        "$.totalMinimums": 265,
+        "$.monthsToFree": 23,
+        "$.totalInterest": 1509.23,
+        "$.clearsInHorizon": true,
+        "$.interestSaved": 112.56,
+        "$.schedule[0].interest": 142.5,
+        "$.schedule[0].balance": 11042.5,
+        "$.schedule[22].balance": 0
+      }
+    },
+    {
+      "description": "the same debts on snowball — clears in the same 23 months but costs 112.56 more in interest",
+      "given": { "$.monthlyBudget": 600, "$.strategy": "snowball" },
+      "expect": {
+        "$.monthsToFree": 23,
+        "$.totalInterest": 1621.79,
+        "$.interestSaved": 112.56
+      }
+    },
+    {
+      "description": "paying only the minimums stretches it to 66 months and nearly quadruples the interest",
+      "given": { "$.monthlyBudget": 265, "$.strategy": "avalanche" },
+      "expect": {
+        "$.monthsToFree": 66,
+        "$.totalInterest": 5876.6,
+        "$.interestSaved": 30.42,
+        "$.clearsInHorizon": true
+      }
+    }
+  ]
+}
