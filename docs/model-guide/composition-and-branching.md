@@ -45,6 +45,13 @@ acyclic) and stamps every inherited effect with a read-only `origin` (`{fromRef,
 recording which ancestor contributed it. Inspect the chain at `GET /models/{id}/lineage`
 (`[]` for a non-branch model).
 
+Materialization merges section by section: the branch's `constants` override the template's by name,
+and a [`library`](anatomy.md#sharing-values-and-computation) is concatenated as **layers** — the
+template's first, the branch's own last. Later layers win a name collision, so a branch inherits its
+template's functions, can call them, and can override one by exporting the same name. Only the
+branch's own layer is editable afterwards (`newLibrary` in a spec evolution replaces that layer
+alone).
+
 ## Inherited-effect approval (cross-owner branching)
 
 Branching across an **ownership boundary** (the new model's owner differs from an ancestor's

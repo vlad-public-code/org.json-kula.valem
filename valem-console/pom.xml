@@ -42,6 +42,34 @@
 
     <build>
         <plugins>
+            <!--
+                Copy the canonical example specs onto the test classpath, where
+                ConsoleExamplesIntegrationTest loads them from `examples/`. They used to be a
+                hand-maintained second copy under src/test/resources/examples, which drifted from
+                valem-ui/src/examples in five of ten files without anything failing — the tests were
+                asserting against stale specs. Same idiom as valem-mcp's copy-example-specs.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-example-specs</id>
+                        <phase>generate-test-resources</phase>
+                        <goals><goal>copy-resources</goal></goals>
+                        <configuration>
+                            <outputDirectory>${project.build.testOutputDirectory}/examples</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/../valem-ui/src/examples</directory>
+                                    <includes><include>*.json</include></includes>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>

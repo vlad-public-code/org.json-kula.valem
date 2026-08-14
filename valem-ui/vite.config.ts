@@ -1,6 +1,12 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+// @ts-expect-error — plain ESM build helper, not part of the app's tsconfig `include`.
+import { copyExamplesPlugin } from './build/copyExamples.mjs';
+
+// The example specs are authored only in src/examples; this copies them to dist/examples (and serves
+// them in dev) so `/examples/*.json` keeps working without a second checked-in copy under public/.
+const outDir = path.resolve(__dirname, 'dist');
 
 /**
  * Where the dev server proxies API calls. Overridable so a second backend — a different build, a
@@ -25,7 +31,7 @@ function rewriteWsOrigin(proxy: { on: (e: string, cb: (r: { setHeader: (k: strin
 }
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), copyExamplesPlugin(outDir)],
   resolve: {
     alias: {
       'valem-view-react': path.resolve(__dirname, '../valem-view-react/src/index.ts'),

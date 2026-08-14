@@ -1,0 +1,262 @@
+{
+  "_name": "Rent vs Buy",
+  "_description": "Whether buying beats renting over the years you actually stay — comparing net worth on both paths, with the renter investing the difference, and reporting the year the lines cross.",
+  "id": "rent-vs-buy",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "homePrice": { "type": "number", "minimum": 0 },
+      "depositPct": { "type": "number", "minimum": 0, "maximum": 100, "description": "Down payment as a percent of the price" },
+      "mortgageRatePct": { "type": "number", "minimum": 0, "maximum": 25 },
+      "mortgageTermYears": { "type": "integer", "minimum": 1, "maximum": 40 },
+      "closingCostsPct": { "type": "number", "minimum": 0, "maximum": 20, "description": "One-off costs of buying, percent of price" },
+      "sellingCostsPct": { "type": "number", "minimum": 0, "maximum": 20, "description": "Agent and legal fees on sale, percent of value" },
+      "propertyTaxPct": { "type": "number", "minimum": 0, "maximum": 10, "description": "Annual property tax, percent of value" },
+      "insurancePerYear": { "type": "number", "minimum": 0 },
+      "maintenancePct": { "type": "number", "minimum": 0, "maximum": 10, "description": "Annual upkeep, percent of value" },
+      "hoaPerMonth": { "type": "number", "minimum": 0, "description": "Service charge / HOA / ground rent" },
+      "appreciationPct": { "type": "number", "minimum": -10, "maximum": 20, "description": "Assumed house price growth per year" },
+      "taxReliefPct": { "type": "number", "minimum": 0, "maximum": 100, "description": "Share of mortgage interest you get back in tax relief (0 where there is none)" },
+
+      "monthlyRent": { "type": "number", "minimum": 0 },
+      "rentInflationPct": { "type": "number", "minimum": -10, "maximum": 20 },
+      "rentersInsurancePerYear": { "type": "number", "minimum": 0 },
+
+      "investmentReturnPct": { "type": "number", "minimum": 0, "maximum": 20, "description": "What the renter earns on the money not tied up in a house" },
+      "years": { "type": "integer", "minimum": 1, "maximum": 40, "description": "How long you stay" },
+
+      "deposit": { "type": "number", "readOnly": true },
+      "loanAmount": { "type": "number", "readOnly": true },
+      "closingCosts": { "type": "number", "readOnly": true },
+      "monthlyRate": { "type": "number", "readOnly": true },
+      "compoundFactor": { "type": "number", "readOnly": true },
+      "monthlyPayment": { "type": "number", "readOnly": true },
+      "comparison": {
+        "type": "array",
+        "readOnly": true,
+        "items": {
+          "type": "object",
+          "properties": {
+            "year": { "type": "integer" },
+            "homeValue": { "type": "number" },
+            "mortgageBalance": { "type": "number" },
+            "buyCost": { "type": "number" },
+            "rentCost": { "type": "number" },
+            "buyNet": { "type": "number" },
+            "rentNet": { "type": "number" }
+          }
+        }
+      },
+      "breakevenYear": { "type": "integer", "readOnly": true, "description": "First year buying is ahead; 0 when it never is inside the horizon" },
+      "totalBuyCost": { "type": "number", "readOnly": true },
+      "totalRentCost": { "type": "number", "readOnly": true },
+      "netAdvantage": { "type": "number", "readOnly": true, "description": "Buyer net worth minus renter net worth in the final year" },
+      "favoursBuying": { "type": "boolean", "readOnly": true }
+    },
+    "required": ["homePrice", "monthlyRent", "years"]
+  },
+  "library": {
+    "layers": [
+      {
+        "define": "( $balanceAt := function($m, $principal, $rate, $factor, $term) { ($term <= 0 or $principal <= 0) ? 0 : ($rate = 0 ? $principal * (1 - $m / $term) : $round($principal * ($factor - $power(1 + $rate, $m)) / ($factor - 1), 2)) }; [\"balanceAt\"] )"
+      }
+    ]
+  },
+  "defaultValues": [
+    {
+      "path": "$",
+      "expr": "{\"homePrice\": 400000, \"depositPct\": 20, \"mortgageRatePct\": 6.5, \"mortgageTermYears\": 30, \"closingCostsPct\": 3, \"sellingCostsPct\": 6, \"propertyTaxPct\": 1.1, \"insurancePerYear\": 1200, \"maintenancePct\": 1, \"hoaPerMonth\": 0, \"appreciationPct\": 3, \"taxReliefPct\": 0, \"monthlyRent\": 2200, \"rentInflationPct\": 3, \"rentersInsurancePerYear\": 200, \"investmentReturnPct\": 7, \"years\": 20}"
+    }
+  ],
+  "derivations": [
+    { "path": "$.deposit", "expr": "$round(homePrice * depositPct / 100, 2)" },
+    { "path": "$.closingCosts", "expr": "$round(homePrice * closingCostsPct / 100, 2)" },
+    { "path": "$.monthlyRate", "expr": "mortgageRatePct / 1200" },
+    { "path": "$.loanAmount", "expr": "$round(homePrice - deposit, 2)" },
+    { "path": "$.compoundFactor", "expr": "$power(1 + monthlyRate, mortgageTermYears * 12)" },
+    { "path": "$.monthlyPayment", "expr": "loanAmount <= 0 ? 0 : (monthlyRate = 0 ? $round(loanAmount / (mortgageTermYears * 12), 2) : $round(loanAmount * monthlyRate * compoundFactor / (compoundFactor - 1), 2))" },
+    {
+      "path": "$.comparison",
+      "expr": "( $r := $reduce([1..years], function($a, $y) { ( $term := mortgageTermYears * 12; $hv := $round(homePrice * $power(1 + appreciationPct / 100, $y), 2); $hvPrev := $round(homePrice * $power(1 + appreciationPct / 100, $y - 1), 2); $m1 := $min([($y - 1) * 12, $term]); $m2 := $min([$y * 12, $term]); $b1 := $balanceAt($m1, loanAmount, monthlyRate, compoundFactor, $term); $b2 := $balanceAt($m2, loanAmount, monthlyRate, compoundFactor, $term); $interest := $max([0, $round(monthlyPayment * ($m2 - $m1) - ($b1 - $b2), 2)]); $relief := $round($interest * taxReliefPct / 100, 2); $principal := $round($b1 - $b2, 2); $carry := $round($interest - $relief + $hvPrev * propertyTaxPct / 100 + $hvPrev * maintenancePct / 100 + insurancePerYear + hoaPerMonth * 12, 2); $outlay := $round($carry + $principal, 2); $rentYear := $round(monthlyRent * 12 * $power(1 + rentInflationPct / 100, $y - 1) + rentersInsurancePerYear, 2); $invested := $round($outlay - $rentYear, 2); $port := $round(($a.portfolio + $invested) * (1 + investmentReturnPct / 100), 2); { \"portfolio\": $port, \"rows\": $append($a.rows, [{ \"year\": $y, \"homeValue\": $hv, \"mortgageBalance\": $b2, \"buyCost\": $carry, \"rentCost\": $rentYear, \"buyNet\": $round($hv - $b2 - $hv * sellingCostsPct / 100, 2), \"rentNet\": $port }]) } ) }, { \"portfolio\": $round(deposit + closingCosts, 2), \"rows\": [] }); [$r.rows] )"
+    },
+    { "path": "$.totalBuyCost", "expr": "$round($sum($map(comparison, function($c) { $c.buyCost })), 2)" },
+    { "path": "$.totalRentCost", "expr": "$round($sum($map(comparison, function($c) { $c.rentCost })), 2)" },
+    { "path": "$.breakevenYear", "expr": "( $hits := $map(comparison, function($c) { $c.buyNet >= $c.rentNet ? $c.year : 0 })[$ > 0]; $count($hits) = 0 ? 0 : $min($hits) )" },
+    { "path": "$.netAdvantage", "expr": "( $d := $map(comparison, function($c) { $round($c.buyNet - $c.rentNet, 2) }); $i := $count($d) - 1; $d[$i] )" },
+    { "path": "$.favoursBuying", "expr": "netAdvantage >= 0" }
+  ],
+  "constraints": [
+    { "id": "price-positive", "expr": "homePrice > 0", "message": "House price must be positive", "policy": "rollback" },
+    { "id": "rent-positive", "expr": "monthlyRent > 0", "message": "Monthly rent must be positive — this compares two real options", "policy": "rollback" },
+    { "id": "rate-positive", "expr": "mortgageRatePct > 0", "message": "Mortgage rate must be positive", "policy": "rollback" },
+    { "id": "stay-within-term", "expr": "years <= mortgageTermYears", "message": "You are staying longer than the mortgage term — the comparison stops at the end of the term", "policy": "flag" }
+  ],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "Rent vs buy",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "assumptions",
+            "type": "alert",
+            "variant": "info",
+            "label": "This is a projection from your assumptions",
+            "text": "The answer is decided by two guesses nobody can make for you: how fast houses appreciate and what the renter earns on the money not tied up in a deposit. Both are inputs below, and both are visible on purpose — a calculator that hides them is hiding the answer. Not financial advice."
+          },
+          {
+            "id": "buySet",
+            "type": "fieldSet",
+            "legend": "Buying",
+            "components": [
+              { "id": "priceField", "type": "numericField", "label": "House price", "bind": "$.homePrice", "placeholder": "400000" },
+              { "id": "depositField", "type": "sliderField", "label": "Deposit (%)", "bind": "$.depositPct", "min": 0, "max": 100, "step": 1 },
+              { "id": "rateField", "type": "numericField", "label": "Mortgage rate (%)", "bind": "$.mortgageRatePct", "placeholder": "6.5" },
+              { "id": "termField", "type": "numericField", "label": "Mortgage term (years)", "bind": "$.mortgageTermYears", "placeholder": "30" },
+              { "id": "closingField", "type": "numericField", "label": "Buying costs (% of price)", "bind": "$.closingCostsPct", "placeholder": "3" },
+              { "id": "sellingField", "type": "numericField", "label": "Selling costs (% of value)", "bind": "$.sellingCostsPct", "placeholder": "6" },
+              { "id": "taxField", "type": "numericField", "label": "Property tax (% of value / yr)", "bind": "$.propertyTaxPct", "placeholder": "1.1" },
+              { "id": "insuranceField", "type": "numericField", "label": "Buildings insurance / yr", "bind": "$.insurancePerYear", "placeholder": "1200" },
+              { "id": "maintField", "type": "numericField", "label": "Maintenance (% of value / yr)", "bind": "$.maintenancePct", "placeholder": "1" },
+              { "id": "hoaField", "type": "numericField", "label": "Service charge / month", "bind": "$.hoaPerMonth", "placeholder": "0" },
+              { "id": "reliefField", "type": "numericField", "label": "Mortgage interest tax relief (%)", "bind": "$.taxReliefPct", "placeholder": "0" }
+            ]
+          },
+          {
+            "id": "rentSet",
+            "type": "fieldSet",
+            "legend": "Renting",
+            "components": [
+              { "id": "rentField", "type": "numericField", "label": "Rent / month", "bind": "$.monthlyRent", "placeholder": "2200" },
+              { "id": "rentInflationField", "type": "numericField", "label": "Rent rises per year (%)", "bind": "$.rentInflationPct", "placeholder": "3" },
+              { "id": "contentsField", "type": "numericField", "label": "Contents insurance / yr", "bind": "$.rentersInsurancePerYear", "placeholder": "200" }
+            ]
+          },
+          {
+            "id": "sharedSet",
+            "type": "fieldSet",
+            "legend": "The two assumptions that decide it",
+            "components": [
+              { "id": "apprField", "type": "sliderField", "label": "House price growth per year (%)", "bind": "$.appreciationPct", "min": -5, "max": 12, "step": 0.5 },
+              { "id": "returnField", "type": "sliderField", "label": "Investment return the renter earns (%)", "bind": "$.investmentReturnPct", "min": 0, "max": 15, "step": 0.5 },
+              { "id": "yearsField", "type": "sliderField", "label": "Years you stay", "bind": "$.years", "min": 1, "max": 40, "step": 1 }
+            ]
+          },
+          { "id": "sep1", "type": "separatorLine" },
+          {
+            "id": "headline",
+            "type": "group",
+            "layout": "horizontal",
+            "components": [
+              { "id": "breakevenTile", "type": "statTile", "label": "Buying pulls ahead in year", "bind": "$.breakevenYear", "format": "number", "caption": "0 means it never does inside your horizon" },
+              { "id": "advantageTile", "type": "statTile", "label": "Net worth difference", "bind": "$.netAdvantage", "format": "number", "caption": "buyer minus renter, final year" },
+              { "id": "buyCostTile", "type": "statTile", "label": "Total cost of owning", "bind": "$.totalBuyCost", "format": "number", "caption": "interest, tax, upkeep — not principal" },
+              { "id": "rentCostTile", "type": "statTile", "label": "Total rent paid", "bind": "$.totalRentCost", "format": "number" }
+            ]
+          },
+          {
+            "id": "verdict",
+            "type": "alert",
+            "variant": "info",
+            "label": "On these assumptions",
+            "text": "favoursBuying ? 'Buying leaves you better off by the year you move out.' : 'Renting and investing the difference leaves you better off over this period.'"
+          },
+          { "id": "sep2", "type": "separatorLine" },
+          {
+            "id": "crossoverChart",
+            "type": "dataChart",
+            "label": "Net worth on each path",
+            "chartType": "line",
+            "bind": "$.comparison",
+            "chartX": "year",
+            "chartSeries": [
+              { "field": "buyNet", "label": "Buying (equity after selling costs)" },
+              { "field": "rentNet", "label": "Renting (invested difference)" }
+            ]
+          },
+          {
+            "id": "comparisonTable",
+            "type": "dataTable",
+            "label": "Year by year",
+            "bind": "$.comparison",
+            "tableColumns": [
+              { "field": "year", "header": "Year", "width": "8%" },
+              { "field": "homeValue", "header": "House value", "format": "number", "width": "16%" },
+              { "field": "mortgageBalance", "header": "Mortgage left", "format": "number", "width": "16%" },
+              { "field": "buyCost", "header": "Cost of owning", "format": "number", "width": "15%" },
+              { "field": "rentCost", "header": "Rent paid", "format": "number", "width": "15%" },
+              { "field": "buyNet", "header": "Buyer net worth", "format": "number", "width": "15%" },
+              { "field": "rentNet", "header": "Renter net worth", "format": "number", "width": "15%" }
+            ],
+            "pageSize": 15
+          }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "400,000 home at 6.5% with 20% down vs 2,200 rent, 3% appreciation, 7% return, staying 20 years",
+      "given": {
+        "$.homePrice": 400000,
+        "$.depositPct": 20,
+        "$.mortgageRatePct": 6.5,
+        "$.monthlyRent": 2200,
+        "$.appreciationPct": 3,
+        "$.investmentReturnPct": 7,
+        "$.years": 20
+      },
+      "expect": {
+        "$.deposit": 80000,
+        "$.closingCosts": 12000,
+        "$.loanAmount": 320000,
+        "$.monthlyPayment": 2022.62,
+        "$.comparison[0].homeValue": 412000,
+        "$.comparison[0].mortgageBalance": 316423.28,
+        "$.comparison[0].buyNet": 70856.72,
+        "$.comparison[0].rentNet": 106220.44,
+        "$.comparison[19].buyNet": 500968.92,
+        "$.comparison[19].rentNet": 470936.57,
+        "$.totalBuyCost": 593268.83,
+        "$.totalRentCost": 713377.88,
+        "$.breakevenYear": 16,
+        "$.netAdvantage": 30032.35,
+        "$.favoursBuying": true
+      }
+    },
+    {
+      "description": "the same move over only 8 years — renting and investing the difference wins, and there is no breakeven",
+      "given": { "$.years": 8 },
+      "expect": {
+        "$.comparison[7].buyNet": 192604.18,
+        "$.comparison[7].rentNet": 218145.84,
+        "$.breakevenYear": 0,
+        "$.netAdvantage": -25541.66,
+        "$.favoursBuying": false
+      }
+    },
+    {
+      "description": "no appreciation, no investment return, no rent rises — the pure cash comparison you can check by hand",
+      "given": {
+        "$.appreciationPct": 0,
+        "$.investmentReturnPct": 0,
+        "$.rentInflationPct": 0,
+        "$.years": 5
+      },
+      "expect": {
+        "$.comparison[0].homeValue": 400000,
+        "$.comparison[0].buyNet": 59576.72,
+        "$.comparison[0].rentNet": 99271.44,
+        "$.comparison[4].homeValue": 400000,
+        "$.totalRentCost": 133000,
+        "$.totalBuyCost": 148912.33,
+        "$.breakevenYear": 0,
+        "$.netAdvantage": -51912.33
+      }
+    }
+  ]
+}

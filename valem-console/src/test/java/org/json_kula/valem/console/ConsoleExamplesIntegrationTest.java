@@ -22,9 +22,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
 /**
- * Integration tests that load the real example model specs from valem-ui/src/examples
- * (copied to test-classpath under examples/) and run the assertions embedded in each spec's
- * "tests" array through the full ModelService reactive pipeline.
+ * Integration tests that load the real example model specs from valem-ui/src/examples and run the
+ * assertions embedded in each spec's "tests" array through the full ModelService reactive pipeline.
+ *
+ * <p>The specs reach the test classpath under {@code examples/} through the pom's
+ * {@code copy-example-specs} execution, so this module reads the same single source of truth that
+ * {@code BundledExamplesTest} globs and that {@code valem-mcp} bundles. That copy step is load-bearing:
+ * these files used to be checked in here separately and had silently drifted from the originals.
  */
 class ConsoleExamplesIntegrationTest {
 
