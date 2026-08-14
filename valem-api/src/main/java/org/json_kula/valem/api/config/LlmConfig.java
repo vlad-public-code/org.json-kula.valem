@@ -8,6 +8,7 @@ import org.json_kula.valem.api.llm.LlmClientFactory;
 import org.json_kula.valem.api.llm.LlmInteractionLog;
 import org.json_kula.valem.api.llm.MockLlmClient;
 import org.json_kula.valem.api.llm.RecordingLlmClient;
+import org.json_kula.valem.api.llm.StructuredOutputMode;
 import org.json_kula.valem.api.llm.CompositeWebTool;
 import org.json_kula.valem.api.llm.SearchBackend;
 import org.json_kula.valem.api.llm.TavilySearchBackend;
@@ -51,6 +52,7 @@ public class LlmConfig {
             @Value("${valem.llm.max-concurrent-requests:0}") int maxConcurrentRequests,
             @Value("${valem.llm.prompt-cache.enabled:true}") boolean promptCacheEnabled,
             @Value("${valem.llm.tool-loop.max-iterations:40}") int toolLoopMaxIterations,
+            @Value("${valem.llm.structured-output:schema}") String structuredOutput,
             ObjectMapper mapper,
             RestClient.Builder restClientBuilder,
             LlmInteractionLog interactionLog) {
@@ -67,7 +69,8 @@ public class LlmConfig {
             log.info("LLM provider '{}' using model '{}'{}", provider, model,
                     configuredModel.isBlank() ? " (provider default)" : "");
             inner = LlmClientFactory.create(provider, apiKey, model, maxTokens, baseUrl,
-                    promptCacheEnabled, toolLoopMaxIterations, mapper, restClientBuilder);
+                    promptCacheEnabled, toolLoopMaxIterations,
+                    StructuredOutputMode.parse(structuredOutput), mapper, restClientBuilder);
         }
         LlmClient client = new RecordingLlmClient(inner, interactionLog);
         // Optionally cap simultaneous LLM calls: throttled keys 429 when generations overlap.

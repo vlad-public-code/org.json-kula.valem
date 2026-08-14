@@ -34,6 +34,8 @@ public class OpenAiLlmClient implements LlmClient {
     private final String endpoint;
     /** Hard ceiling on tool-call round-trips before one final tools-withheld request. */
     private final int maxToolIterations;
+    /** How much structured-output constraint this provider is asked for. */
+    private final StructuredOutputMode structuredOutput;
 
     private static final int DEFAULT_MAX_TOOL_ITERATIONS = 40;
 
@@ -44,6 +46,18 @@ public class OpenAiLlmClient implements LlmClient {
 
     public OpenAiLlmClient(String baseUrl, String apiKey, String model, int maxTokens,
                            int maxToolIterations, ObjectMapper mapper, RestClient restClient) {
+        this(baseUrl, apiKey, model, maxTokens, maxToolIterations, StructuredOutputMode.SCHEMA,
+                mapper, restClient);
+    }
+
+    /**
+     * @param structuredOutput how much {@code response_format} constraint to send; use anything but
+     *                         {@link StructuredOutputMode#SCHEMA} for a provider that rejects it
+     */
+    public OpenAiLlmClient(String baseUrl, String apiKey, String model, int maxTokens,
+                           int maxToolIterations, StructuredOutputMode structuredOutput,
+                           ObjectMapper mapper, RestClient restClient) {
+        this.structuredOutput = structuredOutput != null ? structuredOutput : StructuredOutputMode.SCHEMA;
         this.apiKey = apiKey;
         this.model = model;
         this.maxTokens = maxTokens;
@@ -324,7 +338,11 @@ public class OpenAiLlmClient implements LlmClient {
      * source of truth.
      */
     private void setResponseFormat(ObjectNode req, JsonNode responseSchema) {
-        if (responseSchema == null) {
+        // NONE omits the field entirely, and JSON never asks for a schema — both for providers that
+        // answer 400 to what they do not support, which is indistinguishable from a dead key.
+        if (structuredOutput == StructuredOutputMode.NONE) return;
+
+        if (responseSchema == null || structuredOutput == StructuredOutputMode.JSON) {
             req.putObject("response_format").put("type", "json_object");
             return;
         }

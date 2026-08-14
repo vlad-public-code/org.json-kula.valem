@@ -49,6 +49,20 @@ public final class LlmClientFactory {
                                    String baseUrl, boolean promptCacheEnabled,
                                    int toolLoopMaxIterations, ObjectMapper mapper,
                                    RestClient.Builder restClientBuilder) {
+        return create(provider, apiKey, model, maxTokens, baseUrl, promptCacheEnabled,
+                toolLoopMaxIterations, StructuredOutputMode.SCHEMA, mapper, restClientBuilder);
+    }
+
+    /**
+     * As above, choosing how much structured-output constraint to ask for.
+     *
+     * @param structuredOutput see {@link StructuredOutputMode}; ignored by Anthropic, which has no
+     *                         {@code response_format}
+     */
+    public static LlmClient create(String provider, String apiKey, String model, int maxTokens,
+                                   String baseUrl, boolean promptCacheEnabled,
+                                   int toolLoopMaxIterations, StructuredOutputMode structuredOutput,
+                                   ObjectMapper mapper, RestClient.Builder restClientBuilder) {
         String resolvedModel = model == null || model.isBlank() ? defaultModelFor(provider) : model;
         String url = baseUrl == null || baseUrl.isBlank() ? defaultBaseUrlFor(provider) : baseUrl;
         String key = provider == null ? "" : provider.toLowerCase();
@@ -56,11 +70,11 @@ public final class LlmClientFactory {
         return switch (key) {
             case "openai", "ollama", "groq", "mistral", "gemini", "cerebras" ->
                     new OpenAiLlmClient(url, apiKey, resolvedModel, maxTokens, toolLoopMaxIterations,
-                            mapper, restClientBuilder.build());
+                            structuredOutput, mapper, restClientBuilder.build());
             // OpenRouter asks integrators to identify themselves; the headers are attribution only.
             case "openrouter" ->
                     new OpenAiLlmClient(url, apiKey, resolvedModel, maxTokens, toolLoopMaxIterations,
-                            mapper, restClientBuilder
+                            structuredOutput, mapper, restClientBuilder
                                     .defaultHeader("HTTP-Referer", "https://github.com/vlad-public-code/valem")
                                     .defaultHeader("X-Title", "Valem")
                                     .build());
