@@ -242,6 +242,14 @@ public final class ValemClient implements AutoCloseable {
         return get(path, JsonNode.class);
     }
 
+    /**
+     * The model's library vocabulary: {@code {description, layers, exports:[{name, kind, signature,
+     * arity, origin}]}}. Returns {@code null} when the model declares no library (HTTP 404).
+     */
+    public JsonNode getLibrary(String id) {
+        return get("/models/" + enc(id) + "/library", JsonNode.class);
+    }
+
     // ── Blobs ─────────────────────────────────────────────────────────────────
 
     /**

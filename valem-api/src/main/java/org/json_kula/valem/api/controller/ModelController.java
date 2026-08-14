@@ -229,6 +229,16 @@ public class ModelController {
         return ResponseEntity.ok(service.getSpec(id));
     }
 
+    /**
+     * The model's library vocabulary — what an expression in this model may call, with signature,
+     * arity and originating layer. 404 when the model declares no library.
+     */
+    @GetMapping("/{id}/library")
+    public ResponseEntity<?> getLibrary(@PathVariable("id") String id) {
+        JsonNode library = service.getLibrary(id);
+        return library == null ? ResponseEntity.notFound().build() : ResponseEntity.ok(library);
+    }
+
     /** The pinned ancestor chain a branch was materialized from (empty for a non-branch model). */
     @GetMapping("/{id}/lineage")
     public ResponseEntity<?> getLineage(@PathVariable("id") String id) {

@@ -6,7 +6,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.json_kula.jsonata_jvm.JsonataBindings;
 import org.json_kula.jsonata_jvm.JsonataExpression;
+import org.json_kula.valem.core.engine.LibraryCache;
 import org.json_kula.valem.core.engine.ConstraintEvaluator;
 import org.json_kula.valem.core.engine.ExpressionCache;
 import org.json_kula.valem.core.engine.ModelRuntime;
@@ -16,6 +18,7 @@ import org.json_kula.valem.core.graph.ModelSpecValidator;
 import org.json_kula.valem.core.graph.SpecEvolution;
 import org.json_kula.valem.core.llm.DomainGuidanceCatalog;
 import org.json_kula.valem.core.llm.SpecGenerationSchema;
+import org.json_kula.valem.core.model.LibraryLayer;
 import org.json_kula.valem.core.model.BlobRef;
 import org.json_kula.valem.core.model.ModelSpec;
 import org.json_kula.valem.core.model.TestCase;
@@ -221,6 +224,23 @@ class ToolRegistry {
             objectSchema(),   // a full ModelSpec document
             annotations(true, false, true),
             args -> service.getSpec(requiredText(args, "id")));
+
+        add("get_library", "Get model library",
+            "List the JSONata functions and values a model's library exports — what an expression in "
+            + "this model may call, with signature, arity and originating layer. Call it before "
+            + "writing an expression so you reuse the model's existing vocabulary instead of "
+            + "re-deriving it. Returns null when the model declares no library.",
+            idSchema(),
+            objectSchema(schema -> {
+                ObjectNode props = schema.putObject("properties");
+                stringProp(props, "description", "The library's prose description, if any.");
+                ObjectNode exports = props.putObject("exports");
+                exports.put("type", "array");
+                exports.put("description", "One entry per exported name: {name, kind "
+                        + "('function'|'constant'), signature, arity, origin}.");
+            }),
+            annotations(true, false, true),
+            args -> service.getLibrary(requiredText(args, "id")));
 
         add("get_state", "Get state",
             "Get a model's merged state (base fields plus all computed derived fields). On a large model "
@@ -599,7 +619,9 @@ class ToolRegistry {
             + "computed value, or the exact compile/eval error. Write the expr exactly as in a "
             + "derivation/constraint 'expr': bare dot-paths, no leading $ (e.g. "
             + "\"loan.amount * loan.annualRate / 1200\"). Use this to verify an expression before "
-            + "putting it in a spec — it uses the same compiler the runtime validates against.",
+            + "putting it in a spec — it uses the same compiler the runtime validates against. "
+            + "If the expression calls a library function, pass the model's library definition as "
+            + "'library' — without it every $myFn(...) call fails as undefined.",
             objectSchema(schema -> {
                 ObjectNode props = schema.putObject("properties");
                 stringProp(props, "expr", "A single JSONata expression (bare dot-paths, no leading $).");
@@ -608,6 +630,15 @@ class ToolRegistry {
                 input.put("description", "Sample document the expression runs against (full nested "
                         + "shape, e.g. {\"loan\": {\"amount\": 20000}}). Optional; defaults to {}.");
                 input.put("additionalProperties", true);
+                stringProp(props, "library", "Optional JSONata library definition expression whose "
+                        + "exports are bound while evaluating, e.g. "
+                        + "\"( $money := function($n){ $round($n,2) }; [\\\"money\\\"] )\". "
+                        + "Pass it when the expression calls $myFn(...).");
+                ObjectNode constants = props.putObject("constants");
+                constants.put("type", "object");
+                constants.put("description", "Optional constants bound as $const while evaluating "
+                        + "(and while defining the library).");
+                constants.put("additionalProperties", true);
                 schema.putArray("required").add("expr");
             }),
             objectSchema(schema -> {
@@ -619,7 +650,9 @@ class ToolRegistry {
             }),
             annotations(true, false, true),
             args -> evalExpression(requiredText(args, "expr"),
-                    args.hasNonNull("input") ? args.get("input") : mapper.createObjectNode()));
+                    args.hasNonNull("input") ? args.get("input") : mapper.createObjectNode(),
+                    args.hasNonNull("library") ? args.get("library").asText() : null,
+                    args.hasNonNull("constants") ? args.get("constants") : null));
 
         add("test_spec", "Test spec",
             "Run a spec's embedded test cases (or ad-hoc given->expect cases) through the real reactive "
@@ -1180,7 +1213,28 @@ class ToolRegistry {
     }
 
     /** Compiles and evaluates a JSONata expression against a sample input, returning a structured result. */
-    private Object evalExpression(String expr, JsonNode input) {
+    /**
+     * Evaluates one expression against a sample document, optionally with a library and constants
+     * bound exactly as the runtime would bind them.
+     *
+     * <p>The library matters more than it looks: without it, every {@code $myFn(...)} in a candidate
+     * expression fails as undefined, so the agent's main way to check an expression before putting it
+     * in a spec goes dark for precisely the specs that have a shared vocabulary.
+     */
+    private Object evalExpression(String expr, JsonNode input, String libraryDefine, JsonNode constants) {
+        ObjectNode constantsNode = constants != null && constants.isObject()
+                ? (ObjectNode) constants : mapper.createObjectNode();
+
+        LibraryCache.Compiled library = LibraryCache.Compiled.EMPTY;
+        if (libraryDefine != null && !libraryDefine.isBlank()) {
+            try {
+                library = LibraryCache.compile(
+                        List.of(LibraryLayer.own(libraryDefine.strip(), null)), constantsNode);
+            } catch (RuntimeException e) {
+                return Map.of("ok", false, "error", "library", "message", messageOf(e));
+            }
+        }
+
         JsonataExpression compiled;
         try {
             compiled = new ExpressionCache().get(expr.strip());
@@ -1188,12 +1242,18 @@ class ToolRegistry {
             return Map.of("ok", false, "error", "compile", "message", messageOf(ce));
         }
         try {
-            JsonNode result = compiled.evaluate(input);
+            JsonataBindings bindings = new JsonataBindings()
+                    .bindValue("const", constantsNode)
+                    .bindFunctions(library.functions());
+            library.constants().forEach(bindings::bindValue);
+
+            JsonNode result = compiled.evaluate(input, bindings);
             boolean undefined = result == null || result.isMissingNode();
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("ok", true);
             m.put("undefined", undefined);
             m.put("result", undefined ? NullNode.getInstance() : result);
+            if (!library.isEmpty()) m.put("libraryExports", List.copyOf(library.names()));
             return m;
         } catch (Exception e) {
             return Map.of("ok", false, "error", "evaluation", "message", messageOf(e));

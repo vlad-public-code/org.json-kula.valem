@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createModel, deleteModel, fillAndBlur, openModel, switchTab, uid } from './helpers';
+import { createModel, deleteModel, expectTile, fillAndBlur, openModel, switchTab, uid } from './helpers';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -39,11 +39,11 @@ test.describe('Benefits Eligibility view', () => {
     await fillAndBlur(page, 'Annual household income ($)', '12000');
     await fillAndBlur(page, 'Age', '30', { exact: true });
 
-    await expect(page.getByTestId('poverty')).toContainText('15000');
-    await expect(page.getByTestId('ratio')).toContainText('0.8');
+    await expectTile(page, 'poverty', '15000');
+    await expectTile(page, 'ratio', '0.8');
     await expect(page.getByTestId('tier')).toContainText('full');
     await expect(page.getByTestId('eligible')).toContainText('true');
-    await expect(page.getByTestId('benefit')).toContainText('500');
+    await expectTile(page, 'benefit', '500');
   });
 
   test('household of 4, $45k income -> partial tier, $300/mo', async ({ page }) => {
@@ -54,10 +54,10 @@ test.describe('Benefits Eligibility view', () => {
     await fillAndBlur(page, 'Annual household income ($)', '45000');
     await fillAndBlur(page, 'Age', '40', { exact: true });
 
-    await expect(page.getByTestId('poverty')).toContainText('30000');
-    await expect(page.getByTestId('ratio')).toContainText('1.5');
+    await expectTile(page, 'poverty', '30000');
+    await expectTile(page, 'ratio', '1.5');
     await expect(page.getByTestId('tier')).toContainText('partial');
-    await expect(page.getByTestId('benefit')).toContainText('300');
+    await expectTile(page, 'benefit', '300');
   });
 
   test('income above 200% of the poverty line is ineligible', async ({ page }) => {

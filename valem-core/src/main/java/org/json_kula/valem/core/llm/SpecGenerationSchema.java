@@ -71,6 +71,10 @@ public final class SpecGenerationSchema {
                "version":{"type":"string"},
                "schema":{"type":"object"},
                "constants":{"type":"object"},
+               "library":{"type":"object",
+                 "properties":{"define":{"type":"string"},"description":{"type":"string"},
+                               "signatures":{"type":"object"}},
+                 "required":["define"]},
                "defaultValues":{"type":"array","items":""" + DEFAULT_VALUE_ITEM + """
             },
                "derivations":{"type":"array","items":""" + DERIVATION_ITEM + """
@@ -128,7 +132,10 @@ public final class SpecGenerationSchema {
                  "properties":{"viewId":{"type":"string"},"componentId":{"type":"string"}},
                  "required":["viewId","componentId"]}},
                "upsertConstants":{"type":"object"},
-               "removeConstants":{"type":"array","items":{"type":"string"}}
+               "removeConstants":{"type":"array","items":{"type":"string"}},
+               "newLibrary":{"type":"object",
+                 "properties":{"define":{"type":"string"},"signatures":{"type":"object"}},
+                 "required":["define"]}
              }}""";
 
     /** The permissive JSON Schema for a full {@code ModelSpec}. */

@@ -75,6 +75,7 @@ recompiled; if validation fails the request is rejected with `422`.
   "upsertDefaultValues":   [ { "path": "$.items[*]", "expr": "{ \"qty\": 1 }" } ],
   "removeDefaultValues":   ["$.customer"],
   "newConstants":          { "vatRate": 0.25 },
+  "newLibrary":            { "define": "( $money := function($n){ $round($n,2) }; [\"money\"] )" },
   "newTests":              [ { "description": "vat", "given": { "$.total": 100 }, "expect": { "$.vat": 20 } } ],
   "backfill":              { "$.shipping": 0 }
 }
@@ -96,6 +97,7 @@ recompiled; if validation fails the request is rejected with `422`.
 | `upsertDefaultValues` | Add or replace default-value rules matched by `path` |
 | `removeDefaultValues` | Remove default-value rules by `path` |
 | `newConstants` | Replace the entire `constants` map (omit to keep existing) |
+| `newLibrary` | Replace this model's **own** library layer (omit to keep, explicit `null` to drop) |
 | `newTests` | Replace the entire embedded `tests` list wholesale (omit to keep existing; `[]` clears them) |
 | `backfill` | `$.path → value` map applied to the existing instance for new fields it lacks |
 | `expectedVersion` | Optimistic-concurrency precondition — apply only if the live version still equals this; otherwise `409` |

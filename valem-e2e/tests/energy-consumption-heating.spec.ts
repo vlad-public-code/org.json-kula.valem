@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
-import { createModel, deleteModel, fillAndBlur, openModel, switchTab, uid } from './helpers';
+import {
+  createModel, deleteModel, expectStateNumber, expectTile, fillAndBlur, openModel, switchTab, uid,
+} from './helpers';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -28,28 +30,34 @@ test.describe('House Heating Energy view', () => {
     await expect(page.getByLabel('Insulation U-value W/(m²·K)')).toBeVisible();
   });
 
-  test('default values (from defaultValues seed) derive the documented golden result', async ({ page }) => {
+  test('default values (from defaultValues seed) derive the documented golden result',
+      async ({ page, request }) => {
     await openModel(page, modelId);
     await switchTab(page, 'view');
 
     // 120m², 21C indoor, -5C outdoor, U=0.3, 100% eff, 16h/day, 30 days, 0.28 EUR/kWh
-    await expect(page.getByTestId('deltaLabel')).toContainText('26');
-    await expect(page.getByTestId('demandLabel')).toContainText('0.936');
-    await expect(page.getByTestId('kwhLabel')).toContainText('449.3');
-    await expect(page.getByTestId('costLabel')).toContainText('125.8');
+    await expectTile(page, 'deltaLabel', '26');
+    await expectTile(page, 'demandLabel', '0.94');     // tile rounds to 2 dp; golden is 0.936
+    await expectTile(page, 'kwhLabel', '449.3');
+    await expectTile(page, 'costLabel', '125.8');
+
+    // The tile cannot show the golden precision, so assert it where it is not rounded.
+    await expectStateNumber(request, modelId, '/heatDemandKw', 0.936);
   });
 
-  test('improving insulation (lower U-value) reduces monthly cost', async ({ page }) => {
+  test('improving insulation (lower U-value) reduces monthly cost', async ({ page, request }) => {
     await openModel(page, modelId);
     await switchTab(page, 'view');
 
-    await expect(page.getByTestId('costLabel')).toContainText('125.8');
+    await expectTile(page, 'costLabel', '125.8');
 
     // Halve the U-value -> heat demand and everything downstream halves too
     await fillAndBlur(page, 'Insulation U-value W/(m²·K)', '0.15');
-    await expect(page.getByTestId('demandLabel')).toContainText('0.468');
-    await expect(page.getByTestId('kwhLabel')).toContainText('224.6');
-    await expect(page.getByTestId('costLabel')).toContainText('62.89');
+    await expectTile(page, 'demandLabel', '0.47');     // tile rounds to 2 dp; exact is 0.468
+    await expectTile(page, 'kwhLabel', '224.6');
+    await expectTile(page, 'costLabel', '62.89');
+
+    await expectStateNumber(request, modelId, '/heatDemandKw', 0.468);
   });
 
   test('raising heating efficiency (heat pump) reduces monthly consumption', async ({ page }) => {

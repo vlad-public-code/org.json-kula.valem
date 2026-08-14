@@ -53,6 +53,10 @@ this reason, and the remaining limits are `-D`-only there.
 | `valem.limits.max-array-index` | `1000000` | Hard ceiling on the array index a single write may target, capping the null-padding one mutation can force. A write beyond it is rejected with a typed `StateLimitExceededException` → HTTP 422, before any allocation. Covers live mutate, defaults, and mutation-log replay. |
 | `valem.limits.regex-max-input` | `100000` | Max input-string length a schema `pattern` keyword will validate; longer values are rejected up front rather than fed to the regex engine (ReDoS amplification guard). |
 | `valem.limits.regex-timeout-ms` | `1000` | Wall-clock budget for a single `pattern` match; a catastrophic-backtracking match is aborted past the deadline instead of pinning a CPU under the model lock. |
+| `valem.limits.library-cache-size` | `64` | Max compiled-library entries (bounded LRU, shared process-wide, content-addressed on definition + constants + signatures). Values below `4` are floored. Also reads `VALEM_LIMITS_LIBRARY_CACHE_SIZE`. |
+| `valem.limits.library-max-chars` | `20000` | Max characters in one library definition expression. |
+| `valem.limits.library-max-exports` | `64` | Above this, a library warns that it is doing too much. |
+| `valem.limits.library-max-layers` | `8` | Max library layers (own + inherited) on one model. |
 | `valem.limits.expression-cache-size` | `500` | Max compiled-JSONata-expression entries (bounded LRU, shared process-wide). Values below `64` are floored. Eviction is safe: an evicted expression recompiles on next use. **This bound decides the process's Metaspace footprint** — see the note below. |
 | `valem.history.max-entries` | `50` | (Listed above.) Retained temporal-history snapshots per model. **Not bridged** — this one is still `-D`-only, in every deployment. |
 

@@ -34,6 +34,17 @@ change. `eager` (computed during the mutation) or `lazy` (computed on demand).
 A computed piece of per-field *metadata* (min, max, required, `relevant`, …) stored in the meta
 cache, not the base document. Drives effective schema and view behavior.
 
+### Library
+
+Named JSONata functions and values declared in a spec's `library` section and bound in every
+expression as `$name(...)`. Computes only from its arguments and `$const` — it cannot read the model
+document, which is what keeps a library call free of dependency-graph consequences.
+
+### Definition expression
+
+The plain-JSONata body of a library layer: it binds names and returns the list of names to export as
+its last value, so it evaluates in any JSONata engine to that list.
+
 ### Constraint
 
 A boolean invariant evaluated after each mutation. Policy `rollback` (revert + 409) or `flag`

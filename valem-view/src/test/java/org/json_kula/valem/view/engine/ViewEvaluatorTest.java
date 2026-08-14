@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
 import org.json_kula.valem.core.engine.ExpressionCache;
+import org.json_kula.valem.core.engine.LibraryCache;
+import org.json_kula.valem.core.model.LibraryLayer;
 import org.json_kula.valem.view.model.BasicInputSpec;
 import org.json_kula.valem.view.model.ChoiceInputSpec;
 import org.json_kula.valem.view.model.ComponentSpec;
@@ -412,6 +414,54 @@ class ViewEvaluatorTest {
 
         EvaluatedStaticText st = (EvaluatedStaticText) result.components().getFirst();
         assertThat(st.text()).isEqualTo("Hello from const");
+    }
+
+    // ── library ─────────────────────────────────────────────────────────────────
+
+    @Test
+    void view_text_expression_can_call_a_library_function() {
+        LibraryCache.Compiled lib = LibraryCache.compile(
+                List.of(LibraryLayer.own("( $shout := function($s){ $uppercase($s) & \"!\" }; [\"shout\"] )", null)),
+                NF.objectNode());
+        ViewSpec view = ViewSpec.of("v1", "V", "vertical", null,
+                List.of(staticText("t1", new TextNode("$shout(name)"))), null, null);
+
+        EvaluatedView result = ViewEvaluator.evaluate(
+                "m", view, mergedDoc, Map.of(), exprCache, null, lib.functions(), lib.constants());
+
+        assertThat(((EvaluatedStaticText) result.components().getFirst()).text()).isEqualTo("ALICE!");
+    }
+
+    @Test
+    void a_library_function_reading_const_works_in_a_view_even_with_no_model_constants() {
+        // $const resolves against the CALLING evaluation, so the view path must bind it whenever a
+        // library is present — otherwise this function silently returns nothing here while working
+        // in every derivation.
+        ObjectNode constants = NF.objectNode();
+        constants.put("suffix", "!!");
+        LibraryCache.Compiled lib = LibraryCache.compile(
+                List.of(LibraryLayer.own("( $deco := function($s){ $s & $const.suffix }; [\"deco\"] )", null)),
+                constants);
+        ViewSpec view = ViewSpec.of("v1", "V", "vertical", null,
+                List.of(staticText("t1", new TextNode("$deco(name)"))), null, null);
+
+        EvaluatedView result = ViewEvaluator.evaluate(
+                "m", view, mergedDoc, Map.of(), exprCache, constants, lib.functions(), lib.constants());
+
+        assertThat(((EvaluatedStaticText) result.components().getFirst()).text()).isEqualTo("Alice!!");
+    }
+
+    @Test
+    void a_library_exported_value_is_bound_in_a_view() {
+        LibraryCache.Compiled lib = LibraryCache.compile(
+                List.of(LibraryLayer.own("( $year := 2026; [\"year\"] )", null)), NF.objectNode());
+        ViewSpec view = ViewSpec.of("v1", "V", "vertical", null,
+                List.of(staticText("t1", new TextNode("$string($year)"))), null, null);
+
+        EvaluatedView result = ViewEvaluator.evaluate(
+                "m", view, mergedDoc, Map.of(), exprCache, null, lib.functions(), lib.constants());
+
+        assertThat(((EvaluatedStaticText) result.components().getFirst()).text()).isEqualTo("2026");
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────

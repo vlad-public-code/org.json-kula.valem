@@ -1,6 +1,7 @@
 package org.json_kula.valem.core.graph;
 
 import org.json_kula.valem.core.engine.ExpressionCache;
+import org.json_kula.valem.core.engine.LibraryCache;
 import org.json_kula.valem.core.engine.TestCaseRunner;
 import org.json_kula.valem.core.engine.spi.EffectKind;
 import org.json_kula.valem.core.engine.spi.EffectKindRegistry;
@@ -9,6 +10,8 @@ import org.json_kula.valem.core.model.ConstraintSpec;
 import org.json_kula.valem.core.model.DefaultValueSpec;
 import org.json_kula.valem.core.model.DerivationSpec;
 import org.json_kula.valem.core.model.EffectSpec;
+import org.json_kula.valem.core.model.LibraryLayer;
+import org.json_kula.valem.core.model.LibrarySpec;
 import org.json_kula.valem.core.model.LineageEntry;
 import org.json_kula.valem.core.model.MetaDerivationSpec;
 import org.json_kula.valem.core.model.ModelCoordinate;
@@ -95,6 +98,8 @@ public final class ModelSpecValidator {
         checkEffects(spec, cache, findings);
         checkDefaultValues(spec, cache, findings);
         checkConstants(spec, findings);
+        checkLibrary(spec, findings);
+        checkNames(spec, findings);
         checkTemplateAndLineage(spec, findings);
 
         // Cycle detection — skip if expression errors were found to avoid cascading noise
@@ -582,6 +587,184 @@ public final class ModelSpecValidator {
         return isQuoteWrapped(s) ? s.substring(1, s.length() - 1) : s;
     }
 
+    /** Names a library export may not take, because Valem itself binds them during evaluation. */
+    private static final Set<String> RESERVED_BINDING_NAMES =
+            org.json_kula.valem.core.engine.EvalBindings.RESERVED_NAMES;
+
+    /**
+     * Built-ins whose value is fixed the moment they are evaluated. A library definition runs
+     * exactly once, when it is compiled, so one of these in a definition body freezes a single value
+     * into every future call — almost never what the author meant, and impossible to notice by
+     * reading the call site.
+     */
+    private static final Set<String> NON_DETERMINISTIC_BUILTINS = Set.of("now", "millis", "random");
+
+    private static final int MAX_LIBRARY_CHARS   = intLimit("valem.limits.library-max-chars",   20_000);
+    private static final int MAX_LIBRARY_EXPORTS = intLimit("valem.limits.library-max-exports", 64);
+    private static final int MAX_LIBRARY_LAYERS  = intLimit("valem.limits.library-max-layers",  8);
+
+    private static int intLimit(String property, int fallback) {
+        Integer configured = Integer.getInteger(property);
+        return configured != null && configured > 0 ? configured : fallback;
+    }
+
+    /**
+     * Validates the {@code library} section: each layer must compile, must not read the model
+     * document, and must export usable names.
+     *
+     * <p>Runs after {@link #checkConstants} because a layer is compiled with {@code $const} bound —
+     * a malformed constants map would otherwise surface as a confusing library error.
+     */
+    private static void checkLibrary(ModelSpec spec, List<ValidationError> out) {
+        LibrarySpec library = spec.library();
+        if (library == null) return;
+
+        if (library.layers().size() > MAX_LIBRARY_LAYERS) {
+            out.add(error("library", "library has " + library.layers().size() + " layers; the maximum "
+                    + "is " + MAX_LIBRARY_LAYERS + ". Each layer is a separate compiled class."));
+        }
+        for (String ref : library.extendsRefs()) {
+            if (isBlank(ref) || !ModelCoordinate.isValid(ref)) {
+                out.add(error("library.extends", "invalid library coordinate: '" + ref + "'"));
+            }
+        }
+
+        int i = 0;
+        Set<String> seenExports = new LinkedHashSet<>();
+        for (LibraryLayer layer : library.layers()) {
+            String loc = library.layers().size() == 1 ? "library.define" : "library.layers[" + i + "]";
+            i++;
+            if (isBlank(layer.define())) {
+                out.add(error(loc, "a library layer requires a definition expression"));
+                continue;
+            }
+            if (layer.define().length() > MAX_LIBRARY_CHARS) {
+                out.add(error(loc, "library definition is " + layer.define().length() + " characters; "
+                        + "the maximum is " + MAX_LIBRARY_CHARS));
+                continue;
+            }
+            checkLayerPurity(layer, loc, out);
+            checkLayerDeterminism(layer, loc, out);
+            checkLayerConstantsContract(spec, layer, loc, out);
+            checkLayerExports(spec, layer, loc, seenExports, out);
+        }
+    }
+
+    /**
+     * Rejects a layer that reads the model document. Such a reference always evaluates to nothing —
+     * the runtime never roots a library's closures at the consuming expression's document — so it
+     * would otherwise produce a blank field with no error anywhere.
+     */
+    private static void checkLayerPurity(LibraryLayer layer, String loc, List<ValidationError> out) {
+        for (LibraryPurityCheck.Finding f : LibraryPurityCheck.check(layer.define())) {
+            out.add(error(loc, "'" + f.reference() + "' always evaluates to nothing. A library "
+                    + "function cannot read the model document — it computes only from its arguments "
+                    + "and $const. Fix: " + f.hint() + ", e.g.\n"
+                    + "  library:    \"$myFn := function($total) { ... }\"\n"
+                    + "  derivation: \"$myFn(order.total)\""));
+        }
+    }
+
+    private static void checkLayerDeterminism(LibraryLayer layer, String loc, List<ValidationError> out) {
+        for (String name : LibraryExports.freeNames(layer.define())) {
+            if (NON_DETERMINISTIC_BUILTINS.contains(name)) {
+                out.add(error(loc, "$" + name + " is evaluated once, when the library is compiled, so "
+                        + "every call would return the same frozen value. Pass it in as an argument."));
+            }
+        }
+    }
+
+    /**
+     * A layer inherited from another model that reads {@code $const} depends on the <em>consuming</em>
+     * model's constants, because {@code $const} resolves against the calling evaluation rather than
+     * the bindings the layer was defined with. Declaring {@code requiresConstants} turns that
+     * invisible coupling into a checked contract; without it the layer is rejected.
+     */
+    private static void checkLayerConstantsContract(ModelSpec spec, LibraryLayer layer, String loc,
+                                                    List<ValidationError> out) {
+        if (!layer.isInherited()) return;      // an own layer and its constants share one author
+
+        boolean readsConst = LibraryExports.freeNames(layer.define()).contains("const");
+        if (readsConst && layer.requiresConstants().isEmpty()) {
+            out.add(error(loc, "inherited library layer '" + layer.origin() + "' reads $const but does "
+                    + "not declare requiresConstants. An inherited layer resolves $const against THIS "
+                    + "model's constants, so the dependency must be declared to be checkable."));
+        }
+        for (String required : layer.requiresConstants()) {
+            if (!spec.constants().containsKey(required)) {
+                out.add(error(loc, "inherited library layer '" + layer.origin() + "' requires constant '"
+                        + required + "', which this model does not declare."));
+            }
+        }
+    }
+
+    /** Compiles the layer and checks what it exports: names must be usable, distinct, and bounded. */
+    private static void checkLayerExports(ModelSpec spec, LibraryLayer layer, String loc,
+                                          Set<String> seenExports, List<ValidationError> out) {
+        Set<String> exports;
+        try {
+            exports = LibraryCache.compile(List.of(layer), LibraryExports.constantsNodeOf(spec)).names();
+        } catch (LibraryCache.LibraryCompilationException e) {
+            out.add(error(loc, "Invalid library definition — " + e.getMessage() + lambdaBlockHint(e)));
+            return;
+        } catch (RuntimeException e) {
+            out.add(error(loc, "Invalid library definition — the compiler could not translate it: "
+                    + e.getClass().getSimpleName()
+                    + (e.getMessage() != null ? " — " + e.getMessage() : "")));
+            return;
+        }
+
+        if (exports.isEmpty()) {
+            out.add(error(loc, "a library must export at least one name — end the definition with the "
+                    + "list of names to export, e.g. [\"money\", \"withVat\"]"));
+        }
+        if (exports.size() > MAX_LIBRARY_EXPORTS) {
+            out.add(warn(loc, "library exports " + exports.size() + " names; more than "
+                    + MAX_LIBRARY_EXPORTS + " suggests it is doing too much"));
+        }
+        for (String name : exports) {
+            if (!name.matches("[A-Za-z_][A-Za-z0-9_]*")) {
+                out.add(error(loc, "export '" + name + "' is not a simple identifier; a bound function "
+                        + "name has no quoted form, so it could never be called"));
+            } else if (LibraryExports.isBuiltin(name)) {
+                out.add(error(loc, "export '$" + name + "' shadows a JSONata built-in and would never "
+                        + "be called — the parser resolves built-ins before any binding. Rename it."));
+            } else if (RESERVED_BINDING_NAMES.contains(name)) {
+                out.add(error(loc, "export '$" + name + "' collides with a name Valem binds during "
+                        + "evaluation ($" + String.join(", $", new java.util.TreeSet<>(RESERVED_BINDING_NAMES))
+                        + "). Rename it."));
+            }
+            if (!seenExports.add(name)) {
+                out.add(warn(loc, "export '$" + name + "' shadows the same name from an earlier layer; "
+                        + "expressions inherited from that layer will now call this one"));
+            }
+        }
+    }
+
+    /**
+     * The parser reports a multi-statement lambda body as {@code Expected RBRACE but found SEMICOLON},
+     * which does not suggest the fix. It is an easy slip in a library, where multi-statement functions
+     * are common, so name the remedy.
+     */
+    private static String lambdaBlockHint(RuntimeException e) {
+        String message = String.valueOf(e.getMessage());
+        return message.contains("RBRACE") && message.contains("SEMICOLON")
+                ? "\nHint: a lambda body is a single expression — wrap a multi-statement body in "
+                  + "parentheses: function($x) { ( $a := 1; $a ) }"
+                : "";
+    }
+
+    /**
+     * Resolves every {@code $name} used anywhere in the spec against the JSONata built-ins, the
+     * model's library exports, and the names Valem binds. Runs after {@link #checkLibrary} so the
+     * export set is known. See {@link #checkNameResolution} for the ERROR/WARNING split.
+     */
+    private static void checkNames(ModelSpec spec, List<ValidationError> out) {
+        Set<String> exports = LibraryExports.namesOf(spec);
+        LibraryExports.forEachExpression(spec,
+                (location, expr) -> checkNameResolution(expr, location, exports, out));
+    }
+
     private static void checkConstants(ModelSpec spec, List<ValidationError> out) {
         for (Map.Entry<String, com.fasterxml.jackson.databind.JsonNode> e : spec.constants().entrySet()) {
             String name = e.getKey();
@@ -883,6 +1066,76 @@ public final class ModelSpecValidator {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Reports {@code $name}s an expression uses that nothing can resolve.
+     *
+     * <p>Compilation alone does not catch these: an unknown {@code $myFn(x)} translates to a
+     * bound-function lookup and fails only at evaluation, with a {@code T1006} that the runtime turns
+     * into a {@code null} derived value and a trace entry — a silently blank field rather than an
+     * error. Resolving names here is what makes a mistyped library call a validation failure.
+     *
+     * <p>Two severities, deliberately:
+     * <ul>
+     *   <li><b>A call site</b> ({@code $name(...)}) is an ERROR — it is a guaranteed runtime failure,
+     *       so reporting it now is strictly better than reporting it later.</li>
+     *   <li><b>A value reference</b> ({@code $name}) is a WARNING — an unbound variable is legal
+     *       JSONata that evaluates to <i>undefined</i>, and some authored expressions rely on it.</li>
+     * </ul>
+     */
+    private static void checkNameResolution(String expr, String location, Set<String> exports,
+                                            List<ValidationError> out) {
+        Set<String> free = LibraryExports.freeNames(expr);
+        if (free.isEmpty()) return;
+
+        for (String name : free) {
+            if (LibraryExports.isBuiltin(name)) continue;
+            if (exports.contains(name)) continue;
+            if (RESERVED_BINDING_NAMES.contains(name)) continue;
+
+            boolean isCall = expr.contains("$" + name + "(");
+            String known = exports.isEmpty()
+                    ? "this model declares no library"
+                    : "library exports: $" + String.join(", $", new java.util.TreeSet<>(exports));
+            String suggestion = nearestExport(name, exports);
+            if (isCall) {
+                out.add(error(location, "$" + name + " is not defined"
+                        + (suggestion != null ? " — did you mean $" + suggestion + "?" : "")
+                        + " (" + known + ")"));
+            } else {
+                out.add(warn(location, "$" + name + " is not bound and will evaluate to nothing"
+                        + (suggestion != null ? " — did you mean $" + suggestion + "?" : "")
+                        + " (" + known + ")"));
+            }
+        }
+    }
+
+    /** The closest export by edit distance, when one is close enough to be worth suggesting. */
+    private static String nearestExport(String name, Set<String> exports) {
+        String best = null;
+        int bestDistance = Integer.MAX_VALUE;
+        for (String candidate : exports) {
+            int d = editDistance(name.toLowerCase(), candidate.toLowerCase());
+            if (d < bestDistance) { bestDistance = d; best = candidate; }
+        }
+        // A third of the name may differ before the suggestion becomes noise.
+        return best != null && bestDistance <= Math.max(1, name.length() / 3) ? best : null;
+    }
+
+    private static int editDistance(String a, String b) {
+        int[] previous = new int[b.length() + 1];
+        int[] current  = new int[b.length() + 1];
+        for (int j = 0; j <= b.length(); j++) previous[j] = j;
+        for (int i = 1; i <= a.length(); i++) {
+            current[0] = i;
+            for (int j = 1; j <= b.length(); j++) {
+                int cost = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                current[j] = Math.min(Math.min(current[j - 1] + 1, previous[j] + 1), previous[j - 1] + cost);
+            }
+            int[] swap = previous; previous = current; current = swap;
+        }
+        return previous[b.length()];
+    }
 
     private static void validateExpr(String expr, String location,
                                      ExpressionCache cache, List<ValidationError> out) {

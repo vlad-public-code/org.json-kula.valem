@@ -364,6 +364,11 @@ final class SandboxSessionModelOperations implements ModelOperations, BrowserPai
     }
 
     @Override
+    public JsonNode getLibrary(String id) {
+        return requireDelegate().getLibrary(toServer(id));
+    }
+
+    @Override
     public void deleteModel(String id) {
         requireDelegate().deleteModel(toServer(id));
     }
@@ -410,9 +415,8 @@ final class SandboxSessionModelOperations implements ModelOperations, BrowserPai
     }
 
     private ModelSpec withTranslatedId(ModelSpec spec) {
-        return new ModelSpec(fromServer(spec.id()), spec.version(), spec.schema(), spec.derivations(),
-                spec.metaDerivations(), spec.constraints(), spec.tests(), spec.defaultValues(),
-                spec.constants(), spec.viewDefinition(), spec.effects(), spec.template(), spec.lineage());
+        // withId copies every other component, so a new spec section cannot be dropped here by omission.
+        return spec.withId(fromServer(spec.id()));
     }
 
     // ── Raw HTTP for the pre-session pairing endpoints (no ValemClient yet) ──

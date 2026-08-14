@@ -25,6 +25,7 @@ JSON protocol. This is the single source of truth for endpoints and request/resp
 | `POST` | `/models` | Create model from a `ModelSpec` body. A `template.ref` branch is flattened + lineage-pinned before validation. Returns `201 Created` (`Location: /models/{id}`) with `{id, status:"created"}`. 422 on spec/composition validation failure, 409 on duplicate id. |
 | `GET` | `/models/{id}` | Model info: id, version, derivation/constraint/effect counts. |
 | `GET` | `/models/{id}/spec` | Full `ModelSpec` JSON as stored. |
+| `GET` | `/models/{id}/library` | The model's library vocabulary: `{description, layers, exports:[{name, kind, signature, arity, origin}]}`. **404** when the model declares no library. |
 | `GET` | `/models/{id}/lineage` | The pinned ancestor chain a branch was materialized from (`[]` for a non-branch model). |
 | `POST` | `/models/{id}/promote` | Promote a local model into a web repository (one-way, closure-checked). Body `{toRepo}`. 400 if `toRepo` missing/blank; 409 on a closure/locality violation. |
 | `GET` | `/models/{id}/effects/pending` | Inherited effects quarantined pending the owner's approval (cross-owner branching only — see [security-model.md](../deployment/security-model.md)). |

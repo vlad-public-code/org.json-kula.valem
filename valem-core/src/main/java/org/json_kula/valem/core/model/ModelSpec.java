@@ -24,7 +24,8 @@ public record ModelSpec(
         JsonNode                 viewDefinition,   // raw UI view definition; parsed by valem-view
         List<EffectSpec>         effects,          // effect requests emitted by the core, executed by a shell (server/caller)
         TemplateRef              template,         // optional: branch parent (authored); resolved + inlined at create/load
-        List<LineageEntry>       lineage           // read-only pinned ancestor chain (materializer-written)
+        List<LineageEntry>       lineage,          // read-only pinned ancestor chain (materializer-written)
+        LibrarySpec              library           // optional JSONata functions/values bound in every expression
 ) {
     @JsonCreator
     public static ModelSpec of(
@@ -47,7 +48,8 @@ public record ModelSpec(
             // Removed: actions are superseded by effects with executor "caller". Accepted (and rejected
             // when non-empty) so a legacy spec fails loudly with a migration pointer, and an empty
             // "actions": [] left in an old spec/fixture still deserializes.
-            @JsonProperty("actions")                           List<JsonNode>           actions
+            @JsonProperty("actions")                           List<JsonNode>           actions,
+            @JsonProperty("library")                           LibrarySpec              library
     ) {
         if (initialState != null && !initialState.isEmpty()) {
             throw new IllegalArgumentException(
@@ -72,14 +74,26 @@ public record ModelSpec(
                 viewDefinition,
                 effects          != null ? List.copyOf(effects)          : List.of(),
                 template,
-                lineage          != null ? List.copyOf(lineage)          : List.of()
+                lineage          != null ? List.copyOf(lineage)          : List.of(),
+                library
         );
     }
 
     /** A copy of this spec carrying a different {@code id}; every other field is shared unchanged. */
     public ModelSpec withId(String newId) {
         return new ModelSpec(newId, version, schema, derivations, metaDerivations, constraints,
-                tests, defaultValues, constants, viewDefinition, effects, template, lineage);
+                tests, defaultValues, constants, viewDefinition, effects, template, lineage, library);
+    }
+
+    /** A copy of this spec carrying a different {@code library}; every other field is shared. */
+    public ModelSpec withLibrary(LibrarySpec newLibrary) {
+        return new ModelSpec(id, version, schema, derivations, metaDerivations, constraints,
+                tests, defaultValues, constants, viewDefinition, effects, template, lineage, newLibrary);
+    }
+
+    /** The library's layers in bind order, or an empty list when the spec declares no library. */
+    public List<LibraryLayer> libraryLayers() {
+        return library != null ? library.layers() : List.of();
     }
 }
 
