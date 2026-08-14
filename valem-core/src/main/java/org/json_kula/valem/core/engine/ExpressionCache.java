@@ -75,6 +75,50 @@ public final class ExpressionCache {
         return FALLBACK_MAX_SIZE;
     }
 
+    /** Last-resort evaluation timeout when nothing configures one; mirrors {@code application.yml}. */
+    static final int FALLBACK_TIMEOUT_MS = 2_000;
+
+    /**
+     * Wall-clock budget for a single expression evaluation, from (in precedence order) the
+     * {@code valem.limits.expression-timeout-ms} system property, the
+     * {@code VALEM_LIMITS_EXPRESSION_TIMEOUT_MS} environment variable, or
+     * {@link #FALLBACK_TIMEOUT_MS}. {@code 0} disables the timeout entirely.
+     *
+     * <p><b>Why there is a timeout at all.</b> Derivations, constraints and effect triggers are
+     * evaluated <b>inside the model lock</b> ({@code ModelService} synchronizes on the runtime), so a
+     * single non-terminating evaluation does not just fail one request — it holds the lock, and on a
+     * host where Loom gives parallelism 1 it can wedge the whole service. Expression bodies are
+     * LLM-authored; a {@code library} makes deep, self-recursive computation easy to write for the
+     * first time. A bounded evaluation turns that from an outage into one failed field: the runtime
+     * already maps an evaluation error to a {@code null} value plus a {@code DerivationTrace}.
+     *
+     * <p><b>Why it is wall-clock, and what that costs.</b> The deadline is checked against
+     * {@code System.currentTimeMillis()}, which keeps advancing while the thread is descheduled, so
+     * on a pathologically loaded host a normally-fast expression can be timed out. The bound is
+     * therefore generous relative to real expressions (single-digit milliseconds) and configurable;
+     * set it to {@code 0} where evaluation time is genuinely unbounded and the lock contention is
+     * acceptable.
+     *
+     * <p>Enabling it also flips a process-wide flag in the JSONata runtime
+     * ({@code JsonataRuntime.notifyTimeoutInUse}) that installs a deadline check at higher-order
+     * call sites. That check is one thread-local read per 64 callback invocations — negligible, but
+     * it is not free, which is the other reason the value is configurable.
+     */
+    static int resolveTimeoutMs() {
+        Integer fromProperty = Integer.getInteger("valem.limits.expression-timeout-ms");
+        if (fromProperty != null) return Math.max(0, fromProperty);
+
+        String fromEnv = System.getenv("VALEM_LIMITS_EXPRESSION_TIMEOUT_MS");
+        if (fromEnv != null && !fromEnv.isBlank()) {
+            try {
+                return Math.max(0, Integer.parseInt(fromEnv.trim()));
+            } catch (NumberFormatException ignored) {
+                // A malformed override must not stop the engine starting — fall through to the default.
+            }
+        }
+        return FALLBACK_TIMEOUT_MS;
+    }
+
     /** Unchecked wrapper thrown when a JSONata expression fails to compile. */
     public static final class CompilationException extends RuntimeException {
         private final String expression;
@@ -153,10 +197,31 @@ public final class ExpressionCache {
 
     private JsonataExpression compile(String expr) {
         try {
-            return factory.compile(expr);
+            return withTimeout(factory.compile(expr));
         } catch (JsonataCompilationException e) {
             throw new CompilationException(expr, e);
         }
+    }
+
+    /**
+     * Applies the configured evaluation timeout to a freshly compiled expression.
+     *
+     * <p>Applied here, at compile time, rather than per evaluation: the deadline itself is computed
+     * when an evaluation begins, so the budget is a property of the compiled instance and is safe to
+     * set before the instance is published to the shared cache and used concurrently.
+     *
+     * <p>Resolved per compilation rather than captured in a static initialiser like
+     * {@link #DEFAULT_MAX_SIZE}. The two settings are not alike: the cache bound sizes a structure
+     * allocated once, while the budget is stamped onto each compiled expression, and reading a system
+     * property is nothing beside the javac round-trip that just happened. The payoff is that changing
+     * the setting takes effect for expressions compiled afterwards, instead of requiring a restart.
+     * (An already-compiled expression keeps the budget it was given — the shared cache hands out one
+     * instance per expression for the life of the process.)
+     */
+    private static JsonataExpression withTimeout(JsonataExpression compiled) {
+        int timeoutMs = resolveTimeoutMs();
+        if (timeoutMs > 0) compiled.setTimeout(timeoutMs);
+        return compiled;
     }
 
     /**
@@ -194,8 +259,9 @@ public final class ExpressionCache {
             List<JsonataExpression> compiled = factory.compileAll(toCompile);
             for (int i = 0; i < toCompile.size(); i++) {
                 String e = toCompile.get(i);
-                JsonataExpression existing = SHARED.putIfAbsent(e, compiled.get(i));
-                cache.putIfAbsent(e, existing != null ? existing : compiled.get(i));
+                JsonataExpression fresh = withTimeout(compiled.get(i));
+                JsonataExpression existing = SHARED.putIfAbsent(e, fresh);
+                cache.putIfAbsent(e, existing != null ? existing : fresh);
             }
         } catch (JsonataCompilationException e) {
             // Best-effort: leave the expressions for lazy per-expression compilation via get(),

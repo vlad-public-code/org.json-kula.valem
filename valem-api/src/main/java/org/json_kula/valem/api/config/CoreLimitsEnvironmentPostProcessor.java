@@ -36,6 +36,11 @@ public class CoreLimitsEnvironmentPostProcessor implements EnvironmentPostProces
      */
     static final String[] BRIDGED_PROPERTIES = {
             "valem.limits.expression-cache-size",
+            "valem.limits.expression-timeout-ms",
+            "valem.limits.library-cache-size",
+            "valem.limits.library-max-chars",
+            "valem.limits.library-max-exports",
+            "valem.limits.library-max-layers",
             "valem.limits.max-array-index",
             "valem.limits.regex-max-input",
             "valem.limits.regex-timeout-ms",

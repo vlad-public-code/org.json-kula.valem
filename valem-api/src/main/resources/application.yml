@@ -42,6 +42,20 @@ valem:
     # property valem-core reads by CoreLimitsEnvironmentPostProcessor; see
     # docs/deployment/configuration.md for sizing guidance.
     expression-cache-size: ${VALEM_LIMITS_EXPRESSION_CACHE_SIZE:500}
+    # Wall-clock budget for ONE expression evaluation; 0 disables. Derivations, constraints and
+    # effect triggers are evaluated inside the model lock, so a non-terminating expression does not
+    # merely fail a request — it holds the lock, and where Loom gives parallelism 1 it can wedge the
+    # service. Bounding it turns that into one failed field (null value + an error trace). Real
+    # expressions run in single-digit milliseconds; the deadline is wall-clock, so a pathologically
+    # loaded host can time out a normally-fast expression — raise it, or set 0, if that happens.
+    expression-timeout-ms: ${VALEM_LIMITS_EXPRESSION_TIMEOUT_MS:2000}
+    # Max compiled-library entries (bounded LRU, shared process-wide, content-addressed on the
+    # definition + the model's constants + signature overrides). One library = one generated class,
+    # so this bounds Metaspace exactly as expression-cache-size does. Values below 4 are floored.
+    library-cache-size: ${VALEM_LIMITS_LIBRARY_CACHE_SIZE:64}
+    library-max-chars:   ${VALEM_LIMITS_LIBRARY_MAX_CHARS:20000}    # per definition expression
+    library-max-exports: ${VALEM_LIMITS_LIBRARY_MAX_EXPORTS:64}     # above this, a warning
+    library-max-layers:  ${VALEM_LIMITS_LIBRARY_MAX_LAYERS:8}       # own + inherited layers
   blob-store: memory           # memory | filesystem
   blob-store-path: ${user.home}/.valem/blobs
   blob:
