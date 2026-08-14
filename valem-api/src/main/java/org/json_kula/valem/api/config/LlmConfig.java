@@ -1,14 +1,14 @@
 package org.json_kula.valem.api.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.json_kula.valem.api.llm.AnthropicLlmClient;
 import org.json_kula.valem.api.llm.BraveSearchBackend;
 import org.json_kula.valem.api.llm.ConcurrencyLimitingLlmClient;
 import org.json_kula.valem.api.llm.DuckDuckGoSearchBackend;
+import org.json_kula.valem.api.llm.LlmClientFactory;
 import org.json_kula.valem.api.llm.LlmInteractionLog;
 import org.json_kula.valem.api.llm.MockLlmClient;
-import org.json_kula.valem.api.llm.OpenAiLlmClient;
 import org.json_kula.valem.api.llm.RecordingLlmClient;
+import org.json_kula.valem.api.llm.StructuredOutputMode;
 import org.json_kula.valem.api.llm.CompositeWebTool;
 import org.json_kula.valem.api.llm.SearchBackend;
 import org.json_kula.valem.api.llm.TavilySearchBackend;
@@ -41,12 +41,6 @@ public class LlmConfig {
 
     private static final Logger log = LoggerFactory.getLogger(LlmConfig.class);
 
-    private static final String OPENAI_BASE_URL      = "https://api.openai.com/v1";
-    private static final String OLLAMA_BASE_URL      = "http://localhost:11434/v1";
-    private static final String OPENROUTER_BASE_URL  = "https://openrouter.ai/api/v1";
-    private static final String GROQ_BASE_URL        = "https://api.groq.com/openai/v1";
-    private static final String MISTRAL_BASE_URL     = "https://api.mistral.ai/v1";
-
     @Bean
     LlmClient llmClient(
             @Value("${valem.llm.provider:anthropic}") String provider,
@@ -58,6 +52,7 @@ public class LlmConfig {
             @Value("${valem.llm.max-concurrent-requests:0}") int maxConcurrentRequests,
             @Value("${valem.llm.prompt-cache.enabled:true}") boolean promptCacheEnabled,
             @Value("${valem.llm.tool-loop.max-iterations:40}") int toolLoopMaxIterations,
+            @Value("${valem.llm.structured-output:schema}") String structuredOutput,
             ObjectMapper mapper,
             RestClient.Builder restClientBuilder,
             LlmInteractionLog interactionLog) {
@@ -73,52 +68,9 @@ public class LlmConfig {
         } else {
             log.info("LLM provider '{}' using model '{}'{}", provider, model,
                     configuredModel.isBlank() ? " (provider default)" : "");
-            inner = switch (provider.toLowerCase()) {
-                case "openai" -> {
-                    String url = baseUrl.isBlank() ? OPENAI_BASE_URL : baseUrl;
-                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, toolLoopMaxIterations, mapper,
-                            restClientBuilder.build());
-                }
-                case "ollama" -> {
-                    String url = baseUrl.isBlank() ? OLLAMA_BASE_URL : baseUrl;
-                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, toolLoopMaxIterations, mapper,
-                            restClientBuilder.build());
-                }
-                case "openrouter" -> {
-                    String url = baseUrl.isBlank() ? OPENROUTER_BASE_URL : baseUrl;
-                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, toolLoopMaxIterations, mapper,
-                            restClientBuilder
-                                    .defaultHeader("HTTP-Referer", "https://github.com/vlad-public-code/valem")
-                                    .defaultHeader("X-Title", "Valem")
-                                    .build());
-                }
-                case "groq" -> {
-                    String url = baseUrl.isBlank() ? GROQ_BASE_URL : baseUrl;
-                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, toolLoopMaxIterations, mapper,
-                            restClientBuilder.build());
-                }
-                case "mistral" -> {
-                    String url = baseUrl.isBlank() ? MISTRAL_BASE_URL : baseUrl;
-                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, toolLoopMaxIterations, mapper,
-                            restClientBuilder.build());
-                }
-                case "gemini" -> {
-                    String url = baseUrl.isBlank()
-                            ? "https://generativelanguage.googleapis.com/v1beta/openai/"
-                            : baseUrl;
-                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, toolLoopMaxIterations, mapper,
-                            restClientBuilder.build());
-                }
-                case "cerebras" -> {
-                    String url = baseUrl.isBlank() ? "https://api.cerebras.ai/v1" : baseUrl;
-                    yield new OpenAiLlmClient(url, apiKey, model, maxTokens, toolLoopMaxIterations, mapper,
-                            restClientBuilder.build());
-                }
-                case "anthropic" -> new AnthropicLlmClient(apiKey, model, maxTokens, promptCacheEnabled,
-                        toolLoopMaxIterations, mapper, restClientBuilder.build());
-                default -> throw new IllegalArgumentException(
-                        "Unknown LLM provider: '" + provider + "'. Valid values: anthropic, openai, ollama, openrouter, groq, mistral, gemini, cerebras");
-            };
+            inner = LlmClientFactory.create(provider, apiKey, model, maxTokens, baseUrl,
+                    promptCacheEnabled, toolLoopMaxIterations,
+                    StructuredOutputMode.parse(structuredOutput), mapper, restClientBuilder);
         }
         LlmClient client = new RecordingLlmClient(inner, interactionLog);
         // Optionally cap simultaneous LLM calls: throttled keys 429 when generations overlap.
@@ -137,17 +89,7 @@ public class LlmConfig {
      * anyway).
      */
     static String defaultModelFor(String provider) {
-        return switch (provider == null ? "" : provider.toLowerCase()) {
-            case "anthropic"  -> "claude-sonnet-4-6";
-            case "openai"     -> "gpt-4o";
-            case "mistral"    -> "mistral-large-latest";
-            case "groq"       -> "llama-3.3-70b-versatile";
-            case "gemini"     -> "gemini-2.0-flash";
-            case "cerebras"   -> "llama-3.3-70b";
-            case "ollama"     -> "llama3.1";
-            case "openrouter" -> "anthropic/claude-3.7-sonnet";
-            default           -> "claude-sonnet-4-6";
-        };
+        return LlmClientFactory.defaultModelFor(provider);
     }
 
     /**
