@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.json_kula.valem.core.llm.LlmClient;
+import org.json_kula.valem.core.llm.LlmDescriptor;
 import org.json_kula.valem.core.llm.LlmProgressEvent;
 import org.json_kula.valem.core.llm.SpecGenerationPrompt;
 import org.slf4j.Logger;
@@ -17,6 +18,14 @@ import org.springframework.web.client.RestClientException;
 import java.util.function.Consumer;
 
 public class AnthropicLlmClient implements LlmClient {
+
+    /** This client speaks only to Anthropic, so the provider half of its identity is fixed. */
+    private static final String PROVIDER = "anthropic";
+
+    @Override
+    public LlmDescriptor describe() {
+        return new LlmDescriptor(PROVIDER, model);
+    }
 
     private static final Logger log = LoggerFactory.getLogger(AnthropicLlmClient.class);
 

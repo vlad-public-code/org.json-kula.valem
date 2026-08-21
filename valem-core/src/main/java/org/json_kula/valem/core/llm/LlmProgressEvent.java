@@ -9,8 +9,28 @@ public sealed interface LlmProgressEvent
                 LlmProgressEvent.ValidationFailed, LlmProgressEvent.TestRunning,
                 LlmProgressEvent.TestFailed, LlmProgressEvent.Retrying {
 
-    /** A new HTTP round-trip to the LLM is starting. */
-    record LlmRequesting(int attempt) implements LlmProgressEvent {}
+    /**
+     * A new HTTP round-trip to the LLM is starting, naming the model it goes to.
+     *
+     * <p>Carried per event rather than announced once per session because a routing deployment can
+     * send attempt 2 to a different provider than attempt 1 — which is exactly when a reader needs
+     * to know. {@code provider}/{@code model} are {@code null} when the client cannot identify
+     * itself.
+     */
+    record LlmRequesting(int attempt, String provider, String model) implements LlmProgressEvent {
+
+        /** For a client that does not identify itself. */
+        public LlmRequesting(int attempt) {
+            this(attempt, null, null);
+        }
+
+        /** From a {@link LlmDescriptor}, which may be {@code null}. */
+        public static LlmRequesting of(int attempt, LlmDescriptor descriptor) {
+            return descriptor == null
+                    ? new LlmRequesting(attempt)
+                    : new LlmRequesting(attempt, descriptor.provider(), descriptor.model());
+        }
+    }
 
     /** The LLM requested a tool call. {@code detail} is the query/URL/expression preview. */
     record ToolCalling(String tool, String detail) implements LlmProgressEvent {}

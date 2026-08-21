@@ -1,6 +1,7 @@
 package org.json_kula.valem.api.llm;
 
 import org.json_kula.valem.core.llm.LlmClient;
+import org.json_kula.valem.core.llm.LlmDescriptor;
 import org.json_kula.valem.core.llm.LlmProgressEvent;
 import org.json_kula.valem.core.llm.SpecGenerationPrompt;
 
@@ -31,6 +32,12 @@ public final class ConcurrencyLimitingLlmClient implements LlmClient {
      * @param delegate      the client to gate
      * @param maxConcurrent maximum simultaneous calls; must be {@code >= 1}
      */
+    /** Gating changes when a call runs, never which model answers it. */
+    @Override
+    public LlmDescriptor describe() {
+        return delegate.describe();
+    }
+
     public ConcurrencyLimitingLlmClient(LlmClient delegate, int maxConcurrent) {
         if (maxConcurrent < 1)
             throw new IllegalArgumentException("maxConcurrent must be >= 1, was " + maxConcurrent);

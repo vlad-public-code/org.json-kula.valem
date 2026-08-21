@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.json_kula.valem.core.llm.LlmClient;
+import org.json_kula.valem.core.llm.LlmDescriptor;
 import org.json_kula.valem.core.llm.LlmProgressEvent;
 import org.json_kula.valem.core.llm.SpecGenerationPrompt;
 import org.slf4j.Logger;
@@ -41,8 +42,16 @@ public class OpenAiLlmClient implements LlmClient {
      * {@code tools}. Groq rejects the combination outright — see the constructor.
      */
     private final boolean responseFormatWithTools;
+    /** Provider label for {@link #describe()}; this class serves many, so it must be told which. */
+    private final String provider;
 
     private static final int DEFAULT_MAX_TOOL_ITERATIONS = 40;
+    /**
+     * What a client built without a provider name calls itself. Honest rather than wrong: this class
+     * speaks the OpenAI wire format to a dozen back ends, and only {@link LlmClientFactory} knows
+     * which one a given instance points at.
+     */
+    private static final String UNNAMED_PROVIDER = "openai-compatible";
 
     public OpenAiLlmClient(String baseUrl, String apiKey, String model, int maxTokens,
                            ObjectMapper mapper, RestClient restClient) {
@@ -88,6 +97,24 @@ public class OpenAiLlmClient implements LlmClient {
                            int maxToolIterations, StructuredOutputMode structuredOutput,
                            boolean responseFormatWithTools,
                            ObjectMapper mapper, RestClient restClient) {
+        this(UNNAMED_PROVIDER, baseUrl, apiKey, model, maxTokens, maxToolIterations, structuredOutput,
+                responseFormatWithTools, mapper, restClient);
+    }
+
+    /**
+     * As above, naming the provider this instance points at so the generation log can report which
+     * model answered.
+     *
+     * @param provider provider label for {@link #describe()} ({@code groq}, {@code mistral}, …);
+     *                 blank falls back to {@code openai-compatible}. Note this is the <b>first</b>
+     *                 parameter and {@code baseUrl} is the second — they are both strings, so pass
+     *                 them by name at the call site if there is any doubt.
+     */
+    public OpenAiLlmClient(String provider, String baseUrl, String apiKey, String model, int maxTokens,
+                           int maxToolIterations, StructuredOutputMode structuredOutput,
+                           boolean responseFormatWithTools,
+                           ObjectMapper mapper, RestClient restClient) {
+        this.provider = provider == null || provider.isBlank() ? UNNAMED_PROVIDER : provider;
         this.structuredOutput = structuredOutput != null ? structuredOutput : StructuredOutputMode.SCHEMA;
         this.responseFormatWithTools = responseFormatWithTools;
         this.apiKey = apiKey;
@@ -97,6 +124,11 @@ public class OpenAiLlmClient implements LlmClient {
         this.mapper = mapper;
         this.restClient = restClient;
         this.endpoint = baseUrl.stripTrailing() + "/chat/completions";
+    }
+
+    @Override
+    public LlmDescriptor describe() {
+        return new LlmDescriptor(provider, model);
     }
 
     private int effectiveMaxTokens(Integer override) {

@@ -230,7 +230,7 @@ public final class SpecGenerator {
             // Carry the LLM-selected domain guidance forward into repairs (fresh conversations).
             if (i > 0) prompt = withGuidance(prompt, resolvedGuidance);
             if (i > 0) onProgress.accept(new LlmProgressEvent.Retrying(attempts, maxRetriesHard));
-            onProgress.accept(new LlmProgressEvent.LlmRequesting(attempts));
+            onProgress.accept(LlmProgressEvent.LlmRequesting.of(attempts, llm.describe()));
             rawResp = callLlm(prompt, executor, i, responseSchema, maxTokensOverride, onProgress);
             if (executor instanceof ResolvedGuidanceProvider g) resolvedGuidance = g.resolvedGuidance();
             String cleanJson    = extractJson(rawResp);
@@ -478,7 +478,7 @@ public final class SpecGenerator {
             if (executor != null) executor.resetPerAttemptBudget();
             if (i > 0) prompt = withGuidance(prompt, resolvedGuidance);
             if (i > 0) onProgress.accept(new LlmProgressEvent.Retrying(attempts, maxRetriesHard));
-            onProgress.accept(new LlmProgressEvent.LlmRequesting(attempts));
+            onProgress.accept(LlmProgressEvent.LlmRequesting.of(attempts, llm.describe()));
             String rawResp      = callLlm(prompt, executor, i, responseSchema, null, onProgress);
             if (executor instanceof ResolvedGuidanceProvider g) resolvedGuidance = g.resolvedGuidance();
             String repairedJson = repairConstraintPolicy(

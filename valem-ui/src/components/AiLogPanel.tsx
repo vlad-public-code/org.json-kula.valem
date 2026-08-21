@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
 import type { LlmInteraction, WebFetchCall } from '../types';
+import { modelLabel } from './LlmProgressLog';
 
 function formatTs(ts: string) {
   return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -72,6 +73,17 @@ function InteractionRow({ item }: { item: LlmInteraction }) {
         </span>
         <span style={{ fontSize: 12, color: 'var(--muted, #888)' }}>{formatTs(item.timestamp)}</span>
         <span style={{ fontSize: 12, color: 'var(--muted, #888)' }}>{item.durationMs} ms</span>
+        {modelLabel(item.provider ?? undefined, item.model ?? undefined) && (
+          <span
+            title="The LLM that answered this call"
+            style={{
+              fontSize: 11, color: 'var(--muted, #888)', background: 'var(--code-bg, #1a1a1a)',
+              padding: '1px 6px', borderRadius: 4, whiteSpace: 'nowrap',
+            }}
+          >
+            {modelLabel(item.provider ?? undefined, item.model ?? undefined)}
+          </span>
+        )}
         {fetchCount > 0 && (
           <span style={{ fontSize: 11, color: 'var(--muted, #888)', background: 'var(--code-bg, #1a1a1a)', padding: '1px 6px', borderRadius: 4 }}>
             {fetchCount} fetch{fetchCount !== 1 ? 'es' : ''}

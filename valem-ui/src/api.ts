@@ -4,7 +4,9 @@ import type { EvaluatedView } from 'valem-view-react';
 // ── LLM progress streaming ────────────────────────────────────────────────────
 
 export type LlmProgressEventData =
-  | { type: 'llm_requesting'; attempt: number }
+  // provider/model are omitted when the client cannot identify itself; a routing deployment can
+  // report a different pair on a later attempt, which is the point of sending them per event.
+  | { type: 'llm_requesting'; attempt: number; provider?: string; model?: string }
   | { type: 'tool_calling'; tool: string; detail: string }
   | { type: 'tool_completed'; tool: string; resultSummary: string }
   | { type: 'validating'; attempt: number }

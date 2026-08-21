@@ -107,6 +107,18 @@ public interface LlmClient {
         return completeWithTools(parts.concatenated(), tools, executor, options, onProgress);
     }
 
+    /**
+     * Which provider and model this client would answer with, for logs and progress events.
+     *
+     * <p>Default {@code null} = unknown, so a lambda or a test stub stays a valid {@code LlmClient}.
+     * A decorator must delegate this to whatever it wraps, or the identity is lost at the first
+     * wrapper. A client that <em>routes</em> across several providers reports the one the next call
+     * would go to; see its own documentation for how exact that is under failover.
+     */
+    default LlmDescriptor describe() {
+        return null;
+    }
+
     // ── Tool-calling types ────────────────────────────────────────────────────
 
     /**
