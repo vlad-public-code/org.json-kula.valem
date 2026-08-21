@@ -1,6 +1,7 @@
 package org.json_kula.valem.api.llm;
 
 import org.json_kula.valem.core.llm.LlmClient;
+import org.json_kula.valem.core.llm.LlmDescriptor;
 import org.json_kula.valem.core.llm.LlmProgressEvent;
 import org.json_kula.valem.core.llm.SpecGenerationPrompt;
 
@@ -17,6 +18,12 @@ public class RecordingLlmClient implements LlmClient {
     public RecordingLlmClient(LlmClient delegate, LlmInteractionLog log) {
         this.delegate = delegate;
         this.log = log;
+    }
+
+    /** Recording changes nothing about which model answers; report whatever is underneath. */
+    @Override
+    public LlmDescriptor describe() {
+        return delegate.describe();
     }
 
     @Override
@@ -105,14 +112,20 @@ public class RecordingLlmClient implements LlmClient {
     private String doRecord(String system, String user, String prompt, LlmCallable call,
                             Supplier<List<WebFetchFact>> getFacts) {
         long start = System.currentTimeMillis();
+        // Read the identity BEFORE the call, not after. A routing delegate answers describe() with
+        // the provider the next call would go to, so asking afterwards — once a failure has opened a
+        // circuit — would name the provider that will serve the NEXT call, not the one that just ran.
+        LlmDescriptor descriptor = delegate.describe();
+        String provider = descriptor == null ? null : descriptor.provider();
+        String model    = descriptor == null ? null : descriptor.model();
         try {
             String response = call.call();
             log.record(new LlmInteractionRecord(Instant.now(), system, user, prompt, response, null,
-                    System.currentTimeMillis() - start, getFacts.get()));
+                    System.currentTimeMillis() - start, getFacts.get(), provider, model));
             return response;
         } catch (LlmException e) {
             log.record(new LlmInteractionRecord(Instant.now(), system, user, prompt, null, e.getMessage(),
-                    System.currentTimeMillis() - start, getFacts.get()));
+                    System.currentTimeMillis() - start, getFacts.get(), provider, model));
             throw e;
         }
     }

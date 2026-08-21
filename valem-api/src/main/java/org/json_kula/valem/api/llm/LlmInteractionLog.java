@@ -42,7 +42,13 @@ public class LlmInteractionLog {
                 e.response() == null ? null : REDACTED,
                 e.errorMessage() == null ? null : REDACTED,
                 e.durationMs(),
-                List.of());
+                List.of(),
+                // Kept, not redacted: a provider name and a public model id are metadata, carrying
+                // no domain data. This mode exists to drop the prompt/response text while keeping
+                // the operational trail — and "a call failed" is not much of a trail if you cannot
+                // tell which model it went to. The class doc above already promises to keep these.
+                e.provider(),
+                e.model());
     }
 
     public synchronized List<LlmInteractionRecord> getAll() {

@@ -3,6 +3,7 @@ package org.json_kula.valem.api.llm;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.json_kula.valem.core.llm.LlmClient;
+import org.json_kula.valem.core.llm.LlmDescriptor;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
@@ -44,6 +45,26 @@ class LlmClientFactoryWiringTest {
         JsonNode body = capturePlainRequest("groq");
 
         assertThat(body.path("response_format").path("type").asText()).isEqualTo("json_schema");
+    }
+
+    @Test
+    void the_built_client_knows_which_provider_it_points_at() {
+        // OpenAiLlmClient speaks the same wire format to a dozen back ends, so only the factory can
+        // tell it which one it is — and without that the generation log cannot name the model.
+        assertThat(build("groq").client.describe())
+                .isEqualTo(new LlmDescriptor("groq", "openai/gpt-oss-120b"));
+        assertThat(build("mistral").client.describe())
+                .isEqualTo(new LlmDescriptor("mistral", "mistral-large-latest"));
+        assertThat(build("anthropic").client.describe())
+                .isEqualTo(new LlmDescriptor("anthropic", "claude-sonnet-4-6"));
+    }
+
+    @Test
+    void a_client_built_without_a_provider_name_says_so_rather_than_guessing() {
+        OpenAiLlmClient unnamed = new OpenAiLlmClient("http://provider.test", "k", "m", 100, 40,
+                MAPPER, RestClient.builder().build());
+
+        assertThat(unnamed.describe()).isEqualTo(new LlmDescriptor("openai-compatible", "m"));
     }
 
     @Test

@@ -69,13 +69,15 @@ public final class LlmClientFactory {
 
         return switch (key) {
             case "openai", "ollama", "groq", "mistral", "gemini", "cerebras" ->
-                    new OpenAiLlmClient(url, apiKey, resolvedModel, maxTokens, toolLoopMaxIterations,
-                            structuredOutput, combinesResponseFormatWithTools(key),
+                    new OpenAiLlmClient(key, url, apiKey, resolvedModel, maxTokens,
+                            toolLoopMaxIterations, structuredOutput,
+                            combinesResponseFormatWithTools(key),
                             mapper, restClientBuilder.build());
             // OpenRouter asks integrators to identify themselves; the headers are attribution only.
             case "openrouter" ->
-                    new OpenAiLlmClient(url, apiKey, resolvedModel, maxTokens, toolLoopMaxIterations,
-                            structuredOutput, combinesResponseFormatWithTools(key), mapper,
+                    new OpenAiLlmClient(key, url, apiKey, resolvedModel, maxTokens,
+                            toolLoopMaxIterations, structuredOutput,
+                            combinesResponseFormatWithTools(key), mapper,
                             restClientBuilder
                                     .defaultHeader("HTTP-Referer", "https://github.com/vlad-public-code/valem")
                                     .defaultHeader("X-Title", "Valem")

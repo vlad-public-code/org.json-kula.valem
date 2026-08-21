@@ -149,6 +149,9 @@ export interface LlmInteraction {
   errorMessage: string | null;
   durationMs: number;
   webFetchCalls: WebFetchCall[];
+  /** Which LLM answered this call. Absent when the client could not identify itself. */
+  provider: string | null;
+  model: string | null;
 }
 
 export interface SpecEvolution {

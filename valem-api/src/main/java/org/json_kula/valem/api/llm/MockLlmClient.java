@@ -1,10 +1,20 @@
 package org.json_kula.valem.api.llm;
 
 import org.json_kula.valem.core.llm.LlmClient;
+import org.json_kula.valem.core.llm.LlmDescriptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class MockLlmClient implements LlmClient {
+
+    /**
+     * Named so a canned response is never mistaken for a real model's output in the generation log
+     * — the whole point of showing which LLM answered.
+     */
+    @Override
+    public LlmDescriptor describe() {
+        return new LlmDescriptor("mock", "mock");
+    }
 
     private static final Logger log = LoggerFactory.getLogger(MockLlmClient.class);
 

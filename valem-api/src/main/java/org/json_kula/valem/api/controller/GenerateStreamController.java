@@ -223,8 +223,16 @@ public class GenerateStreamController {
 
     private static Map<String, Object> progressToMap(LlmProgressEvent event) {
         return switch (event) {
-            case LlmProgressEvent.LlmRequesting e ->
-                    Map.of("type", "llm_requesting", "attempt", e.attempt());
+            case LlmProgressEvent.LlmRequesting e -> {
+                // LinkedHashMap, not Map.of: provider/model are absent for a client that cannot
+                // identify itself, and Map.of rejects nulls.
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("type", "llm_requesting");
+                m.put("attempt", e.attempt());
+                if (e.provider() != null) m.put("provider", e.provider());
+                if (e.model() != null)    m.put("model", e.model());
+                yield m;
+            }
             case LlmProgressEvent.ToolCalling e ->
                     Map.of("type", "tool_calling", "tool", e.tool(), "detail", e.detail());
             case LlmProgressEvent.ToolCompleted e ->

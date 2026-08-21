@@ -10,10 +10,30 @@ function toolLabel(tool: string) {
   return TOOL_LABELS[tool] ?? tool;
 }
 
+/**
+ * How the LLM that served an attempt is named in the log: "groq · openai/gpt-oss-120b", degrading
+ * to whichever half the server sent, or null when it sent neither. Mirrors LlmDescriptor.label()
+ * on the Java side — the same event, formatted the same way wherever it is shown.
+ */
+export function modelLabel(provider?: string, model?: string): string | null {
+  const p = provider?.trim();
+  const m = model?.trim();
+  if (p && m) return `${p} · ${m}`;
+  return p || m || null;
+}
+
 function eventRow(e: LlmProgressEventData): { icon: string; text: string; muted: boolean } {
   switch (e.type) {
-    case 'llm_requesting':
-      return { icon: '⟳', text: e.attempt === 1 ? 'Sending to LLM…' : `Attempt ${e.attempt} — sending to LLM…`, muted: false };
+    case 'llm_requesting': {
+      // Name the model rather than saying "LLM" whenever the server identified it. Under provider
+      // routing a later attempt can name a different one, which is exactly what a reader wants to see.
+      const target = modelLabel(e.provider, e.model) ?? 'LLM';
+      return {
+        icon: '⟳',
+        text: e.attempt === 1 ? `Sending to ${target}…` : `Attempt ${e.attempt} — sending to ${target}…`,
+        muted: false,
+      };
+    }
     case 'tool_calling':
       return { icon: '→', text: `${toolLabel(e.tool)}: ${e.detail}`, muted: false };
     case 'tool_completed':
