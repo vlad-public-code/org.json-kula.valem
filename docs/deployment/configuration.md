@@ -241,7 +241,7 @@ sit behind the same gate as the model API.
 |---|---|---|
 | `valem.llm.provider` | `anthropic` | One of `anthropic`, `openai`, `ollama`, `openrouter`, `groq`, `mistral`, `gemini`, `cerebras`. |
 | `valem.llm.api-key` | *(unset)* | API key for the provider; not required for `ollama`. |
-| `valem.llm.model` | *(provider-appropriate default)* | Model name sent to the provider. When unset, a sensible default is chosen for the provider: `anthropic`→`claude-sonnet-4-6`, `openai`→`gpt-4o`, `mistral`→`mistral-large-latest`, `groq`→`llama-3.3-70b-versatile`, `gemini`→`gemini-2.0-flash`, `cerebras`→`llama-3.3-70b`, `ollama`→`llama3.1`, `openrouter`→`anthropic/claude-3.7-sonnet`. Override per deployment. |
+| `valem.llm.model` | *(provider-appropriate default)* | Model name sent to the provider. When unset, a sensible default is chosen for the provider: `anthropic`→`claude-sonnet-4-6`, `openai`→`gpt-4o`, `mistral`→`mistral-large-latest`, `groq`→`openai/gpt-oss-120b`, `gemini`→`gemini-2.0-flash`, `cerebras`→`llama-3.3-70b`, `ollama`→`llama3.1`, `openrouter`→`anthropic/claude-3.7-sonnet`. Override per deployment. |
 | `valem.llm.max-tokens` | `8192` | Max tokens for LLM responses. On a truncated response the first retry transiently raises this to `min(2 × max-tokens, max-tokens-hard)` on the *same* prompt (keeping the work) before falling back to the "smaller spec" prompt on a second truncation. |
 | `valem.llm.max-tokens-hard` | `16384` | Ceiling for the adaptive truncation retry above. |
 | `valem.llm.base-url` | *(provider default)* | Override the endpoint (Ollama, proxies, OpenAI-compatible servers). |
@@ -276,6 +276,23 @@ sit behind the same gate as the model API.
 `https://openrouter.ai/api/v1`; Groq `https://api.groq.com/openai/v1`; Mistral
 `https://api.mistral.ai/v1`; Gemini `https://generativelanguage.googleapis.com/v1beta/openai/`;
 Cerebras `https://api.cerebras.ai/v1`.
+
+**Groq: `response_format` and `tools` are mutually exclusive** — handled automatically, no
+configuration needed. Groq answers `400 "json mode cannot be combined with tool/function calling"`
+to *any* `response_format` (`json_object` and `json_schema` alike, on every model) once the request
+also carries `tools`. The spec-generation tool loop is on by default, so that would be the very
+first call a correctly-configured Groq key makes. The client therefore omits `response_format` on
+tool-carrying requests to Groq only; plain completions and the tool loop's final tools-withheld
+answer keep whatever `structured-output` rung is configured. This is a fixed provider rule rather
+than a per-deployment capability, so it lives in the provider table
+(`LlmClientFactory.combinesResponseFormatWithTools`) alongside the base URLs above — unlike
+`valem.llm.structured-output`, which exists because *local* server support genuinely varies.
+
+**Model defaults go stale.** Providers retire model ids, and a retired default answers
+`model_not_found` — which looks like a broken key rather than a stale constant. The built-in
+defaults are starting points only; set `valem.llm.model` explicitly for any deployment you care
+about, and check the provider's own model list first (for an OpenAI-compatible provider,
+`GET {base-url}/models`).
 
 LLM beans are created only when `valem.llm.mock=true`, `valem.llm.api-key` is non-blank,
 or the provider is `ollama`. Otherwise `/models/generate*` returns 503.

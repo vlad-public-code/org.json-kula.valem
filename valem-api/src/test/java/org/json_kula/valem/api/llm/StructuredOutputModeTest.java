@@ -68,6 +68,54 @@ class StructuredOutputModeTest {
         assertThat(body.path("response_format").path("type").asText()).isEqualTo("json_schema");
     }
 
+    // ── The second axis: response_format alongside tools ──────────────────────
+
+    @Test
+    void a_provider_that_rejects_the_combination_drops_response_format_only_on_tool_requests() throws Exception {
+        // Groq answers 400 "json mode cannot be combined with tool/function calling" to any
+        // response_format once tools are present. Spec generation calls with tools by default, so
+        // this is the very first request a correctly-configured Groq key makes.
+        JsonNode withTools = new ClientFixture(StructuredOutputMode.SCHEMA, false).captureToolRequest(schema());
+        assertThat(withTools.has("tools")).isTrue();
+        assertThat(withTools.has("response_format"))
+                .as("response_format must not ride along with tools").isFalse();
+
+        JsonNode withoutTools = new ClientFixture(StructuredOutputMode.SCHEMA, false).capturePlainRequest(schema());
+        assertThat(withoutTools.has("tools")).isFalse();
+        assertThat(withoutTools.path("response_format").path("type").asText())
+                .as("a tools-free request keeps the configured rung").isEqualTo("json_schema");
+    }
+
+    @Test
+    void an_ordinary_provider_keeps_response_format_alongside_tools() throws Exception {
+        // The default, and what every provider did before the flag existed.
+        JsonNode withTools = new ClientFixture(StructuredOutputMode.SCHEMA, true).captureToolRequest(schema());
+
+        assertThat(withTools.path("response_format").path("type").asText()).isEqualTo("json_schema");
+    }
+
+    @Test
+    void the_two_axes_compose_rather_than_override() throws Exception {
+        // NONE already omits the field and the tools flag must not resurrect it; JSON must stay
+        // json_object on the requests it does survive on.
+        assertThat(new ClientFixture(StructuredOutputMode.NONE, false).capturePlainRequest(schema())
+                .has("response_format")).isFalse();
+        assertThat(new ClientFixture(StructuredOutputMode.JSON, false).capturePlainRequest(schema())
+                .path("response_format").path("type").asText()).isEqualTo("json_object");
+        assertThat(new ClientFixture(StructuredOutputMode.JSON, false).captureToolRequest(schema())
+                .has("response_format")).isFalse();
+    }
+
+    @Test
+    void only_groq_is_marked_as_rejecting_the_combination() {
+        assertThat(LlmClientFactory.combinesResponseFormatWithTools("groq")).isFalse();
+        assertThat(LlmClientFactory.combinesResponseFormatWithTools("GROQ")).isFalse();
+        assertThat(LlmClientFactory.combinesResponseFormatWithTools("openai")).isTrue();
+        assertThat(LlmClientFactory.combinesResponseFormatWithTools("mistral")).isTrue();
+        assertThat(LlmClientFactory.combinesResponseFormatWithTools("ollama")).isTrue();
+        assertThat(LlmClientFactory.combinesResponseFormatWithTools(null)).isTrue();
+    }
+
     @Test
     void parse_maps_configured_values_and_defaults_safely() {
         assertThat(StructuredOutputMode.parse("json")).isEqualTo(StructuredOutputMode.JSON);
@@ -110,6 +158,11 @@ class StructuredOutputModeTest {
         final OpenAiLlmClient client;
 
         ClientFixture(StructuredOutputMode mode) {
+            this(mode, null);
+        }
+
+        /** @param responseFormatWithTools null selects the constructor that predates the flag */
+        ClientFixture(StructuredOutputMode mode, Boolean responseFormatWithTools) {
             RestClient.Builder builder = RestClient.builder().baseUrl("http://provider.test");
             MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
             server.expect(requestTo("http://provider.test/chat/completions"))
@@ -119,11 +172,36 @@ class StructuredOutputModeTest {
                         return withSuccess(COMPLETION_RESPONSE, MediaType.APPLICATION_JSON)
                                 .createResponse(request);
                     });
-            this.client = mode == null
-                    ? new OpenAiLlmClient("http://provider.test", "k", "m", 1000, 40,
-                            MAPPER, builder.build())
-                    : new OpenAiLlmClient("http://provider.test", "k", "m", 1000, 40, mode,
-                            MAPPER, builder.build());
+            if (responseFormatWithTools != null) {
+                this.client = new OpenAiLlmClient("http://provider.test", "k", "m", 1000, 40, mode,
+                        responseFormatWithTools, MAPPER, builder.build());
+            } else if (mode == null) {
+                this.client = new OpenAiLlmClient("http://provider.test", "k", "m", 1000, 40,
+                        MAPPER, builder.build());
+            } else {
+                this.client = new OpenAiLlmClient("http://provider.test", "k", "m", 1000, 40, mode,
+                        MAPPER, builder.build());
+            }
+        }
+
+        JsonNode capturePlainRequest(JsonNode responseSchema) throws Exception {
+            LAST.set(null);
+            client.complete("give me a spec", new LlmClient.CompletionOptions(0.0, responseSchema));
+            return MAPPER.readTree(LAST.get());
+        }
+
+        /**
+         * Drives one turn of the tool loop. The canned response carries no {@code tool_calls}, so
+         * the loop terminates after the single request this captures.
+         */
+        JsonNode captureToolRequest(JsonNode responseSchema) throws Exception {
+            LAST.set(null);
+            client.completeWithTools("give me a spec",
+                    java.util.List.of(new LlmClient.ToolDefinition(
+                            "eval_jsonata", "evaluate an expression", MAPPER.createObjectNode())),
+                    call -> "unused",
+                    new LlmClient.CompletionOptions(0.0, responseSchema));
+            return MAPPER.readTree(LAST.get());
         }
     }
 }

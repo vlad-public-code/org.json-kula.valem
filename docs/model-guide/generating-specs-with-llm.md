@@ -36,6 +36,12 @@ Supported providers: `anthropic`, `openai`, `ollama`, `openrouter`, `groq`, `mis
 `cerebras`. Set `valem.llm.base-url` to target any OpenAI-compatible server (LM Studio,
 vLLM, proxies).
 
+Set `VALEM_LLM_MODEL` explicitly rather than relying on the built-in per-provider default —
+providers retire model ids, and a retired default answers `model_not_found`, which reads like a
+broken key. Generation also calls with tools by default, and a provider's structured-output support
+varies with that; if a provider you believe is configured correctly returns **400**, see the
+structured-output notes in [configuration.md](../deployment/configuration.md#llm-integration).
+
 ## Workflow (UI or REST)
 
 The UI **✦ Generate** button drives a human-in-the-loop flow: enter a model id + description →

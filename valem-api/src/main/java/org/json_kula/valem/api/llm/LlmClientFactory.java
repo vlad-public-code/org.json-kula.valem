@@ -70,11 +70,13 @@ public final class LlmClientFactory {
         return switch (key) {
             case "openai", "ollama", "groq", "mistral", "gemini", "cerebras" ->
                     new OpenAiLlmClient(url, apiKey, resolvedModel, maxTokens, toolLoopMaxIterations,
-                            structuredOutput, mapper, restClientBuilder.build());
+                            structuredOutput, combinesResponseFormatWithTools(key),
+                            mapper, restClientBuilder.build());
             // OpenRouter asks integrators to identify themselves; the headers are attribution only.
             case "openrouter" ->
                     new OpenAiLlmClient(url, apiKey, resolvedModel, maxTokens, toolLoopMaxIterations,
-                            structuredOutput, mapper, restClientBuilder
+                            structuredOutput, combinesResponseFormatWithTools(key), mapper,
+                            restClientBuilder
                                     .defaultHeader("HTTP-Referer", "https://github.com/vlad-public-code/valem")
                                     .defaultHeader("X-Title", "Valem")
                                     .build());
@@ -84,6 +86,26 @@ public final class LlmClientFactory {
             default -> throw new IllegalArgumentException(
                     "Unknown LLM provider: '" + provider + "'. Valid values: " + VALID_PROVIDERS);
         };
+    }
+
+    /**
+     * Whether {@code provider} accepts {@code response_format} on a request that also carries
+     * {@code tools}.
+     *
+     * <p>Almost every OpenAI-compatible provider does, and the ones that struggle with structured
+     * output struggle by rung — which is what {@link StructuredOutputMode} is for. <b>Groq is
+     * different</b>: it answers {@code 400 "json mode cannot be combined with tool/function calling"}
+     * to any {@code response_format} whenever tools are present, measured across
+     * {@code json_object} and {@code json_schema} on every one of its chat models. That is a fixed
+     * provider rule rather than a per-deployment capability, so it belongs in this table next to the
+     * base URLs, not in an operator's configuration: the spec-generation tool loop is on by default,
+     * so without this a correctly-configured Groq key fails its very first call.
+     *
+     * <p>Only the tool-carrying requests are affected. Plain completions and the tool loop's final
+     * tools-withheld answer keep whatever {@link StructuredOutputMode} was configured.
+     */
+    public static boolean combinesResponseFormatWithTools(String provider) {
+        return !"groq".equalsIgnoreCase(provider == null ? "" : provider.trim());
     }
 
     /** True when {@code provider} is one this factory can build. */
@@ -104,7 +126,10 @@ public final class LlmClientFactory {
             case "anthropic"  -> "claude-sonnet-4-6";
             case "openai"     -> "gpt-4o";
             case "mistral"    -> "mistral-large-latest";
-            case "groq"       -> "llama-3.3-70b-versatile";
+            // Groq retired the llama-3.3-70b-versatile default that used to live here; it now
+            // answers model_not_found. gpt-oss-120b is a listed production model that does tool
+            // calling, which spec generation needs.
+            case "groq"       -> "openai/gpt-oss-120b";
             case "gemini"     -> "gemini-2.0-flash";
             case "cerebras"   -> "llama-3.3-70b";
             case "ollama"     -> "llama3.1";

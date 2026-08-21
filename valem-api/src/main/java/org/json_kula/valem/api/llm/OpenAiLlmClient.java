@@ -36,6 +36,11 @@ public class OpenAiLlmClient implements LlmClient {
     private final int maxToolIterations;
     /** How much structured-output constraint this provider is asked for. */
     private final StructuredOutputMode structuredOutput;
+    /**
+     * Whether this provider tolerates {@code response_format} on a request that also carries
+     * {@code tools}. Groq rejects the combination outright — see the constructor.
+     */
+    private final boolean responseFormatWithTools;
 
     private static final int DEFAULT_MAX_TOOL_ITERATIONS = 40;
 
@@ -57,7 +62,34 @@ public class OpenAiLlmClient implements LlmClient {
     public OpenAiLlmClient(String baseUrl, String apiKey, String model, int maxTokens,
                            int maxToolIterations, StructuredOutputMode structuredOutput,
                            ObjectMapper mapper, RestClient restClient) {
+        this(baseUrl, apiKey, model, maxTokens, maxToolIterations, structuredOutput, true,
+                mapper, restClient);
+    }
+
+    /**
+     * As above, for a provider that refuses {@code response_format} and {@code tools} in the same
+     * request.
+     *
+     * <p>This is a second, independent axis to {@link StructuredOutputMode}. That enum says how much
+     * shape constraint a provider can express at all; this flag says whether it will express any of
+     * it while tools are on the table. Groq answers
+     * {@code 400 "json mode cannot be combined with tool/function calling"} to <em>every</em>
+     * {@code response_format} value — {@code json_object} and {@code json_schema} alike, on every
+     * model — so for it the two features are mutually exclusive rather than laddered. Turning the
+     * whole mode down to {@link StructuredOutputMode#NONE} would be the blunt fix, but it also
+     * strips the constraint from the plain completions and the tool-loop's final answer, where the
+     * provider accepts it perfectly well.
+     *
+     * @param responseFormatWithTools {@code false} to omit {@code response_format} from any request
+     *                                that carries {@code tools}; the tools-free requests keep the
+     *                                configured mode
+     */
+    public OpenAiLlmClient(String baseUrl, String apiKey, String model, int maxTokens,
+                           int maxToolIterations, StructuredOutputMode structuredOutput,
+                           boolean responseFormatWithTools,
+                           ObjectMapper mapper, RestClient restClient) {
         this.structuredOutput = structuredOutput != null ? structuredOutput : StructuredOutputMode.SCHEMA;
+        this.responseFormatWithTools = responseFormatWithTools;
         this.apiKey = apiKey;
         this.model = model;
         this.maxTokens = maxTokens;
@@ -109,7 +141,7 @@ public class OpenAiLlmClient implements LlmClient {
             req.put("max_tokens", budget);
             // Force structured JSON output — without this, weaker OpenAI-compatible models (e.g.
             // mistral-small) answer in conversational prose and the spec parse fails.
-            setResponseFormat(req, responseSchema);
+            setResponseFormat(req, responseSchema, false);
             if (temperature != null) req.put("temperature", temperature.doubleValue());
             ArrayNode messages = req.putArray("messages");
             // A distinct system role improves instruction adherence; OpenAI-compatible providers
@@ -217,7 +249,7 @@ public class OpenAiLlmClient implements LlmClient {
                 req.put("model", model);
                 req.put("max_tokens", budget);
                 // Structured JSON for the final answer (tool_calls turns still emit function calls).
-                setResponseFormat(req, responseSchema);
+                setResponseFormat(req, responseSchema, true);
                 if (temperature != null) req.put("temperature", temperature.doubleValue());
                 req.set("tools", tools);
                 req.set("messages", messages);
@@ -287,7 +319,8 @@ public class OpenAiLlmClient implements LlmClient {
         ObjectNode req = mapper.createObjectNode();
         req.put("model", model);
         req.put("max_tokens", budget);
-        setResponseFormat(req, responseSchema);
+        // No "tools" on this request, so even a provider that rejects the combination takes it.
+        setResponseFormat(req, responseSchema, false);
         if (temperature != null) req.put("temperature", temperature.doubleValue());
         req.set("messages", messages);   // no "tools" → the model cannot request a call
 
@@ -336,11 +369,15 @@ public class OpenAiLlmClient implements LlmClient {
      * strict mode (requiring {@code additionalProperties:false} everywhere) cannot represent — so the
      * schema is shape guidance, not a hard contract, and the {@code ModelSpecValidator} stays the
      * source of truth.
+     *
+     * @param toolsPresent whether this request also carries {@code tools}; a provider that rejects
+     *                     the combination gets no {@code response_format} on those requests
      */
-    private void setResponseFormat(ObjectNode req, JsonNode responseSchema) {
+    private void setResponseFormat(ObjectNode req, JsonNode responseSchema, boolean toolsPresent) {
         // NONE omits the field entirely, and JSON never asks for a schema — both for providers that
         // answer 400 to what they do not support, which is indistinguishable from a dead key.
         if (structuredOutput == StructuredOutputMode.NONE) return;
+        if (toolsPresent && !responseFormatWithTools) return;
 
         if (responseSchema == null || structuredOutput == StructuredOutputMode.JSON) {
             req.putObject("response_format").put("type", "json_object");

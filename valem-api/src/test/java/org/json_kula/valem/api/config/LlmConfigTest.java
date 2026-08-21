@@ -11,7 +11,8 @@ class LlmConfigTest {
         assertThat(LlmConfig.defaultModelFor("anthropic")).isEqualTo("claude-sonnet-4-6");
         assertThat(LlmConfig.defaultModelFor("mistral")).isEqualTo("mistral-large-latest");
         assertThat(LlmConfig.defaultModelFor("openai")).isEqualTo("gpt-4o");
-        assertThat(LlmConfig.defaultModelFor("groq")).isEqualTo("llama-3.3-70b-versatile");
+        // Groq retired llama-3.3-70b-versatile; it answers model_not_found.
+        assertThat(LlmConfig.defaultModelFor("groq")).isEqualTo("openai/gpt-oss-120b");
         assertThat(LlmConfig.defaultModelFor("gemini")).isEqualTo("gemini-2.0-flash");
     }
 
