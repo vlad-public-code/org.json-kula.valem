@@ -22,8 +22,8 @@ class ConstantsTest {
 
     @Test
     void derivation_references_primitive_array_and_object_constants() throws Exception {
-        // Each derivation reads an input (subtotal) AND a constant — a value derived purely from
-        // constants has no dependency and would never be re-evaluated (same as a literal derivation).
+        // Each derivation reads an input (subtotal) AND a constant. A value derived purely from
+        // constants has no dependency at all; see constant_only_derivation_* below for that case.
         ModelRuntime rt = runtime("""
             { "id": "m", "schema": {},
               "constants": {
@@ -88,6 +88,47 @@ class ConstantsTest {
         rt.initialize();
 
         assertThat(rt.getValue("$.balance").asInt()).isEqualTo(500);
+    }
+
+    @Test
+    void constant_only_derivation_is_computed_at_initialize() throws Exception {
+        // No field feeds $.annualFee, so dirty propagation can never reach it. initialize() is the
+        // one moment it can be evaluated — before this it stayed absent forever, and every consumer
+        // downstream of it silently collapsed to 0.
+        ModelRuntime rt = runtime("""
+            { "id": "m", "schema": {},
+              "constants": { "monthlyFee": 291 },
+              "defaultValues": [ { "path": "$", "expr": "{ \\"revenue\\": 30000 }" } ],
+              "derivations": [
+                { "path": "$.annualFee", "expr": "$const.monthlyFee * 12" },
+                { "path": "$.net",       "expr": "revenue - annualFee" }
+              ] }
+            """);
+
+        rt.initialize();
+
+        assertThat(rt.getValue("$.annualFee").asInt()).isEqualTo(3492);
+        assertThat(rt.getValue("$.net").asInt()).isEqualTo(26508);
+
+        // And it survives a later mutation of an unrelated base field.
+        rt.mutate(Map.of("$.revenue", F.numberNode(40000)));
+        assertThat(rt.getValue("$.annualFee").asInt()).isEqualTo(3492);
+        assertThat(rt.getValue("$.net").asInt()).isEqualTo(36508);
+    }
+
+    @Test
+    void constant_only_derivation_is_computed_without_any_default_values() throws Exception {
+        // initialize() used to short-circuit when nothing was defaulted; a model whose only
+        // creation-time work is a constant-only derivation has to run the cycle anyway.
+        ModelRuntime rt = runtime("""
+            { "id": "m", "schema": {},
+              "constants": { "monthlyFee": 88.64 },
+              "derivations": [ { "path": "$.annualFee", "expr": "$round($const.monthlyFee * 12, 2)" } ] }
+            """);
+
+        rt.initialize();
+
+        assertThat(rt.getValue("$.annualFee").asDouble()).isEqualTo(1063.68);
     }
 
     private ModelRuntime runtime(String specJson) throws Exception {

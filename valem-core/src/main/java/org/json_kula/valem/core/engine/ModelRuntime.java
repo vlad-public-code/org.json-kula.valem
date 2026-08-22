@@ -239,14 +239,18 @@ public final class ModelRuntime {
             // `default` keywords then fill any field still absent (fill-absent, never overwriting).
             List<String> defaulted = new ArrayList<>(defaultApplier.apply(model, state, rootContainer));
             defaulted.addAll(SchemaDefaultApplier.apply(model, state));
-            if (defaulted.isEmpty()) {
+            // Derivations built purely from constants and literals have no upstream dependency, so
+            // dirty propagation can never reach them — on every later mutation they stay absent.
+            // Creation is the one moment they can be computed, so seed them into the dirty set here.
+            Set<String> constantDerived = Set.copyOf(model.graph().sourceComputedNodes());
+            if (defaulted.isEmpty() && constantDerived.isEmpty()) {
                 // Nothing seeded — close the transaction without recording history.
                 state.commit();
                 state.clearDirty();
                 return new MutationResult(true, List.of(), List.of(), List.of(),
                         List.of(), List.of(), List.of());
             }
-            return runReactiveCycle(defaulted, cycleTraces);
+            return runReactiveCycle(defaulted, cycleTraces, constantDerived);
         } catch (ConstraintEvaluator.ConstraintViolationException cve) {
             state.rollback();
             appendTraces(cycleTraces);
@@ -263,10 +267,25 @@ public final class ModelRuntime {
      * (client mutations plus any applied defaults), reported back in the result.
      */
     private MutationResult runReactiveCycle(List<String> mutatedPaths, List<DerivationTrace> cycleTraces) {
+        return runReactiveCycle(mutatedPaths, cycleTraces, Set.of());
+    }
+
+    /**
+     * As above, with {@code seedDirty} force-added to the dirty set (and propagated from) even
+     * though nothing wrote to those nodes. Used by {@link #initialize()} for constant-only
+     * derivations, which have no upstream edge for propagation to travel along.
+     */
+    private MutationResult runReactiveCycle(List<String> mutatedPaths, List<DerivationTrace> cycleTraces,
+                                            Set<String> seedDirty) {
         // 2. Compute full dirty set
         Set<String> dirty = DirtyPropagator.propagate(model.graph(), state.dirtyPaths());
         dirty = new java.util.HashSet<>(dirty);
         dirty.addAll(state.dirtyPaths()); // include the base fields themselves
+        for (String seed : seedDirty) {
+            dirty.add(seed);
+            // Anything reading a constant-only derivation must recompute alongside it.
+            dirty.addAll(model.graph().transitivelyDependentOn(seed));
+        }
 
         // 3. Re-evaluate derived fields. The evaluator maintains a single merged document
         //    incrementally across topological levels and hands it back here, so the whole

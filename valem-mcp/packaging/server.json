@@ -1,7 +1,7 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.json",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.vlad-public-code/valem",
-  "description": "Deterministic reactive state models an agent can create, mutate, read, and verify over MCP — hosted, no install. Connect and call pair_browser to drive a live Valem sandbox session.",
+  "description": "Valem - Deterministic reactive state models. Create your own calculators/forms with AI",
   "status": "active",
   "repository": {
     "url": "https://github.com/vlad-public-code/org.json-kula.valem",

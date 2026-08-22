@@ -56,6 +56,12 @@ public final class DependencyGraph {
     // propagation only needs to pattern-match a mutated concrete path against these, not all nodes.
     private final List<String> wildcardNodes;
 
+    // Precomputed subset of DERIVED/META node keys with no upstream dependencies at all — a
+    // derivation whose expression reads only constants and literals ("12 * $const.monthlyFee").
+    // Dirty propagation can never reach these (nothing feeds them), so the reactive cycle alone
+    // would leave them permanently absent; initialize() seeds them once instead.
+    private final List<String> sourceComputedNodes;
+
     private DependencyGraph(
             Map<String, NodeInfo> nodes,
             Map<String, Set<String>> dependents,
@@ -73,10 +79,24 @@ public final class DependencyGraph {
             if (key.contains("[*]")) wildcards.add(key);
         }
         this.wildcardNodes = Collections.unmodifiableList(wildcards);
+
+        List<String> sources = new ArrayList<>();
+        for (NodeInfo info : nodes.values()) {
+            if (info.kind() == NodeKind.BASE) continue;
+            if (dependencies.getOrDefault(info.key(), Set.of()).isEmpty()) sources.add(info.key());
+        }
+        this.sourceComputedNodes = Collections.unmodifiableList(sources);
     }
 
     /** Node keys that contain a wildcard segment {@code [*]} (precomputed for dirty propagation). */
     public List<String> wildcardNodes() { return wildcardNodes; }
+
+    /**
+     * Derived and meta node keys with an empty dependency set — expressions built purely from
+     * constants and literals, which therefore never become dirty. They are evaluated once at
+     * {@link org.json_kula.valem.core.engine.ModelRuntime#initialize()} and never again.
+     */
+    public List<String> sourceComputedNodes() { return sourceComputedNodes; }
 
     // â”€â”€ Queries â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 

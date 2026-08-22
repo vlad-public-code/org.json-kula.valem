@@ -238,6 +238,15 @@ public final class ExpressionPathExtractor {
                 // $parent alone produces no field-path dependency
             }
 
+            case AstNode.VariableRef ignored -> {
+                // Any other variable head — $const.vatRate, $lib.table, a locally bound $x —
+                // navigates into a value that lives outside the document, so no step after it
+                // names a document path. Walking on would invent a phantom base field
+                // ("$const.monthlyFee" -> "$.monthlyFee") that nothing can ever write, which both
+                // pollutes the provenance graph and gives the derivation a dependency it does not
+                // have. ($$ is a RootRef, not a VariableRef, and still resolves to the document.)
+            }
+
             case AstNode.PredicateExpr pe -> {
                 // source[predicate] as a path step — compute new prefix based on source + filter
                 String next = predicateStepPrefix(pe, prefix, parentPrefix, out);

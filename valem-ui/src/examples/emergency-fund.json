@@ -1,0 +1,169 @@
+{
+  "_name": "Emergency Fund Sizing",
+  "_description": "How many months of essential expenses to keep as an emergency fund, adjusted for income stability, dependents and insurance — not the flat \"3 to 6 months\" every incumbent calculator repeats without saying why.",
+  "id": "emergency-fund",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "monthlyEssentialExpenses": { "type": "number", "minimum": 0, "description": "Rent or mortgage, utilities, food, insurance, minimum debt payments — what must be paid even with no income" },
+      "currentSavings": { "type": "number", "minimum": 0, "description": "What you already hold specifically as an emergency fund" },
+      "monthlySavingsCapacity": { "type": "number", "minimum": 0, "description": "How much you can add to the fund each month going forward" },
+      "incomeStability": { "type": "string", "enum": ["stable", "variable", "freelance"], "description": "stable = single salaried job; variable = commission, shift work, at-risk role; freelance = self-employed or contract" },
+      "dependents": { "type": "integer", "minimum": 0, "maximum": 10, "description": "People who rely on your income" },
+      "hasIncomeProtectionInsurance": { "type": "boolean", "description": "Income-protection or critical-illness cover that would replace part of your income" },
+
+      "recommendedMonths": { "type": "number", "readOnly": true },
+      "targetFundSize": { "type": "number", "readOnly": true },
+      "currentCoverageMonths": { "type": "number", "readOnly": true },
+      "shortfall": { "type": "number", "readOnly": true },
+      "monthsToTarget": { "type": "number", "readOnly": true },
+      "percentFunded": { "type": "number", "readOnly": true }
+    },
+    "required": ["monthlyEssentialExpenses", "currentSavings", "monthlySavingsCapacity", "incomeStability", "dependents", "hasIncomeProtectionInsurance"]
+  },
+  "defaultValues": [
+    {
+      "path": "$",
+      "expr": "{\"monthlyEssentialExpenses\": 2500, \"currentSavings\": 3000, \"monthlySavingsCapacity\": 500, \"incomeStability\": \"freelance\", \"dependents\": 1, \"hasIncomeProtectionInsurance\": false}"
+    }
+  ],
+  "derivations": [
+    { "path": "$.recommendedMonths", "expr": "$max([3 + (incomeStability = \"variable\" ? 2 : incomeStability = \"freelance\" ? 3 : 0) + $min([dependents, 3]) - (hasIncomeProtectionInsurance ? 1 : 0), 3])" },
+    { "path": "$.targetFundSize", "expr": "$round(monthlyEssentialExpenses * recommendedMonths, 2)" },
+    { "path": "$.currentCoverageMonths", "expr": "$round(monthlyEssentialExpenses > 0 ? currentSavings / monthlyEssentialExpenses : 0, 2)" },
+    { "path": "$.shortfall", "expr": "$round($max([0, targetFundSize - currentSavings]), 2)" },
+    { "path": "$.monthsToTarget", "expr": "$round(shortfall <= 0 ? 0 : (monthlySavingsCapacity > 0 ? shortfall / monthlySavingsCapacity : -1), 1)" },
+    { "path": "$.percentFunded", "expr": "$round(targetFundSize > 0 ? $min([100, currentSavings / targetFundSize * 100]) : 0, 1)" }
+  ],
+  "constraints": [
+    { "id": "has-expenses", "expr": "monthlyEssentialExpenses > 0", "message": "Enter your monthly essential expenses to size the fund", "policy": "rollback" }
+  ],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "Emergency fund",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "assumptions",
+            "type": "alert",
+            "variant": "info",
+            "label": "This is a projection from your assumptions",
+            "text": "Essential expenses are assumed to stay flat through an emergency — no belt-tightening or income replacement is built in. The recommended-months figure is a heuristic (a 3-month base, adjusted for income stability, dependents and insurance), not a personal financial plan. Savings capacity is assumed constant going forward."
+          },
+          {
+            "id": "expensesSet",
+            "type": "fieldSet",
+            "legend": "Your expenses and savings",
+            "components": [
+              { "id": "expensesField", "type": "numericField", "label": "Monthly essential expenses", "bind": "$.monthlyEssentialExpenses", "placeholder": "2500" },
+              { "id": "savingsField", "type": "numericField", "label": "Current emergency savings", "bind": "$.currentSavings", "placeholder": "3000" },
+              { "id": "capacityField", "type": "numericField", "label": "Can save toward it each month", "bind": "$.monthlySavingsCapacity", "placeholder": "500" }
+            ]
+          },
+          {
+            "id": "riskSet",
+            "type": "fieldSet",
+            "legend": "What changes the target",
+            "components": [
+              {
+                "id": "stabilityField",
+                "type": "radioField",
+                "label": "Income stability",
+                "bind": "$.incomeStability",
+                "options": [
+                  { "value": "stable", "label": "Stable — one salaried job" },
+                  { "value": "variable", "label": "Variable — commission, shift work, at-risk role" },
+                  { "value": "freelance", "label": "Freelance or self-employed" }
+                ]
+              },
+              { "id": "dependentsField", "type": "numericField", "label": "Dependents", "bind": "$.dependents", "placeholder": "1" },
+              { "id": "insuranceField", "type": "checkboxField", "label": "I have income-protection or critical-illness insurance", "bind": "$.hasIncomeProtectionInsurance" }
+            ]
+          },
+          { "id": "sep1", "type": "separatorLine" },
+          {
+            "id": "headline",
+            "type": "group",
+            "layout": "horizontal",
+            "components": [
+              { "id": "monthsTile", "type": "statTile", "label": "Recommended months", "bind": "$.recommendedMonths", "format": "number" },
+              { "id": "targetTile", "type": "statTile", "label": "Target fund size", "bind": "$.targetFundSize", "format": "number" },
+              { "id": "shortfallTile", "type": "statTile", "label": "Amount still needed", "bind": "$.shortfall", "format": "number" },
+              { "id": "percentTile", "type": "statTile", "label": "Percent funded", "bind": "$.percentFunded", "format": "number", "caption": "%" }
+            ]
+          },
+          {
+            "id": "coverageText",
+            "type": "staticText",
+            "text": "'Your current savings cover ' & $string(currentCoverageMonths) & ' months of essential expenses. ' & (shortfall <= 0 ? 'You have already reached the target.' : (monthsToTarget < 0 ? 'At zero monthly saving capacity, the gap will not close on its own — increase how much you can save each month to see a timeline.' : ('At your current saving rate, you reach the target in about ' & $string(monthsToTarget) & ' more months.')))"
+          }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "freelancer with a dependent, partially funded — the baseline scenario",
+      "given": {
+        "$.monthlyEssentialExpenses": 2500, "$.currentSavings": 3000, "$.monthlySavingsCapacity": 500,
+        "$.incomeStability": "freelance", "$.dependents": 1, "$.hasIncomeProtectionInsurance": false
+      },
+      "expect": {
+        "$.recommendedMonths": 7,
+        "$.targetFundSize": 17500,
+        "$.currentCoverageMonths": 1.2,
+        "$.shortfall": 14500,
+        "$.monthsToTarget": 29,
+        "$.percentFunded": 17.1
+      }
+    },
+    {
+      "description": "stable income, insured, no dependents, already over target — floor and cap both bind",
+      "given": {
+        "$.monthlyEssentialExpenses": 2000, "$.currentSavings": 8000, "$.monthlySavingsCapacity": 200,
+        "$.incomeStability": "stable", "$.dependents": 0, "$.hasIncomeProtectionInsurance": true
+      },
+      "expect": {
+        "$.recommendedMonths": 3,
+        "$.targetFundSize": 6000,
+        "$.currentCoverageMonths": 4,
+        "$.shortfall": 0,
+        "$.monthsToTarget": 0,
+        "$.percentFunded": 100
+      }
+    },
+    {
+      "description": "freelancer with several dependents starting from zero savings — the worst-case shape",
+      "given": {
+        "$.monthlyEssentialExpenses": 3000, "$.currentSavings": 0, "$.monthlySavingsCapacity": 300,
+        "$.incomeStability": "freelance", "$.dependents": 5, "$.hasIncomeProtectionInsurance": false
+      },
+      "expect": {
+        "$.recommendedMonths": 9,
+        "$.targetFundSize": 27000,
+        "$.currentCoverageMonths": 0,
+        "$.shortfall": 27000,
+        "$.monthsToTarget": 90,
+        "$.percentFunded": 0
+      }
+    },
+    {
+      "description": "zero saving capacity with a real shortfall — the gap cannot close, monthsToTarget is the -1 sentinel rather than a false 0",
+      "given": {
+        "$.monthlyEssentialExpenses": 2000, "$.currentSavings": 1000, "$.monthlySavingsCapacity": 0,
+        "$.incomeStability": "stable", "$.dependents": 0, "$.hasIncomeProtectionInsurance": false
+      },
+      "expect": {
+        "$.recommendedMonths": 3,
+        "$.targetFundSize": 6000,
+        "$.shortfall": 5000,
+        "$.monthsToTarget": -1
+      }
+    }
+  ]
+}

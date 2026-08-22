@@ -138,6 +138,24 @@ class ExpressionPathExtractorTest {
     }
 
     @Test
+    void field_access_through_a_non_parent_variable_produces_no_path() {
+        // $const.monthlyFee names a constant, not a document field. Treating the step after the
+        // variable as a path invented a phantom base node ("$.monthlyFee") that nothing can write,
+        // which both polluted the provenance graph and gave the derivation a dependency it does
+        // not have — so it looked reachable by dirty propagation when it never is.
+        assertThat(extract("$const.monthlyFee * 12")).isEmpty();
+        assertThat(extract("$const.config.threshold")).isEmpty();
+        assertThat(extract("$lib.rates.standard")).isEmpty();
+        assertThat(extract("($x := items; $x.price)")).containsExactly("$.items");
+
+        // $$ is a root reference, not a variable — it still resolves to a document path.
+        assertThat(extract("$$.order.total")).containsExactly("$.order.total");
+
+        // And the document-side operand of a mixed expression is still picked up.
+        assertThat(extract("subtotal * $const.vatRate")).containsExactly("$.subtotal");
+    }
+
+    @Test
     void parent_without_field_access_produces_no_path() {
         // $parent alone (whole element reference) — no specific field dependency
         assertThat(extract("$parent", "$.items[*]")).isEmpty();
