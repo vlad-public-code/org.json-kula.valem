@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -134,9 +135,11 @@ class FuelLogMultiProviderGenerateIT {
                 provider, DOMAIN_DESCRIPTION,
                 modelFor(provider).isBlank() ? "provider default" : modelFor(provider), MAX_TOKENS,
                 SLOT_REASONING_EFFORT.getOrDefault(provider, "provider default"));
+        AtomicInteger toolCalls = new AtomicInteger();
         GenerationResult result;
         try {
-            result = generator.generate(MODEL_ID, DOMAIN_DESCRIPTION, true, progressLogger(provider));
+            result = generator.generate(MODEL_ID, DOMAIN_DESCRIPTION, true,
+                    progressLogger(provider, toolCalls));
         } catch (LlmClient.LlmException e) {
             // Only a CAPACITY refusal is skippable: the key's plan cannot carry a request this size,
             // which is not something the code can fix. Everything else — a 400 for an unsupported
@@ -150,6 +153,17 @@ class FuelLogMultiProviderGenerateIT {
         }
 
         recorder.logEmptyResponses(provider);
+
+        // A provider that quietly stops calling tools still produces a spec, just a worse one — the
+        // model writes JSONata it cannot test and gets no domain guidance. OpenRouter did exactly
+        // that for 19 straight requests because it accepts response_format alongside tools and then
+        // ignores the tools. Nothing failed, so nothing caught it. Assert the capability is live.
+        log.info("[{}] tool calls during generation: {}", provider, toolCalls.get());
+        assertThat(toolCalls.get())
+                .as("%s made no tool call in the whole generation — eval_jsonata and "
+                    + "get_domain_guidance are offered, so zero means the provider is silently "
+                    + "dropping them (check combinesResponseFormatWithTools)", provider)
+                .isPositive();
 
         if (result instanceof GenerationResult.Failure failure) {
             log.error("[{}] generation FAILED after {} attempt(s). Errors: {}",
@@ -251,8 +265,11 @@ class FuelLogMultiProviderGenerateIT {
                 /* repairTemperatureStep */ 0.15, /* repairTemperatureMax */ 0.8, webTool);
     }
 
-    private static Consumer<LlmProgressEvent> progressLogger(String provider) {
-        return event -> log.info("[{}] {}", provider, event);
+    private static Consumer<LlmProgressEvent> progressLogger(String provider, AtomicInteger toolCalls) {
+        return event -> {
+            if (event instanceof LlmProgressEvent.ToolCalling) toolCalls.incrementAndGet();
+            log.info("[{}] {}", provider, event);
+        };
     }
 
     /**

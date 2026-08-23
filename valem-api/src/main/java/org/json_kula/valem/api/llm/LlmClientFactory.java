@@ -114,23 +114,36 @@ public final class LlmClientFactory {
      * {@code tools}.
      *
      * <p>Almost every OpenAI-compatible provider does, and the ones that struggle with structured
-     * output struggle by rung — which is what {@link StructuredOutputMode} is for. <b>Groq and Gemini
-     * are different</b>: for them the two features are mutually exclusive rather than laddered, and
-     * both refuse the combination outright —
+     * output struggle by rung — which is what {@link StructuredOutputMode} is for. Three providers
+     * are different: for them the two features are mutually exclusive rather than laddered.
+     *
+     * <p><b>Groq</b> and <b>Gemini</b> refuse the combination outright, which at least fails loudly:
      * {@code 400 "json mode cannot be combined with tool/function calling"} (Groq, measured across
      * {@code json_object} and {@code json_schema} on every one of its chat models) and
      * {@code 400 "Function calling with a response mime type: 'application/json' is unsupported"}
-     * (Gemini's OpenAI-compatible endpoint). That is a fixed provider rule rather than a
-     * per-deployment capability, so it belongs in this table next to the base URLs, not in an
-     * operator's configuration: the spec-generation tool loop is on by default, so without this a
-     * correctly-configured key fails on its very first call.
+     * (Gemini's OpenAI-compatible endpoint).
+     *
+     * <p><b>OpenRouter is the dangerous one: it accepts the request and silently stops calling
+     * tools.</b> Measured on {@code nvidia/nemotron-3-super-120b-a12b:free} with a prompt that
+     * explicitly demands a tool call — with {@code response_format} present,
+     * {@code finish_reason: "stop"} and zero {@code tool_calls}; with it removed,
+     * {@code finish_reason: "tool_calls"} and the call arrives. There is no error to notice, so a
+     * whole generation runs with {@code eval_jsonata} and {@code get_domain_guidance} silently
+     * unavailable — the model writes JSONata it cannot test and gets no shape guidance, which shows
+     * up much later as a spec full of invented syntax. It is a gateway, so the exact behaviour is
+     * the upstream model's; not combining is the only safe default.
+     *
+     * <p>This is a fixed provider rule rather than a per-deployment capability, so it belongs in this
+     * table next to the base URLs, not in an operator's configuration.
      *
      * <p>Only the tool-carrying requests are affected. Plain completions and the tool loop's final
      * tools-withheld answer keep whatever {@link StructuredOutputMode} was configured.
      */
     public static boolean combinesResponseFormatWithTools(String provider) {
         String key = provider == null ? "" : provider.trim();
-        return !"groq".equalsIgnoreCase(key) && !"gemini".equalsIgnoreCase(key);
+        return !"groq".equalsIgnoreCase(key)
+                && !"gemini".equalsIgnoreCase(key)
+                && !"openrouter".equalsIgnoreCase(key);
     }
 
     /** True when {@code provider} is one this factory can build. */

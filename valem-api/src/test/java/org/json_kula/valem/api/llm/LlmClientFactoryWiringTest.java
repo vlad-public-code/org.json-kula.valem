@@ -59,6 +59,32 @@ class LlmClientFactoryWiringTest {
     }
 
     @Test
+    void an_openrouter_client_built_by_the_factory_omits_response_format_when_tools_are_present()
+            throws Exception {
+        // OpenRouter is the dangerous member of this table: unlike Groq and Gemini, which answer 400,
+        // it ACCEPTS response_format alongside tools and then silently never calls a tool. Measured
+        // with a prompt that demanded one: with response_format → finish_reason "stop", zero
+        // tool_calls; without it → finish_reason "tool_calls". Nothing errors, so a whole generation
+        // runs with eval_jsonata and get_domain_guidance quietly unavailable. Only a request-shape
+        // assertion like this one catches that — a green end-to-end run will not.
+        JsonNode body = captureToolRequest("openrouter");
+
+        assertThat(body.has("tools")).isTrue();
+        assertThat(body.has("response_format")).isFalse();
+    }
+
+    @Test
+    void every_provider_that_cannot_combine_response_format_with_tools_is_listed() {
+        // One place to see the whole rule, so adding a provider forces a decision about it.
+        assertThat(LlmClientFactory.combinesResponseFormatWithTools("groq")).isFalse();
+        assertThat(LlmClientFactory.combinesResponseFormatWithTools("gemini")).isFalse();
+        assertThat(LlmClientFactory.combinesResponseFormatWithTools("openrouter")).isFalse();
+        assertThat(LlmClientFactory.combinesResponseFormatWithTools("mistral")).isTrue();
+        assertThat(LlmClientFactory.combinesResponseFormatWithTools("openai")).isTrue();
+        assertThat(LlmClientFactory.combinesResponseFormatWithTools("anthropic")).isTrue();
+    }
+
+    @Test
     void the_openrouter_default_model_is_one_openrouter_still_lists() {
         // anthropic/claude-3.7-sonnet used to be the default and is now delisted. Like the Gemini
         // check below, this is a re-check reminder rather than a guarantee — a test cannot know what
