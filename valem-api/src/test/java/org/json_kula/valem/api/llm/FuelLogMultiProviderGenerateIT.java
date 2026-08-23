@@ -284,6 +284,21 @@ class FuelLogMultiProviderGenerateIT {
 
         private String record(String response) {
             responses.add(response);
+            // Dump every raw response when asked. A malformed response is often only diagnosable
+            // from the exact bytes — our JSON repair passes can turn one kind of malformation into a
+            // DIFFERENT, still-broken document, and by then the original is gone.
+            String dir = System.getProperty("valem.it.dump-responses");
+            if (dir != null && !dir.isBlank()) {
+                try {
+                    java.nio.file.Path out = java.nio.file.Path.of(dir);
+                    java.nio.file.Files.createDirectories(out);
+                    java.nio.file.Files.writeString(
+                            out.resolve("response-" + responses.size() + ".txt"),
+                            response == null ? "" : response);
+                } catch (Exception e) {
+                    log.warn("could not dump raw response: {}", e.toString());
+                }
+            }
             return response;
         }
 

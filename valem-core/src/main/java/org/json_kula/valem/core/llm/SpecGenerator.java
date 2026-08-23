@@ -755,9 +755,13 @@ public final class SpecGenerator {
      * — and because the model cannot see what it did, the mistake survives every repair attempt and
      * burns the whole budget. Observed repeatedly on a free OpenRouter model.
      *
-     * <p>Deliberately narrow: it fires only when the text opens with two braces AND the unquoted
-     * brace counts are off by exactly that one extra. A well-formed document — including
-     * {@code {"a":{"b":1}}}, which also starts with two braces but balances — is returned untouched.
+     * <p>It fires when the text opens with two braces AND has at least one unmatched opener. The
+     * "unmatched" test rather than "off by exactly one" matters: a response can be doubled-braced
+     * AND truncated at once, leaving several openers unclosed, and requiring an exact off-by-one
+     * would decline precisely there — turning a recoverable truncation into a baffling
+     * "Unexpected character ('{')" that the repair loop cannot talk the model out of. A document
+     * whose braces balance — including {@code {"a":{"b":1}}}, which also starts with two braces —
+     * is returned untouched.
      */
     static String dropStrayLeadingBrace(String json) {
         if (json == null || json.isEmpty() || json.charAt(0) != '{') return json;
@@ -778,7 +782,7 @@ public final class SpecGenerator {
             if      (c == '{') open++;
             else if (c == '}') close++;
         }
-        return open == close + 1 ? json.substring(second) : json;
+        return open > close ? json.substring(second) : json;
     }
 
     /**
@@ -885,8 +889,9 @@ public final class SpecGenerator {
 
         // Phase 2: structure-aware passes (order matters). balanceExpressionParens runs LAST so it
         // closes any paren deficit the earlier passes leave (or the LLM produced).
-        return balanceExpressionParens(fixObjectSemicolons(fixFunctionSequenceBodies(fixFunctionBodyCommas(
-                fixLambdaBodies(fixBindingCommas(fixNotKeyword(convertPowerToReduce(wrapPowerExpressions(s)))))))));
+        return balanceExpressionBraces(balanceExpressionParens(fixObjectSemicolons(fixFunctionSequenceBodies(fixFunctionBodyCommas(
+                fixIfThenElse(
+                fixLambdaBodies(fixBindingCommas(fixNotKeyword(convertPowerToReduce(wrapPowerExpressions(s)))))))))));
     }
 
     /**
@@ -901,6 +906,66 @@ public final class SpecGenerator {
      * (single-quoted {@code '…'} and JSON-escaped {@code \"…\"}) are ignored, and only the exact
      * deficit of {@code )} is appended — never more.
      */
+    /**
+     * Closes a JSONata OBJECT LITERAL expression the model opened and never finished — the sibling of
+     * {@link #balanceExpressionParens} for {@code \{}.
+     *
+     * <p>Captured verbatim from a deployed sandbox and reproduced here: a repair attempt emitted
+     * {@code "expr": "\{ "} for a {@code defaultValues} seed. The JSON is perfectly valid, so nothing
+     * upstream objects; it is the EXPRESSION that is unterminated, and it fails to compile with
+     * "Unexpected end of expression (position 2)". Worse, the repair prompt echoes the spec back with
+     * the same {@code "\{ "} in it, so the model sees nothing obviously wrong and re-sends it — the
+     * loop cannot escape on its own.
+     *
+     * <p>Closing it yields {@code \{ \}}, an empty object, which is a valid (if empty) seed: the spec
+     * then compiles and any real problem with it — an initial state that violates a rollback
+     * constraint, say — surfaces as an error the model CAN act on.
+     *
+     * <p>Narrow by construction: only a string value whose first character is {@code \{} and whose
+     * unquoted brace count is short is touched. Braces inside JSONata string literals ({@code '…'}
+     * and escaped {@code \"…\"}) do not count, and a balanced literal is returned unchanged.
+     */
+    static String balanceExpressionBraces(String json) {
+        StringBuilder out = new StringBuilder(json.length() + 4);
+        int i = 0, n = json.length();
+        while (i < n) {
+            char c = json.charAt(i);
+            if (c != '"') { out.append(c); i++; continue; }
+
+            int braces = 0, closeQuote = -1, j = i + 1;
+            boolean inSq = false, inDq = false;
+            boolean firstSeen = false, startsWithBrace = false;
+            while (j < n) {
+                char d = json.charAt(j);
+                if (d == '\\' && j + 1 < n) {
+                    if (json.charAt(j + 1) == '"' && !inSq) inDq = !inDq;
+                    firstSeen = true;
+                    j += 2;
+                    continue;
+                }
+                if (d == '"') { closeQuote = j; break; }
+                if (!firstSeen) { firstSeen = true; startsWithBrace = (d == '{'); }
+                if (!inDq) {
+                    if (d == '\'') inSq = !inSq;
+                    else if (!inSq) {
+                        if      (d == '{') braces++;
+                        else if (d == '}') braces--;
+                    }
+                }
+                j++;
+            }
+            if (closeQuote < 0) { out.append(json, i, n); return out.toString(); }
+
+            out.append(json, i, closeQuote);
+            if (startsWithBrace && braces > 0) {
+                for (int k = 0; k < braces; k++) out.append('}');
+            }
+            out.append('"');
+            i = closeQuote + 1;
+        }
+        return out.toString();
+    }
+
     static String balanceExpressionParens(String json) {
         StringBuilder out = new StringBuilder(json.length() + 8);
         int i = 0, n = json.length();
@@ -975,7 +1040,87 @@ public final class SpecGenerator {
      *       (so {@code $fn(a, b)} arguments are never touched).</li>
      *   <li>It is not inside an array literal {@code [...]}.</li>
      * </ul>
+     *
+     * <p>A bare {@code return} keyword in the same position is converted the same way, for the same
+     * reason: it is a separator borrowed from another language. JSONata has no {@code return} — the
+     * last expression in the block is its value — so
+     * {@code ($p := $max(...) return $p ? ... : 0)} fails with "Expected RPAREN but found IDENTIFIER
+     * ('return')". It carries one extra guard beyond the comma's: it is skipped inside a JSONata
+     * string literal ({@code '...'} or an escaped {@code \"...\"}), so an expression that merely
+     * contains the WORD return in a message is left alone.
      */
+    /** Whether {@code c} can appear inside a JSONata identifier — used for keyword word-boundaries. */
+    private static boolean isIdentChar(char c) {
+        return Character.isLetterOrDigit(c) || c == '_' || c == '$' || c == '.';
+    }
+
+    /**
+     * Rewrites {@code if (C) then A else B} into JSONata's conditional {@code (C) ? A : B}.
+     *
+     * <p>JSONata has no {@code if}/{@code then}/{@code else} — only the ternary — so the borrowed
+     * form fails with "Expected RPAREN but found IDENTIFIER ('then')". The rewrite is purely
+     * token-level and needs no restructuring: dropping {@code if} and mapping {@code then}→{@code ?},
+     * {@code else}→{@code :} is correct for a chain too, because the ternary is right-associative:
+     * <pre>
+     *   if (a=0) then 0 else if (b='x') then 1 else 2   →   (a=0) ? 0 : (b='x') ? 1 : 2
+     * </pre>
+     *
+     * <p>Runs inside JSON string values only, and skips JSONata string literals ({@code '…'} and
+     * escaped {@code \"…\"}) so prose containing these very common words is never touched.
+     */
+    static String fixIfThenElse(String json) {
+        StringBuilder sb = new StringBuilder(json.length());
+        boolean inJsonStr = false, inLiteral = false;
+        char quote = 0;
+
+        for (int i = 0; i < json.length(); i++) {
+            char c = json.charAt(i);
+
+            if (c == '"') {
+                int backslashes = 0;
+                for (int j = i - 1; j >= 0 && json.charAt(j) == '\\'; j--) backslashes++;
+                if (backslashes % 2 == 0) {
+                    inJsonStr = !inJsonStr;
+                    if (!inJsonStr) { inLiteral = false; quote = 0; }
+                } else if (inJsonStr && (!inLiteral || quote == '"')) {
+                    inLiteral = !inLiteral;
+                    quote     = inLiteral ? '"' : 0;
+                }
+                sb.append(c);
+                continue;
+            }
+            if (!inJsonStr) { sb.append(c); continue; }
+            if (c == '\'' && (!inLiteral || quote == '\'')) {
+                inLiteral = !inLiteral;
+                quote     = inLiteral ? '\'' : 0;
+            }
+            if (!inLiteral && !isIdentChar(i > 0 ? json.charAt(i - 1) : 0)) {
+                String replacement = null;
+                int    length      = 0;
+                if      (json.startsWith("if",   i) && !isIdentChar(charAt(json, i + 2))) { replacement = "";  length = 2; }
+                else if (json.startsWith("then", i) && !isIdentChar(charAt(json, i + 4))) { replacement = "?"; length = 4; }
+                else if (json.startsWith("else", i) && !isIdentChar(charAt(json, i + 4))) { replacement = ":"; length = 4; }
+                if (replacement != null) {
+                    sb.append(replacement);
+                    i += length - 1;                  // the loop's i++ consumes the last character
+                    // Dropping "if" would otherwise leave a double space before the condition; the
+                    // result is still valid JSONata, but the expression is echoed back to the model
+                    // in repair prompts, so keep it clean.
+                    if (replacement.isEmpty()) {
+                        while (i + 1 < json.length() && json.charAt(i + 1) == ' ') i++;
+                    }
+                    continue;
+                }
+            }
+            sb.append(c);
+        }
+        return sb.toString();
+    }
+
+    private static char charAt(String s, int i) {
+        return i < s.length() ? s.charAt(i) : 0;
+    }
+
     static String fixBindingCommas(String json) {
         StringBuilder sb = new StringBuilder(json.length());
         boolean inJsonStr = false;
@@ -987,6 +1132,11 @@ public final class SpecGenerator {
         int[]    parenKind       = new int[64];     // 0 = block, 1 = function call
         boolean[] hasBinding     = new boolean[64];
         int[]    parenBraceDepth = new int[64];     // brace depth when each paren was opened
+        // Whether we are inside a JSONata string literal WITHIN the expression — an escaped \"…\"
+        // or a single-quoted '…'. Only the `return` rewrite consults it; the comma rewrite's
+        // behaviour is deliberately left byte-identical.
+        boolean  inExprLiteral   = false;
+        char     exprQuote       = 0;
 
         for (int i = 0; i < json.length(); i++) {
             char c = json.charAt(i);
@@ -997,7 +1147,14 @@ public final class SpecGenerator {
                 for (int j = i - 1; j >= 0 && json.charAt(j) == '\\'; j--) backslashes++;
                 if (backslashes % 2 == 0) {
                     inJsonStr = !inJsonStr;
-                    if (!inJsonStr) { parenDepth = 0; bracketDepth = 0; braceDepth = 0; }
+                    if (!inJsonStr) {
+                        parenDepth = 0; bracketDepth = 0; braceDepth = 0;
+                        inExprLiteral = false; exprQuote = 0;
+                    }
+                } else if (inJsonStr && (!inExprLiteral || exprQuote == '"')) {
+                    // An escaped quote inside the expression opens/closes a JSONata string literal.
+                    inExprLiteral = !inExprLiteral;
+                    exprQuote     = inExprLiteral ? '"' : 0;
                 }
                 sb.append(c);
                 continue;
@@ -1023,9 +1180,29 @@ public final class SpecGenerator {
                 case '[' -> bracketDepth++;
                 case ']' -> { if (bracketDepth > 0) bracketDepth--; }
                 default  -> {
+                    // Single-quoted JSONata string literal: track it for the `return` guard below.
+                    if (c == '\'' && (!inExprLiteral || exprQuote == '\'')) {
+                        inExprLiteral = !inExprLiteral;
+                        exprQuote     = inExprLiteral ? '\'' : 0;
+                    }
                     // Detect := at current depth
                     if (c == ':' && i + 1 < json.length() && json.charAt(i + 1) == '=' && parenDepth < hasBinding.length) {
                         hasBinding[parenDepth] = true;
+                    }
+                    // `return` used as a statement separator — same position and guards as the comma
+                    // below, plus: never inside a JSONata string literal, so an expression whose text
+                    // merely contains the word is untouched.
+                    if (c == 'r' && !inExprLiteral && bracketDepth == 0
+                            && parenDepth > 0 && parenDepth < parenKind.length
+                            && parenKind[parenDepth] == 0
+                            && hasBinding[parenDepth]
+                            && braceDepth == parenBraceDepth[parenDepth]
+                            && json.startsWith("return", i)
+                            && !isIdentChar(i > 0 ? json.charAt(i - 1) : 0)
+                            && !isIdentChar(i + 6 < json.length() ? json.charAt(i + 6) : 0)) {
+                        sb.append(';');
+                        i += 5;                       // the loop's i++ consumes the sixth character
+                        continue;
                     }
                     // Convert comma → semicolon when in a binding block.
                     // Guard braceDepth: if we entered a {} object literal since this paren opened,

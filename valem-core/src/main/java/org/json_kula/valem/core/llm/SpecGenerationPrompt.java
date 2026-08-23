@@ -112,44 +112,44 @@ public final class SpecGenerationPrompt {
             { "mutations": "<JSONata → {'$.path': value}>", "navigate": "<view-id>" }
 
             *** FIELD VALUE KINDS — the #1 source of broken views. Every component field is ONE of
-            three kinds. Putting the wrong kind of value in a field is the most common mistake: ***
+            three kinds, and putting the wrong kind of value in one is the most common mistake: ***
 
             1. PLAIN-TEXT fields — shown to the user exactly as written, never evaluated:
                label, placeholder, helperText, tooltip, legend, addLabel, removeLabel, fromLabel,
                toLabel, alt, and every options[].label / menuItems[].label / tableColumns[].header /
                keyValueList items[].label.
-               → Write the human text directly. Do NOT wrap it in quotes. Do NOT write JSONata here.
+               Write the human text directly — no surrounding quotes, no JSONata:
                  RIGHT: "label": "Weight (kg)"
                  WRONG: "label": "\\"Weight (kg)\\""   ← renders with the literal quote characters
                  WRONG: "label": "weight & \\" kg\\""   ← JSONata is ignored here; shown verbatim
 
             2. PATH (bind) fields — a "$.path" address the component READS its value from:
                bind, bindFrom, bindTo, dependsOn, keyValueList items[].bind.
-               → This is the PRIMARY way to show a stored or derived value. To display "$.bmi",
-                 use "bind": "$.bmi" — do not try to put the value in "text".
+               RULE OF THUMB: to show one stored or derived value, prefer "bind": "$.path" over any
+               expression — it is what statTile, progressBar, gauge and label exist for:
                  RIGHT: { "type": "statTile", "label": "Your BMI", "bind": "$.bmi", "format": "number" }
-               → EXCEPTION — tableColumns[].field, chartX and chartSeries[].field are NOT "$." paths.
-                 The table/chart binds the ARRAY; these name a field INSIDE one of its items, written
-                 bare, relative to the row:
-                   RIGHT: "bind": "$.entries", "chartX": "date"
-                   WRONG: "bind": "$.entries", "chartX": "$.entries.date"   ← plots nothing
+               EXCEPTION — tableColumns[].field, chartX and chartSeries[].field are NOT "$." paths.
+               The table/chart binds the ARRAY; these name a field INSIDE one of its items, written
+               bare, relative to the row:
+                 RIGHT: "bind": "$.entries", "chartX": "date"
+                 WRONG: "bind": "$.entries", "chartX": "$.entries.date"   ← plots nothing
 
-            3. EXPRESSION fields — a JSONata expression evaluated against the model:
-               text (label/badge/staticText/link), value (statTile), delta, caption, trend,
-               and the boolean dynamics visible / enabled / readOnly / required.
-               → CRITICAL SERVER RULE: an expression field is only evaluated when the string
-                 CONTAINS a "$". A string with no "$" is shown as literal text.
-                   "text": "bmiCategory"          → shows the literal word "bmiCategory" (BUG)
-                   "text": "$string(bmiCategory)" → shows the value of the bmiCategory field  ✓
-                 So, to reference a model field inside an expression field, wrap it in a "$" function
-                 (e.g. $string(field), $round(field,1)) OR — better — give the component a "bind"
-                 instead. To show a fixed literal in an expression field, write it plainly with NO
-                 quotes and NO "$" (it falls through to literal): "caption": "kg/m2".
-               → visible/enabled/readOnly/required are ALWAYS evaluated (no "$" needed), so
-                 "visible": "bmi != null" is correct as-is.
-
-            RULE OF THUMB: to show one stored/derived value, prefer "bind": "$.path". Reserve
-            expression fields (text/value) for values you compute inline, and always include a "$".
+            3. EXPRESSION fields — JSONata evaluated against the model: text (label/badge/staticText/
+               link), value (statTile), delta, caption, trend, plus the boolean dynamics
+               visible / enabled / readOnly / required.
+               Reference model fields by their UNQUALIFIED name (age, totalTax) — never "$age", which
+               is an undefined variable. "$" is for built-in functions and lambda parameters.
+               CRITICAL SERVER RULE: text/value/delta/caption/trend are only evaluated when the string
+               CONTAINS a "$"; with no "$" it is shown as literal text.
+                 "text": "bmiCategory"                → shows the literal word (BUG)
+                 "text": "$string(bmiCategory)"       → shows the value  ✓
+                 "text": "$string(age) & \\" yrs\\""      → a literal segment spliced into a $-expression
+               So reference a field through a "$" function, or — better — give the component a "bind".
+               A FIXED literal needs no quotes and no "$", and falls through as-is:
+                 RIGHT: "caption": "kg/m2"
+                 WRONG: "caption": "\\"kg/m2\\""   ← the quote characters are shown to the user
+               visible/enabled/readOnly/required do NOT need a "$" — they are always evaluated, so
+               "visible": "bmi != null" is correct as written.
 
             COMPONENT CATALOG:
 
@@ -199,25 +199,6 @@ public final class SpecGenerationPrompt {
             does NOT multiply by 100), "number", or "integer". Never render a raw derived number. Present
             the one-to-three headline results a model computes as statTile cards grouped horizontally,
             not plain labels.
-
-            JSONata in view EXPRESSION fields (text/value/delta/caption + the boolean dynamics):
-              Reference model fields by their unqualified name: age, totalTax, emissionsBand.
-              Never use a $ prefix ON A FIELD NAME ($age is an undefined variable). $ is for
-              built-in functions ($string, $round, $now, $sum, …) and lambda parameters.
-              BUT REMEMBER the server rule above: a text/value/delta/caption string is only
-              evaluated when it CONTAINS a $. A bare "age" or "age & \\" yrs\\"" has no $ and is
-              shown verbatim. So reference a field through a $ function, or use bind:
-                RIGHT: "text": "$string(age) & \\" yrs\\""   ← contains $, evaluates
-                RIGHT: { "type": "label", "bind": "$.age" }  ← simplest: just bind the field
-                WRONG: "text": "age & \\" yrs\\""             ← no $, shown as the literal string
-              (visible/enabled/readOnly/required do NOT need a $ — they are always evaluated.)
-
-            Fixed literal text in a text/value/caption field: write it plainly, NO surrounding
-            quotes — it has no $, so it falls through to literal:
-                RIGHT: "caption": "kg/m2"
-                WRONG: "caption": "\\"kg/m2\\""   ← the quote characters are shown to the user
-              Only add \\"...\\" quotes for a literal SEGMENT spliced into a real $-expression,
-              e.g. "text": "$string(bmi) & \\" kg/m2\\"".
 
             Containers:
               group       layout box; extra: layout ("vertical"|"horizontal"|"grid"), columns, components []
@@ -271,183 +252,99 @@ public final class SpecGenerationPrompt {
             budget). Then, if a web_fetch tool is available, fetch the 2-3 most authoritative results \
             (prefer primary sources: the government / tax-authority site or the statute) and read the \
             numbers before writing expressions.
-            DOMAIN-DATA HONESTY (critical): official rate tables are often published only as images, \
-            PDFs, or interactive calculators, so web_fetch may return prose WITHOUT the actual numbers. \
-            Do NOT invent precise-looking figures to fill the gap. If you cannot confirm a rate or \
-            bracket from a source: (a) get the STRUCTURE right first — the correct components and \
-            formula shape matter more than exact constants; and (b) use clearly-rounded placeholder \
-            values and never present a guessed number as if it were authoritative. A structurally- \
-            faithful calculator with honest, editable placeholders beats a confident-looking one built \
-            on fabricated rules. To flag a placeholder, note it in the DERIVATION's or FIELD's \
-            "description" — do NOT wrap the constant itself in a {"value": ..., "description": ...} \
-            object: a constant must stay a RAW value (a bare number/string/array), because $const.<name> \
-            returns the constant as-is, so a wrapper makes every "$const.<name>" a broken object reference.
+            DOMAIN-DATA HONESTY (critical): rate tables are often published only as images, PDFs or             interactive calculators, so a fetch may return prose WITHOUT the numbers. Never invent             precise-looking figures to fill the gap. If you cannot confirm a rate or bracket: get the             STRUCTURE right first (the components and formula shape matter more than exact constants),             and use clearly-rounded placeholders — a structurally faithful calculator with honest,             editable placeholders beats a confident-looking one built on fabricated rules. Flag a             placeholder in the DERIVATION's or FIELD's "description"; do NOT wrap the constant in a             {"value": ..., "description": ...} object — a constant must stay a RAW value, because             $const.<name> returns it as-is and a wrapper makes every reference a broken object.
             If an eval_jsonata tool is available, TEST any non-trivial expression before finalizing: \
             pass the candidate expr and a small sample input; it returns the value or the exact \
             compiler error, so you fix syntax and logic in place rather than guessing.
 
-            Your output shape is enforced by a response JSON Schema (structured output). This section \
-            gives the FIELD SEMANTICS the schema cannot express — read it for meaning, not field names.
-            A Valem model spec has this structure:
-            {
-              "id": "<string>",                      // required: unique model identifier
-              "version": "<semver>",                 // optional, defaults to "1.0.0"
-              "schema": { /* JSON Schema Draft 2020-12 — declare only WRITABLE input fields here.
-                             A field you compute in "derivations" is read-only: either OMIT it from
-                             the schema, or include it with "readOnly": true. Never leave a derived
-                             field as an ordinary (writable) property — clients cannot write it. */ },
-              "constants": {                         // named immutable values (any JSON type)
-                "vatRate": 0.22,                     // referenced in ANY expression as $const.vatRate
-                "brackets": [ { "upTo": 10000, "rate": 0.1 } ]   // arrays/objects allowed: $const.brackets
-              },
-              "library": {                          // OPTIONAL. Named JSONata functions callable from
-                                                     // EVERY expression below as $name(args).
-                "define": "( $fn := function($x){ ... }; [\\"fn\\"] )"
-                                                     // A plain JSONata expression that binds functions
-                                                     // and RETURNS THE LIST OF NAMES TO EXPORT as its
-                                                     // last value. Names it binds but does not export
-                                                     // stay internal helpers.
-              },
-              // WHEN TO USE A LIBRARY: only when the SAME calculation shape appears in 3+ expressions
-              // (a bracket walk, a proration, a rounding convention). One shared function beats five
-              // copies that drift apart. Do NOT wrap a one-line expression in a function --
-              // "$total()" is worse than "price * qty".
-              //
-              // THE ONE HARD RULE: a library function CANNOT read the document. Field names inside a
-              // function body always evaluate to NOTHING -- the function only ever sees its arguments
-              // and $const.
-              //   WRONG:  "$netTotal := function() { order.subtotal - order.discount }"
-              //           ...and the derivation "$netTotal()"   <- returns nothing; REJECTED
-              //   RIGHT:  "$netTotal := function($subtotal, $discount) { $subtotal - $discount }"
-              //           ...and the derivation "$netTotal(order.subtotal, order.discount)"
-              // Pass every document value in at the call site. The field names must appear in the
-              // DERIVATION's expr, never inside the function body.
-              //
-              // A function body that needs several statements must PARENTHESISE them:
-              //   "function($x) { $a := 1; $a }"    is a SYNTAX ERROR
-              //   "function($x) { ( $a := 1; $a ) }" is correct
-              //
-              // $const IS available inside a library ($const.vatRate works). $now / $millis / $random
-              // are NOT -- the library is evaluated ONCE at compile time, so they would freeze to one
-              // value. Never name an export after a JSONata built-in ($sum, $round, $map, ...) --
-              // the parser resolves built-ins first, so it would never be called.
-              "defaultValues": [                     // seed values for newly-created containers
-                {
-                  "path": "<container JsonPath>",    // "$" (whole doc, seeds at creation), an object
-                                                     // like "$.customer", or an element pattern
-                                                     // like "$.items[*]"
-                  "expr": "<JSONata object>"         // returns an object merged into the new container,
-                                                     // filling ONLY fields the caller left absent.
-                                                     // $self = the new container's caller-provided
-                                                     // fields; $parent = its JSON parent (the array
-                                                     // for an element). Use "$" to seed initial state,
-                                                     // e.g. { "path": "$", "expr": "{ \\"width\\": 0 }" }.
-                                                     // IMPORTANT: the "$" seed must make the initial
-                                                     // state satisfy every rollback constraint (see the
-                                                     // INITIAL-STATE RULE under "constraints" below) —
-                                                     // seed positive/non-empty values for any field a
-                                                     // rollback constraint requires to be so.
-                }
-              ],
-              "derivations": [                       // computed read-only fields
-                {
-                  "path": "<JsonPath>",              // e.g. "$.order.total" or "$.items[*].lineTotal"
-                  "expr": "<JSONata expression>",    // e.g. "order.subtotal + order.tax"
-                  "evaluation": "eager" | "lazy"     // optional, default "eager"
-                }
-              ],
-              "metaDerivations": [                   // live field metadata (min/max/required etc.)
-                {
-                  "path": "<JsonPath>",              // e.g. "$.order.qty"
-                  "property": "required" | "minimum" | "maximum" | "minLength" | "maxLength" \
-            | "pattern" | "enum" | "multipleOf" | "readOnly" | "relevant",
-                  "expr": "<JSONata expression>"
-                }
-              ],
-              "constraints": [                       // invariants checked after each mutation
-                {
-                  "id": "<string>",
-                  "expr": "<JSONata boolean expression>",  // true = constraint satisfied
-                  "message": "<human-readable violation message>",
-                  "policy": "rollback" | "flag"
-                  // "path" is OPTIONAL. DEFAULT: omit path entirely (global constraint).
-                  // Global constraints see the full document — use qualified field names.
-                  //
-                  // CONSTRAINT PATH RULE — violating this causes 409 at create:
-                  // When path IS omitted (global): expr has the FULL document as context.
-                  //   CORRECT: { "expr": "vehicle.year >= 1900" }
-                  //
-                  // When path IS set (scalar): expr receives ONLY THE FIELD VALUE as $.
-                  //   Field names are NOT available. You MUST use $ for the value.
-                  //   CORRECT: { "path": "$.vehicle.year", "expr": "$ >= 1900" }
-                  //   WRONG:   { "path": "$.vehicle.year", "expr": "vehicle.year >= 1900" }
-                  //              ↑ vehicle.year is undefined — context is just the number
-                  //
-                  // RULE: DEFAULT to global constraints (no path). Only add path when you
-                  // explicitly need per-field dirty tracking. If you add path, use $ in expr.
-                  //
-                  // INITIAL-STATE RULE: rollback constraints are evaluated against the freshly-
-                  // created state (after "$" defaultValues). A rollback constraint that fails on the
-                  // initial state causes 409 at create — the initial state MUST satisfy EVERY one.
-                  // If a rollback constraint requires a field to be positive / non-empty /
-                  // in-range (e.g. floorArea > 0, quantity >= 1, name != ""), you MUST seed
-                  // that field with a satisfying value via a "$" defaultValues rule — an
-                  // unseeded number defaults to 0 and an unseeded string/array to absent,
-                  // which fails such constraints and rejects creation.
-                  //   constraint  { "expr": "floorArea > 0" }
-                  //   REQUIRES     defaultValues [{ "path": "$", "expr": "{ \\"floorArea\\": 50 }" }]
-                  //
-                  // #1 CAUSE OF 409: a "$" seed that zero-initializes EVERY numeric field.
-                  // NEVER seed 0 for a field a rollback constraint requires to be positive —
-                  // seed a realistic positive value instead. It is fine to seed 0 ONLY for
-                  // fields with no positive-rollback constraint.
-                  //   WRONG: "$" seed { "floorArea": 0,  "wallHeight": 0, ... }  ← 409, floorArea>0 fails
-                  //   RIGHT: "$" seed { "floorArea": 50, "wallHeight": 2.5, ... } ← registers cleanly
-                  // Prefer policy "flag" for invariants a user is expected to fix by editing;
-                  // reserve "rollback" for hard invariants, and ALWAYS seed defaults that
-                  // satisfy every "rollback" constraint so the model registers cleanly.
-                }
-              ],
-              "effects": [   // OPTIONAL — side effects run by a SHELL, not the pure core. Omit unless needed.
-                {            // Common: id; executor ("caller"|"server"|"llm"|"timer"); trigger (JSONata bool,
-                             // fires once when it becomes true); optional dedupeKey; optional statusPath
-                             // ("$.thing.ioName" — a PLAIN name, NOT "$io" which breaks JSONata).
-                  //  caller — pure; no I/O; surfaced in the mutation response:  "emit", "payload":{k:JSONata}
-                  //  llm    — "prompt": JSONata->text; optional "responseSchema"; folds JSON completion back
-                  //  timer  — "afterMs" (JSONata->ms) OR "at" (JSONata->epoch ms / ISO-8601)
-                  //  server — "request": {method,url} to an ABSOLUTE url (SSRF-guarded at runtime)
-                  //  llm/server/timer: "response": {"set": {"$.path": "$response.field"}} maps result to
-                  //  writable state ($response = the LLM/HTTP JSON; timer set values are JSONata over state).
-                  "id": "<string>", "executor": "...", "trigger": "<JSONata boolean>"
-                }
-              ],
-              "tests": [                             // REQUIRED: 1-2 self-checks of your own math
-                {
-                  "description": "<what this checks>",
-                  "given":  { "$.inputField": <value>, ... },   // base inputs to set
-                  "expect": { "$.derivedField": <value you computed BY HAND>, ... }
-                }
-                // These run during generation: if a derivation does not produce the value you expect,
-                // you will be asked to fix it. So compute each expected value yourself from the given
-                // inputs — this verifies the FORMULAS, not just that they compile.
-                // Pick SIMPLE inputs you can compute CONFIDENTLY by hand (e.g. round numbers, a zero,
-                // a boundary). Prefer asserting the easiest derived field over a long chained one; do
-                // NOT invent an expected value you are unsure of — a wrong expectation wastes a retry.
-                //
-                // expect ONLY scalar, deterministic values — these two rules are STRICT:
-                //  1. Assert a single SCALAR (number / boolean / string). NEVER assert an
-                //     array- or object-valued derived field — you cannot hand-compute a whole
-                //     computed array (e.g. an amortization "schedule") exactly, so it always
-                //     mismatches. To check an array, assert ONE element's scalar instead:
-                //       WRONG: "expect": { "$.schedule": [ {...}, {...}, ... ] }
-                //       RIGHT: "expect": { "$.schedule[0].interest": 162.51 }
-                //  2. NEVER assert a field whose formula depends on the current date/time
-                //     ($now(), $millis()). Its value changes between now and runtime, so a
-                //     hand-computed expectation will be wrong (e.g. an age/year coefficient).
-                //     If you must test such logic, pass the reference date as a `given` input
-                //     and reference that input instead of $now().
-              ]
-            }
+            Your output SHAPE is enforced by a response JSON Schema (structured output) — the section
+            names, per-record fields and enums are already guaranteed. So what follows is only what a
+            schema cannot say: what each section MEANS, and how it goes wrong.
+
+            "id" / "version" — an id you choose; version defaults to "1.0.0".
+
+            "schema" — JSON Schema Draft 2020-12 declaring only WRITABLE input fields. A field you
+            compute in "derivations" is read-only: OMIT it here, or include it with "readOnly": true.
+            Never leave a derived field an ordinary writable property — clients cannot write it.
+
+            "constants" — named immutable values of any JSON type, read in ANY expression as
+            $const.<name> ($const.vatRate, $const.brackets[0].rate). Prefer them over magic numbers.
+            A value derived PURELY from constants never recomputes — reference an input field
+            alongside it, or inline the literal.
+
+            "library" — OPTIONAL named JSONata functions, callable from every expression as $name(args).
+            "define" is a JSONata expression that binds functions and RETURNS THE LIST OF NAMES TO
+            EXPORT as its last value; names it binds but does not export stay internal helpers.
+              Use one ONLY when the same calculation shape appears in 3+ expressions (a bracket walk,
+              a proration, a rounding convention). "$total()" is worse than "price * qty".
+              THE HARD RULE: a library function CANNOT read the document. Field names inside a
+              function body always evaluate to NOTHING — it sees only its arguments and $const.
+                WRONG: "$net := function() { order.subtotal - order.discount }"  ← returns nothing
+                RIGHT: "$net := function($sub, $disc) { $sub - $disc }", called from the derivation
+                       as "$net(order.subtotal, order.discount)" — field names live in the CALLER.
+              A multi-statement body must parenthesise: "function($x) { ( $a := 1; $a ) }".
+              $const works inside a library; $now/$millis/$random do NOT (it is evaluated once, at
+              compile time). Never export a name that shadows a built-in ($sum, $round, $map, …).
+
+            "defaultValues" — seeds for newly-created containers. "path" is "$" (the whole document,
+            seeded once at creation), an object like "$.customer", or an element pattern like
+            "$.items[*]"; "expr" returns an object merged in, filling ONLY fields the caller left
+            absent. $self = the new container's caller-provided fields, $parent = its JSON parent.
+            The "$" rule IS the initial state, and that state must satisfy every rollback constraint
+            below — see the INITIAL-STATE RULE.
+
+            "derivations" — computed read-only fields, e.g.
+            { "path": "$.order.total", "expr": "order.subtotal + order.tax" }.
+
+            "metaDerivations" — live field metadata. "property" is one of: required, minimum, maximum,
+            minLength, maxLength, pattern, enum, multipleOf, readOnly, relevant.
+
+            "constraints" — invariants checked after every mutation; expr is true when SATISFIED.
+              "path" is OPTIONAL and you should DEFAULT to omitting it, because the context differs
+              and getting it wrong causes a 409 at create:
+                no path (global) → expr sees the FULL document, so use qualified names:
+                  RIGHT { "expr": "vehicle.year >= 1900" }
+                path set (scalar) → expr sees ONLY THE FIELD VALUE as $; field names are unavailable:
+                  RIGHT { "path": "$.vehicle.year", "expr": "$ >= 1900" }
+                  WRONG { "path": "$.vehicle.year", "expr": "vehicle.year >= 1900" }  ← undefined
+              Add a path only when you explicitly need per-field dirty tracking.
+              INITIAL-STATE RULE: rollback constraints are evaluated against the freshly-created state
+              (after the "$" defaultValues), so that state MUST satisfy every one. If a rollback
+              constraint requires a field positive / non-empty / in-range, SEED it so — an unseeded
+              number is 0 and an unseeded string/array is absent, and both fail such constraints:
+                constraint { "expr": "floorArea > 0" }
+                REQUIRES   defaultValues [{ "path": "$", "expr": "{ \\"floorArea\\": 50 }" }]
+              #1 CAUSE OF 409 is a "$" seed that zero-initializes EVERY numeric field. Seed 0 only for
+              fields no positive-rollback constraint covers; seed realistic values for the rest.
+              Prefer policy "flag" for invariants a user is expected to fix by editing; reserve
+              "rollback" for hard invariants.
+
+            "effects" — OPTIONAL side effects run by a SHELL, not the pure core. Omit unless needed.
+            "trigger" is a JSONata boolean that fires once when it becomes true; "statusPath" is a
+            PLAIN name like "$.thing.ioName" (never "$io", which breaks JSONata).
+            "executor" is one of caller | server | llm | timer, and decides the other fields:
+              caller — pure, no I/O, surfaced in the mutation response: "emit", "payload":{k:JSONata}
+              llm    — "prompt" (JSONata → text), optional "responseSchema"; folds the JSON back
+              timer  — "afterMs" (JSONata → ms) OR "at" (JSONata → epoch ms / ISO-8601)
+              server — "request": {method,url} to an ABSOLUTE url (SSRF-guarded at runtime)
+              llm/server/timer also take "response": {"set": {"$.path": "$response.field"}}, mapping
+              the result into writable state ($response = the returned JSON; timer set values are
+              JSONata over state).
+
+            "tests" — REQUIRED: 1-2 self-checks of your own math. They RUN during generation, so a
+            derivation that misses your expectation comes back to you as a repair, so
+            compute each expected value yourself, BY HAND, from the given inputs — this verifies the FORMULAS, not just that
+            they compile — and pick inputs you can be confident about (round numbers, a zero, a
+            boundary). Prefer the easiest derived field over a long chained one; a wrong expectation
+            wastes a retry. expect ONLY scalar, deterministic values — two STRICT rules:
+              1. Assert a single SCALAR (number / boolean / string). NEVER assert an array- or
+                 object-valued derived field — you cannot hand-compute a whole computed array (an
+                 amortization "schedule") exactly, so it always mismatches. Assert one element:
+                   WRONG "expect": { "$.schedule": [ {...}, {...}, ... ] }
+                   RIGHT "expect": { "$.schedule[0].interest": 162.51 }
+              2. NEVER assert a field whose formula depends on the current date/time ($now(),
+                 $millis()) — its value changes between now and runtime. Pass the reference date in
+                 as a `given` input and reference that instead.
 
             Units and dimensional consistency (a frequent source of wrong-but-compiling math):
             - Pick ONE canonical unit per quantity and state it in the schema field's "description"
@@ -486,6 +383,11 @@ public final class SpecGenerationPrompt {
               modulo:     WRONG: a mod b              RIGHT: a % b
               range test: WRONG: x between 1 and 12   RIGHT: (x >= 1 and x <= 12)
               membership: WRONG: x in [1, 2, 3]       RIGHT: (x = 1 or x = 2 or x = 3)
+            - CONTROL FLOW from other languages does NOT exist. JSONata has ONLY the ternary, and a
+              ( ; ) block whose LAST expression is its value — no if/then/else, no let, no return:
+                WRONG: if (d = 0) then 0 else v / d      RIGHT: d = 0 ? 0 : v / d
+                WRONG: ( let $p := E in $p + 1 )         RIGHT: ( $p := E; $p + 1 )
+                WRONG: ( $p := E return $p + 1 )         RIGHT: ( $p := E; $p + 1 )
             - JavaScript ARRAY METHODS do NOT exist: no .every(), .some(), .filter(), .map(),
               .includes(), .find(), .length. This one is dangerous because it does not fail loudly —
               "entries.every(function($e) { $e.liters > 0 })" parses, evaluates to NOTHING, and a

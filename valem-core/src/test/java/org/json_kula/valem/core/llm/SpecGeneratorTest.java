@@ -129,11 +129,80 @@ class SpecGeneratorTest {
     }
 
     @Test
+    void fix_expressions_converts_if_then_else_to_the_ternary() {
+        // JSONata has only the ternary. Reported from the deployed sandbox as
+        // "Expected RPAREN but found IDENTIFIER ('then')".
+        assertThat(SpecGenerator.fixExpressions("\"(if ($d = 0) then 0 else ($v / $d) * 100)\""))
+                .contains("(($d = 0) ? 0 : ($v / $d) * 100)");
+        // A chain needs no restructuring — the ternary is right-associative.
+        assertThat(SpecGenerator.fixExpressions(
+                "\"(if (a = 0) then 0 else if (b = 1) then 1 else 2)\""))
+                .contains("((a = 0) ? 0 : (b = 1) ? 1 : 2)");
+    }
+
+    @Test
+    void fix_expressions_leaves_if_then_else_words_alone_inside_string_literals() {
+        // These are three of the commonest words in English; a message or label that contains them
+        // must survive untouched.
+        assertThat(SpecGenerator.fixExpressions("\"($m := \\\"nothing else matters\\\"; $m)\""))
+                .contains("nothing else matters");
+        assertThat(SpecGenerator.fixExpressions("\"status = 'iflag'\"")).contains("'iflag'");
+        // Identifier prefixes are not keywords either.
+        assertThat(SpecGenerator.fixExpressions("\"elsewhere.count + ifCount\""))
+                .contains("elsewhere.count + ifCount");
+    }
+
+    @Test
+    void fix_expressions_converts_a_return_separator_to_a_semicolon() {
+        // Reported from the deployed sandbox: JSONata has no "return" — the last expression in a
+        // block IS its value — so this failed with "Expected RPAREN but found IDENTIFIER ('return')".
+        String reported = "\"($prev := $max(entries[odometer < $parent.odometer].odometer) "
+                          + "return $prev ? $parent.odometer - $prev : 0)\"";
+        assertThat(SpecGenerator.fixExpressions(reported))
+                .contains("($prev := $max(entries[odometer < $parent.odometer].odometer) "
+                          + "; $prev ? $parent.odometer - $prev : 0)");
+    }
+
+    @Test
+    void fix_expressions_leaves_the_word_return_alone_outside_a_binding_block() {
+        // A field or literal that merely contains the letters must survive: only a standalone
+        // keyword inside a ( … ) block that already has a := binding is a separator.
+        assertThat(SpecGenerator.fixExpressions("\"order.returnCount > 0\""))
+                .contains("order.returnCount > 0");
+        assertThat(SpecGenerator.fixExpressions("\"$count(returns)\"")).contains("$count(returns)");
+        // No binding in this block, so "return" is not a separator here either.
+        assertThat(SpecGenerator.fixExpressions("\"(a return b)\"")).contains("(a return b)");
+        // Inside a JSONata string literal it is prose, not syntax.
+        assertThat(SpecGenerator.fixExpressions("\"($m := \\\"please return it\\\"; $m)\""))
+                .contains("please return it");
+    }
+
+    @Test
     void fix_expressions_leaves_the_word_let_alone_when_it_is_not_a_binding() {
         // Only "let" immediately introducing a $variable binding is a keyword to strip; the letters
         // elsewhere — a field named "letters", prose in a description — must survive.
         assertThat(SpecGenerator.fixExpressions("\"letters.count > 0\"")).contains("letters.count > 0");
         assertThat(SpecGenerator.fixExpressions("\"$x := 1\"")).contains("$x := 1");
+    }
+
+    @Test
+    void an_unterminated_object_literal_expression_is_closed() {
+        // Captured verbatim from the deployed sandbox: a defaultValues seed emitted as "{ ". The JSON
+        // is valid, so nothing upstream objects — it is the EXPRESSION that never closes, and it fails
+        // with "Unexpected end of expression (position 2)". The repair prompt then echoes the same
+        // "{ " back, so the model sees nothing wrong and re-sends it; the loop cannot escape.
+        assertThat(SpecGenerator.fixExpressions(
+                "{\"defaultValues\":[{\"path\":\"$\",\"expr\":\"{ \"}]}"))
+                .contains("\"expr\":\"{ }\"");
+    }
+
+    @Test
+    void a_complete_object_literal_expression_is_left_alone() {
+        String complete = "{\"defaultValues\":[{\"path\":\"$\",\"expr\":\"{ \\\"a\\\": 0 }\"}]}";
+        assertThat(SpecGenerator.balanceExpressionBraces(complete)).isEqualTo(complete);
+        // A brace inside a JSONata string literal is text, not structure, so it must not be counted.
+        String literalBrace = "{\"expr\":\"{ \\\"note\\\": \\\"a { here\\\" }\"}";
+        assertThat(SpecGenerator.balanceExpressionBraces(literalBrace)).isEqualTo(literalBrace);
     }
 
     // ── balanceExpressionParens ────────────────────────────────────────────────
@@ -1183,6 +1252,20 @@ class SpecGeneratorTest {
                 .isEqualTo("{ \"id\": \"m\" }");
         assertThat(SpecGenerator.extractJson("preamble prose\n{\n{ \"id\": \"m\" }"))
                 .isEqualTo("{ \"id\": \"m\" }");
+    }
+
+    @Test
+    void a_duplicated_brace_is_dropped_even_when_the_response_is_also_truncated() {
+        // Captured from a real OpenRouter response: the model doubled the opening brace AND ran out
+        // of tokens, leaving five openers unclosed. Requiring an exact off-by-one declined exactly
+        // here, so a recoverable truncation surfaced as "Unexpected character ('{')" and the repair
+        // loop re-sent the same thing forever instead of retrying with a bigger budget.
+        String doubledAndTruncated = "{\n{\n  \"id\": \"m\",\n  \"schema\": { \"properties\": { \"a\": {";
+        String extracted = SpecGenerator.extractJson(doubledAndTruncated);
+
+        assertThat(extracted).startsWith("{\n  \"id\"");
+        assertThat(SpecGenerator.dropStrayLeadingBrace(doubledAndTruncated))
+                .doesNotStartWith("{\n{");
     }
 
     @Test
