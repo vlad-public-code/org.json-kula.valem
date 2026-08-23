@@ -731,7 +731,7 @@ public final class SpecGenerator {
             int firstNewline = trimmed.indexOf('\n', firstFence);
             int lastFence    = trimmed.lastIndexOf("```");
             if (firstNewline >= 0 && lastFence > firstNewline) {
-                return trimmed.substring(firstNewline + 1, lastFence).strip();
+                return dropStrayLeadingBrace(trimmed.substring(firstNewline + 1, lastFence).strip());
             }
         }
 
@@ -739,10 +739,46 @@ public final class SpecGenerator {
         int firstBrace = trimmed.indexOf('{');
         int lastBrace  = trimmed.lastIndexOf('}');
         if (firstBrace >= 0 && lastBrace > firstBrace) {
-            return trimmed.substring(firstBrace, lastBrace + 1);
+            return dropStrayLeadingBrace(trimmed.substring(firstBrace, lastBrace + 1));
         }
 
-        return trimmed;
+        return dropStrayLeadingBrace(trimmed);
+    }
+
+    /**
+     * Drops a duplicated opening brace — a response that begins {@code "{ { \"id\": ..."} where the
+     * document only ever needed one.
+     *
+     * <p>Some models emit it under structured output: the provider opens the object for them and the
+     * model opens it again. Brace-matching extraction then hands the parser {@code "{ {...}"}, which
+     * fails with {@code "Unexpected character ('{'): was expecting double-quote to start field name"}
+     * — and because the model cannot see what it did, the mistake survives every repair attempt and
+     * burns the whole budget. Observed repeatedly on a free OpenRouter model.
+     *
+     * <p>Deliberately narrow: it fires only when the text opens with two braces AND the unquoted
+     * brace counts are off by exactly that one extra. A well-formed document — including
+     * {@code {"a":{"b":1}}}, which also starts with two braces but balances — is returned untouched.
+     */
+    static String dropStrayLeadingBrace(String json) {
+        if (json == null || json.isEmpty() || json.charAt(0) != '{') return json;
+        int second = 1;
+        while (second < json.length() && Character.isWhitespace(json.charAt(second))) second++;
+        if (second >= json.length() || json.charAt(second) != '{') return json;
+
+        int open = 0, close = 0;
+        boolean inString = false;
+        for (int i = 0; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (c == '"') {
+                int backslashes = 0;
+                for (int k = i - 1; k >= 0 && json.charAt(k) == '\\'; k--) backslashes++;
+                if (backslashes % 2 == 0) inString = !inString;
+            }
+            if (inString) continue;
+            if      (c == '{') open++;
+            else if (c == '}') close++;
+        }
+        return open == close + 1 ? json.substring(second) : json;
     }
 
     /**
@@ -837,7 +873,15 @@ public final class SpecGenerator {
                 .replaceAll("(?<=[\\w$.)\\]])\\s+mod\\s+(?=[\\w$.(\\[])", " % ")
                 // ==, === → = (JavaScript equality → JSONata equality);
                 // negative lookbehind guards :=, <=, >=, != so they are not touched
-                .replaceAll("(?<![:<>!])==+", "=");
+                .replaceAll("(?<![:<>!])==+", "=")
+                // ML/Rust-style let bindings. JSONata binds with a bare "$x := E" inside a ( ; )
+                // sequence and has no "let" keyword and no "in" body separator, so both forms below
+                // fail to compile at position 6 — before the model can see anything it recognises as
+                // wrong, which is why the repair loop never talks it out of them.
+                //   "( let $p := E in BODY )"  →  "( $p := E; BODY )"     (handled first)
+                //   "( let $p := E; BODY )"    →  "( $p := E; BODY )"
+                .replaceAll("\\blet\\s+(\\$\\w+)\\s*:=\\s*(.+?)\\s+in\\s+", "$1 := $2; ")
+                .replaceAll("\\blet\\s+(?=\\$\\w+\\s*:=)", "");
 
         // Phase 2: structure-aware passes (order matters). balanceExpressionParens runs LAST so it
         // closes any paren deficit the earlier passes leave (or the LLM produced).
@@ -1511,7 +1555,13 @@ public final class SpecGenerator {
      * broken truncated text back to the model.
      */
     private static boolean isLikelyTruncated(String raw) {
-        if (raw == null || raw.isBlank()) return false;
+        // A BLANK response is the extreme case of truncation, not a separate one: the model emitted no
+        // JSON at all, either because the whole completion budget went to a reasoning model's chain of
+        // thought (the provider returns finish_reason "length" with empty content) or because the answer
+        // was cut off before its first character. Both want the truncation recovery — one more attempt
+        // with a raised budget — rather than a repair prompt quoting an empty "previous response", which
+        // tells the model nothing and reliably reproduces the same empty answer.
+        if (raw == null || raw.isBlank()) return true;
         String stripped = raw.strip();
         // If there's a code fence, strip only the closing fence for the end check
         String tail = stripped.endsWith("```") ? stripped.substring(0, stripped.length() - 3).strip() : stripped;

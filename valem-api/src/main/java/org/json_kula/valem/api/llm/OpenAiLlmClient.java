@@ -44,6 +44,19 @@ public class OpenAiLlmClient implements LlmClient {
     private final boolean responseFormatWithTools;
     /** Provider label for {@link #describe()}; this class serves many, so it must be told which. */
     private final String provider;
+    /**
+     * {@code reasoning_effort} to send, or {@code null} to omit the field entirely.
+     *
+     * <p>Only meaningful for a model that reasons before answering, and it is the difference between a
+     * usable spec and an empty one on a tight budget: a reasoning model bills its chain of thought
+     * against the same {@code max_tokens} as the answer. Measured on {@code gemini-2.5-flash} at a
+     * 4096-token budget for one spec generation — default effort: 3,095 thinking tokens, 984 left for
+     * the answer, truncated; {@code low}: 837 thinking tokens and a complete spec. Sent verbatim, so
+     * the accepted values are the provider's ({@code none}/{@code low}/{@code medium}/{@code high} for
+     * Gemini and Groq's gpt-oss). Left {@code null} by default: a provider that does not know the field
+     * may answer 400, which is indistinguishable from a dead key.
+     */
+    private final String reasoningEffort;
 
     private static final int DEFAULT_MAX_TOOL_ITERATIONS = 40;
     /**
@@ -114,6 +127,20 @@ public class OpenAiLlmClient implements LlmClient {
                            int maxToolIterations, StructuredOutputMode structuredOutput,
                            boolean responseFormatWithTools,
                            ObjectMapper mapper, RestClient restClient) {
+        this(provider, baseUrl, apiKey, model, maxTokens, maxToolIterations, structuredOutput,
+                responseFormatWithTools, null, mapper, restClient);
+    }
+
+    /**
+     * As above, asking a reasoning model for a specific {@code reasoning_effort} — see
+     * {@link #reasoningEffort}. Blank or {@code null} omits the field.
+     */
+    public OpenAiLlmClient(String provider, String baseUrl, String apiKey, String model, int maxTokens,
+                           int maxToolIterations, StructuredOutputMode structuredOutput,
+                           boolean responseFormatWithTools, String reasoningEffort,
+                           ObjectMapper mapper, RestClient restClient) {
+        this.reasoningEffort = reasoningEffort == null || reasoningEffort.isBlank()
+                ? null : reasoningEffort.trim();
         this.provider = provider == null || provider.isBlank() ? UNNAMED_PROVIDER : provider;
         this.structuredOutput = structuredOutput != null ? structuredOutput : StructuredOutputMode.SCHEMA;
         this.responseFormatWithTools = responseFormatWithTools;
@@ -171,6 +198,7 @@ public class OpenAiLlmClient implements LlmClient {
             ObjectNode req = mapper.createObjectNode();
             req.put("model", model);
             req.put("max_tokens", budget);
+        setReasoningEffort(req);
             // Force structured JSON output — without this, weaker OpenAI-compatible models (e.g.
             // mistral-small) answer in conversational prose and the spec parse fails.
             setResponseFormat(req, responseSchema, false);
@@ -280,6 +308,7 @@ public class OpenAiLlmClient implements LlmClient {
                 ObjectNode req = mapper.createObjectNode();
                 req.put("model", model);
                 req.put("max_tokens", budget);
+        setReasoningEffort(req);
                 // Structured JSON for the final answer (tool_calls turns still emit function calls).
                 setResponseFormat(req, responseSchema, true);
                 if (temperature != null) req.put("temperature", temperature.doubleValue());
@@ -296,9 +325,17 @@ public class OpenAiLlmClient implements LlmClient {
                 String finishReason  = choice.path("finish_reason").asText();
                 JsonNode message     = choice.path("message");
 
-                if (!"tool_calls".equals(finishReason)) {
-                    // Terminal response — return the text content
-                    return message.path("content").asText();
+                // A tool-call turn is normally announced by finish_reason, but some providers report
+                // "stop" on a message that still carries tool_calls; treating that as terminal returns
+                // the message's empty content and ends the generation with nothing. "length" is the one
+                // case that stays terminal even with tool_calls present: those calls were cut off
+                // mid-emission, so executing them would feed the model back its own truncated request.
+                boolean hasToolCalls = message.path("tool_calls").isArray()
+                        && !message.path("tool_calls").isEmpty();
+                boolean toolTurn = "tool_calls".equals(finishReason)
+                        || (hasToolCalls && !"length".equals(finishReason));
+                if (!toolTurn) {
+                    return terminalContent(message, finishReason, response);
                 }
 
                 // Add the assistant message (including tool_calls) to the conversation
@@ -351,6 +388,7 @@ public class OpenAiLlmClient implements LlmClient {
         ObjectNode req = mapper.createObjectNode();
         req.put("model", model);
         req.put("max_tokens", budget);
+        setReasoningEffort(req);
         // No "tools" on this request, so even a provider that rejects the combination takes it.
         setResponseFormat(req, responseSchema, false);
         if (temperature != null) req.put("temperature", temperature.doubleValue());
@@ -366,7 +404,62 @@ public class OpenAiLlmClient implements LlmClient {
             throw new LlmException("OpenAI-compatible tool loop did not converge: model kept calling "
                     + "tools after the budget was exhausted");
         }
-        return choice.path("message").path("content").asText();
+        return terminalContent(choice.path("message"), choice.path("finish_reason").asText(), response);
+    }
+
+    /**
+     * The assistant text of a terminal response, tolerant of the content shapes that otherwise read as
+     * empty, and loud when there genuinely is nothing.
+     *
+     * <p>Empty text is the failure mode behind {@code "Response was not valid JSON: No content to map
+     * due to end-of-input"}: the caller gets {@code ""}, and the only clue about why is on this side of
+     * the wire. Two provider behaviours produce it:
+     * <ul>
+     *   <li>a <b>reasoning</b> model (Groq's {@code openai/gpt-oss-*}) bills its chain of thought
+     *       against the same {@code max_tokens} budget as the answer and returns it in a separate
+     *       {@code reasoning} field, so a budget reasoning alone exhausts comes back
+     *       {@code finish_reason: "length"} with {@code content: ""};</li>
+     *   <li>a provider that returns {@code content} as an array of typed chunks rather than a plain
+     *       string, which {@code asText()} reads as empty — handled by {@link #contentText}.</li>
+     * </ul>
+     * Reasoning text is never returned as the answer: it is deliberation, not output. It is only
+     * counted, so the log says which of the two happened.
+     */
+    private String terminalContent(JsonNode message, String finishReason, JsonNode response) {
+        String content = contentText(message.path("content"));
+        if (!content.isBlank()) return content;
+
+        int reasoningTokens = response.path("usage").path("completion_tokens_details")
+                .path("reasoning_tokens").asInt(0);
+        log.warn("OpenAI-compatible model '{}' returned an EMPTY response: finish_reason={} "
+                 + "completion_tokens={} reasoning_tokens={}{}",
+                model, finishReason,
+                response.path("usage").path("completion_tokens").asInt(0), reasoningTokens,
+                "length".equals(finishReason)
+                        ? " — the token budget ran out" + (reasoningTokens > 0
+                                ? " while the model was still reasoning; raise max_tokens or lower "
+                                  + "reasoning_effort" : "; raise max_tokens")
+                        : "");
+        return "";
+    }
+
+    /**
+     * Reads an OpenAI-compatible {@code content} field as text. Usually a plain string; some providers
+     * (and every multimodal-shaped response) send an array of typed parts instead, whose text lives in
+     * each element's {@code text} field. A {@code null}/absent content is the empty string — never the
+     * literal {@code "null"} {@code NullNode.asText()} would hand back.
+     */
+    static String contentText(JsonNode content) {
+        if (content == null || content.isNull() || content.isMissingNode()) return "";
+        if (content.isArray()) {
+            StringBuilder sb = new StringBuilder();
+            for (JsonNode part : content) {
+                if (part.isTextual()) sb.append(part.asText());
+                else if (part.hasNonNull("text")) sb.append(part.path("text").asText());
+            }
+            return sb.toString();
+        }
+        return content.asText("");
     }
 
     /** Prepends a {@code system}-role message when a system context is present. */
@@ -405,6 +498,11 @@ public class OpenAiLlmClient implements LlmClient {
      * @param toolsPresent whether this request also carries {@code tools}; a provider that rejects
      *                     the combination gets no {@code response_format} on those requests
      */
+    /** Adds {@code reasoning_effort} when one is configured; omits the field entirely otherwise. */
+    private void setReasoningEffort(ObjectNode req) {
+        if (reasoningEffort != null) req.put("reasoning_effort", reasoningEffort);
+    }
+
     private void setResponseFormat(ObjectNode req, JsonNode responseSchema, boolean toolsPresent) {
         // NONE omits the field entirely, and JSON never asks for a schema — both for providers that
         // answer 400 to what they do not support, which is indistinguishable from a dead key.
@@ -447,6 +545,7 @@ public class OpenAiLlmClient implements LlmClient {
             log.warn("OpenAI-compatible API returned unexpected response (no choices): {}", responseJson);
             throw new LlmException("Unexpected response: choices array missing — " + responseJson);
         }
-        return choices.get(0).path("message").path("content").asText();
+        JsonNode choice = choices.get(0);
+        return terminalContent(choice.path("message"), choice.path("finish_reason").asText(), response);
     }
 }

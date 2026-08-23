@@ -53,6 +53,10 @@ public class LlmConfig {
             @Value("${valem.llm.prompt-cache.enabled:true}") boolean promptCacheEnabled,
             @Value("${valem.llm.tool-loop.max-iterations:40}") int toolLoopMaxIterations,
             @Value("${valem.llm.structured-output:schema}") String structuredOutput,
+            // Blank = omit reasoning_effort entirely (a provider that does not know the field answers
+            // 400, which looks exactly like a dead key). Set it for a reasoning model on a tight
+            // budget: chain of thought is billed against the same max-tokens as the answer.
+            @Value("${valem.llm.reasoning-effort:}") String reasoningEffort,
             ObjectMapper mapper,
             RestClient.Builder restClientBuilder,
             LlmInteractionLog interactionLog) {
@@ -70,7 +74,8 @@ public class LlmConfig {
                     configuredModel.isBlank() ? " (provider default)" : "");
             inner = LlmClientFactory.create(provider, apiKey, model, maxTokens, baseUrl,
                     promptCacheEnabled, toolLoopMaxIterations,
-                    StructuredOutputMode.parse(structuredOutput), mapper, restClientBuilder);
+                    StructuredOutputMode.parse(structuredOutput), reasoningEffort,
+                    mapper, restClientBuilder);
         }
         LlmClient client = new RecordingLlmClient(inner, interactionLog);
         // Optionally cap simultaneous LLM calls: throttled keys 429 when generations overlap.

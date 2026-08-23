@@ -1,6 +1,7 @@
 package org.json_kula.valem.core.engine;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.NullNode;
 import org.json_kula.valem.core.model.ModelSpec;
 import org.json_kula.valem.core.model.TestCase;
 
@@ -64,9 +65,14 @@ public final class SpecVerifier {
 
             Boolean casePassed = verifiable ? verifiableFailures.isEmpty() : null;
 
+            // A failure's actual value is nullable — a case whose "given" mutation was rejected by a
+            // constraint, or a $meta assertion against an absent schema key, records no runtime value
+            // at all. Map.copyOf rejects a null value with an NPE, which would abort an otherwise
+            // successful generation at the very last step, so those entries carry NullNode: the map
+            // stays complete (every failing path appears) and stays copyable.
             Map<String, JsonNode> actual = new LinkedHashMap<>();
             for (TestCaseRunner.FieldFailure f : verifiableFailures) {
-                actual.put(f.path(), f.actual());
+                actual.put(f.path(), f.actual() == null ? NullNode.getInstance() : f.actual());
             }
 
             String reason = verifiable ? null

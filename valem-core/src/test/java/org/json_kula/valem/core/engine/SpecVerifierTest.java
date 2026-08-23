@@ -147,4 +147,29 @@ class SpecVerifierTest {
         assertThat(report.passedCount()).isEqualTo(1);
         assertThat(report.cases().getFirst().passed()).isTrue();
     }
+
+    @Test
+    void case_whose_given_was_rejected_by_a_constraint_reports_instead_of_throwing() throws Exception {
+        // A failure whose "given" mutation never applied has no runtime value to report, so its actual
+        // is null. Map.copyOf rejects a null value with an NPE — which used to abort an otherwise
+        // successful LLM generation at its very last step, after a perfectly good spec was in hand.
+        var report = verify("""
+                {
+                  "id": "m", "version": "1", "schema": {},
+                  "constraints": [
+                    { "id": "pos", "expr": "x.val > 0", "message": "must be positive", "policy": "rollback" }
+                  ],
+                  "tests": [
+                    { "description": "negative val", "given": { "$.x.val": -5 }, "expect": { "$.x.val": -5 } }
+                  ]
+                }
+                """);
+
+        assertThat(report.state()).isEqualTo(VerificationReport.State.AMBER);
+        assertThat(report.checkedCount()).isEqualTo(1);
+        assertThat(report.passedCount()).isZero();
+        // The failing path is still named in the report; its unavailable value reads as JSON null.
+        assertThat(report.cases().getFirst().actual()).containsKey("given");
+        assertThat(report.cases().getFirst().actual().get("given").isNull()).isTrue();
+    }
 }

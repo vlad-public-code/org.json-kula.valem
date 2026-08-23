@@ -241,9 +241,10 @@ sit behind the same gate as the model API.
 |---|---|---|
 | `valem.llm.provider` | `anthropic` | One of `anthropic`, `openai`, `ollama`, `openrouter`, `groq`, `mistral`, `gemini`, `cerebras`. |
 | `valem.llm.api-key` | *(unset)* | API key for the provider; not required for `ollama`. |
-| `valem.llm.model` | *(provider-appropriate default)* | Model name sent to the provider. When unset, a sensible default is chosen for the provider: `anthropic`→`claude-sonnet-4-6`, `openai`→`gpt-4o`, `mistral`→`mistral-large-latest`, `groq`→`openai/gpt-oss-120b`, `gemini`→`gemini-2.0-flash`, `cerebras`→`llama-3.3-70b`, `ollama`→`llama3.1`, `openrouter`→`anthropic/claude-3.7-sonnet`. Override per deployment. |
+| `valem.llm.model` | *(provider-appropriate default)* | Model name sent to the provider. When unset, a sensible default is chosen for the provider: `anthropic`→`claude-sonnet-4-6`, `openai`→`gpt-4o`, `mistral`→`mistral-large-latest`, `groq`→`openai/gpt-oss-120b`, `gemini`→`gemini-2.5-flash`, `cerebras`→`llama-3.3-70b`, `ollama`→`llama3.1`, `openrouter`→`nvidia/nemotron-3-super-120b-a12b:free`. Override per deployment. |
 | `valem.llm.max-tokens` | `8192` | Max tokens for LLM responses. On a truncated response the first retry transiently raises this to `min(2 × max-tokens, max-tokens-hard)` on the *same* prompt (keeping the work) before falling back to the "smaller spec" prompt on a second truncation. |
 | `valem.llm.max-tokens-hard` | `16384` | Ceiling for the adaptive truncation retry above. |
+| `valem.llm.reasoning-effort` | *(unset — field omitted)* | `reasoning_effort` sent to an OpenAI-compatible provider, verbatim (`none`/`low`/`medium`/`high` on Gemini and Groq's gpt-oss). Leave unset for a non-reasoning model: a provider that does not know the field answers **400**, which is indistinguishable from a dead key. See the reasoning-model note below for why it matters. Ignored by Anthropic. |
 | `valem.llm.base-url` | *(provider default)* | Override the endpoint (Ollama, proxies, OpenAI-compatible servers). |
 | `valem.llm.max-retries` | `6` | Base validation-retry attempts in `SpecGenerator` (always attempted). Each repair attempt re-offers the local `eval_jsonata` tool (its budget replenished) so a fix can be re-tested in place; network tools stay on the first attempt only. |
 | `valem.llm.max-retries-hard` | `10` | Ceiling for a *converging* hard spec — extra attempts past the base budget are granted only while the validation-error count keeps dropping. |
@@ -277,16 +278,41 @@ sit behind the same gate as the model API.
 `https://api.mistral.ai/v1`; Gemini `https://generativelanguage.googleapis.com/v1beta/openai/`;
 Cerebras `https://api.cerebras.ai/v1`.
 
-**Groq: `response_format` and `tools` are mutually exclusive** — handled automatically, no
-configuration needed. Groq answers `400 "json mode cannot be combined with tool/function calling"`
-to *any* `response_format` (`json_object` and `json_schema` alike, on every model) once the request
-also carries `tools`. The spec-generation tool loop is on by default, so that would be the very
-first call a correctly-configured Groq key makes. The client therefore omits `response_format` on
-tool-carrying requests to Groq only; plain completions and the tool loop's final tools-withheld
-answer keep whatever `structured-output` rung is configured. This is a fixed provider rule rather
-than a per-deployment capability, so it lives in the provider table
+**Groq and Gemini: `response_format` and `tools` are mutually exclusive** — handled automatically,
+no configuration needed. Groq answers `400 "json mode cannot be combined with tool/function
+calling"` to *any* `response_format` (`json_object` and `json_schema` alike, on every model) once
+the request also carries `tools`; Gemini's OpenAI-compatible endpoint answers `400 "Function calling
+with a response mime type: 'application/json' is unsupported"` to the same combination. The
+spec-generation tool loop is on by default, so that would be the very first call a correctly
+configured key makes. The client therefore omits `response_format` on tool-carrying requests to
+those two providers; plain completions and the tool loop's final tools-withheld answer keep whatever
+`structured-output` rung is configured. This is a fixed provider rule rather than a per-deployment
+capability, so it lives in the provider table
 (`LlmClientFactory.combinesResponseFormatWithTools`) alongside the base URLs above — unlike
 `valem.llm.structured-output`, which exists because *local* server support genuinely varies.
+
+**Reasoning models spend your token budget thinking.** A model that reasons before answering
+(Gemini 2.5/3.x, Groq's `openai/gpt-oss-*`) bills its chain of thought against the same
+`max-tokens` as the answer, and returns the thinking in a separate field — so a budget the thinking
+exhausts comes back as `finish_reason: "length"` with empty content, which reaches generation as
+"Response was not valid JSON: No content to map due to end-of-input". Measured on one spec
+generation with `gemini-2.5-flash`: at `max-tokens=4096` with the provider's default effort, 3,095
+tokens went to thinking and 984 to the answer, truncating the spec; with
+`valem.llm.reasoning-effort=low` and `max-tokens=8192`, ~800 tokens went to thinking and the spec
+completed in one call. Set both for a reasoning model. (The generator also recovers on its own —
+an empty or truncated response retries the same prompt at `min(2 × max-tokens, max-tokens-hard)` —
+but that costs an extra call per generation.)
+
+**Free tiers run out in different units, and the unit decides the fallback order.** Two measured
+examples, because "free tier" says nothing useful on its own: Groq caps *tokens per minute* (8,000 on
+its free tier) and admits a request on `prompt + max_tokens` before the model reads it — so a
+long system prompt is refused outright, every time, and no `max-tokens` value helps. Gemini caps
+*requests per day* (20 per model on its free tier: `GenerateRequestsPerDayPerProjectPerModel-
+FreeTier`) — generous per call, but a spec generation costs 4–10 calls, so the key is spent after a
+handful of them. A per-minute limit is something a retry rides out; a per-day limit is not. Prefer
+the per-minute-limited provider as the primary and keep the per-day one as the fallback, with a
+`daily-call-limit` matching its real ceiling so it steps aside silently instead of making every later
+call pay a full backoff before failing over.
 
 **Model defaults go stale.** Providers retire model ids, and a retired default answers
 `model_not_found` — which looks like a broken key rather than a stale constant. The built-in

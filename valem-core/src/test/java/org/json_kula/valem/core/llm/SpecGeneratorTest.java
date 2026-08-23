@@ -115,6 +115,27 @@ class SpecGeneratorTest {
                 .contains("(a.b) % count");
     }
 
+    @Test
+    void fix_expressions_strips_ml_style_let_bindings() {
+        // JSONata binds with a bare "$x := E" inside a ( ; ) sequence — no "let" keyword, no "in"
+        // separator. Both forms below fail to compile at position 6, before the model can see
+        // anything it recognises as wrong, so the repair loop never talks it out of them.
+        assertThat(SpecGenerator.fixExpressions(
+                "\"( let $prev := $max(entries.odometer); $prev != null ? $prev : 0 )\""))
+                .contains("( $prev := $max(entries.odometer); $prev != null ? $prev : 0 )");
+        assertThat(SpecGenerator.fixExpressions(
+                "\"( let $prev := $max(entries.odometer) in $prev + 1 )\""))
+                .contains("( $prev := $max(entries.odometer); $prev + 1 )");
+    }
+
+    @Test
+    void fix_expressions_leaves_the_word_let_alone_when_it_is_not_a_binding() {
+        // Only "let" immediately introducing a $variable binding is a keyword to strip; the letters
+        // elsewhere — a field named "letters", prose in a description — must survive.
+        assertThat(SpecGenerator.fixExpressions("\"letters.count > 0\"")).contains("letters.count > 0");
+        assertThat(SpecGenerator.fixExpressions("\"$x := 1\"")).contains("$x := 1");
+    }
+
     // ── balanceExpressionParens ────────────────────────────────────────────────
 
     @Test
@@ -1151,6 +1172,55 @@ class SpecGeneratorTest {
         assertThat(result).isInstanceOf(GenerationResult.Success.class);
         assertThat(budgets.get(0)).isNull();          // first call uses the client default budget
         assertThat(budgets.get(1)).isEqualTo(16384);  // second call: budget raised, same prompt
+    }
+
+    @Test
+    void a_duplicated_opening_brace_is_dropped() {
+        // Some models open the object a second time under structured output. Brace-matching then
+        // yields "{ {...}", which no amount of repair prompting fixes because the model cannot see
+        // what it emitted — it just re-sends the same thing until the budget is gone.
+        assertThat(SpecGenerator.extractJson("{\n{ \"id\": \"m\" }"))
+                .isEqualTo("{ \"id\": \"m\" }");
+        assertThat(SpecGenerator.extractJson("preamble prose\n{\n{ \"id\": \"m\" }"))
+                .isEqualTo("{ \"id\": \"m\" }");
+    }
+
+    @Test
+    void a_nested_object_at_the_start_is_not_mistaken_for_a_duplicated_brace() {
+        // {"a":{...}} also opens with two braces, but they balance — it must survive untouched.
+        String nested = "{\"a\": {\"b\": 1}}";
+        assertThat(SpecGenerator.extractJson(nested)).isEqualTo(nested);
+        assertThat(SpecGenerator.dropStrayLeadingBrace("{{\"a\": 1}}")).isEqualTo("{{\"a\": 1}}");
+        // A brace inside a string is not structure, so it must not tip the count either.
+        assertThat(SpecGenerator.dropStrayLeadingBrace("{\n{ \"expr\": \"a { b\" }"))
+                .isEqualTo("{ \"expr\": \"a { b\" }");
+    }
+
+    @Test
+    void empty_response_is_recovered_as_truncation_not_repaired_as_json() {
+        // The sandbox symptom: "Response was not valid JSON: No content to map due to end-of-input".
+        // An empty body is truncation at its extreme — a reasoning model whose chain of thought spent
+        // the whole completion budget answers exactly this way. So the retry must raise the budget and
+        // re-send the SAME prompt; a repair prompt quoting an empty "previous response" tells the model
+        // nothing and reproduces the empty answer until the budget runs out.
+        java.util.List<Integer> budgets = new java.util.ArrayList<>();
+        java.util.List<String>  userTurns = new java.util.ArrayList<>();
+        LlmClient stub = new LlmClient() {
+            int calls = 0;
+            @Override public String complete(String prompt) { return ""; }
+            @Override public String complete(SpecGenerationPrompt.PromptParts parts, CompletionOptions options) {
+                budgets.add(options == null ? null : options.maxTokens());
+                userTurns.add(parts.user());
+                return ++calls == 1 ? "" : "{ \"id\": \"m\", \"schema\": {} }";
+            }
+        };
+        SpecGenerator gen = new SpecGenerator(stub, MAPPER, 3, 6, 0.2, 0.0, false, 4096, 16384, null);
+
+        var result = gen.generate("m", "fuel refueling log with consumption graph");
+
+        assertThat(result).isInstanceOf(GenerationResult.Success.class);
+        assertThat(budgets.get(1)).isEqualTo(8192);            // 2 × 4096, capped at the hard ceiling
+        assertThat(userTurns.get(1)).isEqualTo(userTurns.get(0)); // same prompt, bigger budget
     }
 
     @Test

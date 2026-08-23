@@ -13,7 +13,8 @@ class LlmConfigTest {
         assertThat(LlmConfig.defaultModelFor("openai")).isEqualTo("gpt-4o");
         // Groq retired llama-3.3-70b-versatile; it answers model_not_found.
         assertThat(LlmConfig.defaultModelFor("groq")).isEqualTo("openai/gpt-oss-120b");
-        assertThat(LlmConfig.defaultModelFor("gemini")).isEqualTo("gemini-2.0-flash");
+        // Google retired gemini-2.0-flash the same way; it answers 404 "no longer available".
+        assertThat(LlmConfig.defaultModelFor("gemini")).isEqualTo("gemini-2.5-flash");
     }
 
     @Test

@@ -48,6 +48,33 @@ class LlmClientFactoryWiringTest {
     }
 
     @Test
+    void a_gemini_client_built_by_the_factory_omits_response_format_when_tools_are_present()
+            throws Exception {
+        // Gemini's OpenAI-compatible endpoint answers 400 "Function calling with a response mime type:
+        // 'application/json' is unsupported" — the same mutual exclusion Groq has, different wording.
+        JsonNode body = captureToolRequest("gemini");
+
+        assertThat(body.has("tools")).isTrue();
+        assertThat(body.has("response_format")).isFalse();
+    }
+
+    @Test
+    void the_openrouter_default_model_is_one_openrouter_still_lists() {
+        // anthropic/claude-3.7-sonnet used to be the default and is now delisted. Like the Gemini
+        // check below, this is a re-check reminder rather than a guarantee — a test cannot know what
+        // a provider retired this morning.
+        assertThat(LlmClientFactory.defaultModelFor("openrouter"))
+                .isEqualTo("nvidia/nemotron-3-super-120b-a12b:free");
+    }
+
+    @Test
+    void the_gemini_default_model_is_one_google_still_serves() {
+        // gemini-2.0-flash used to be the default here and now answers 404 "no longer available".
+        // A dated id has a shelf life; this test is the reminder to re-check it, not a guarantee.
+        assertThat(LlmClientFactory.defaultModelFor("gemini")).isEqualTo("gemini-2.5-flash");
+    }
+
+    @Test
     void the_built_client_knows_which_provider_it_points_at() {
         // OpenAiLlmClient speaks the same wire format to a dozen back ends, so only the factory can
         // tell it which one it is — and without that the generation log cannot name the model.

@@ -124,11 +124,15 @@ public final class SpecGenerationPrompt {
                  WRONG: "label": "weight & \\" kg\\""   ← JSONata is ignored here; shown verbatim
 
             2. PATH (bind) fields — a "$.path" address the component READS its value from:
-               bind, bindFrom, bindTo, dependsOn, chartX, chartSeries[].field, tableColumns[].field,
-               keyValueList items[].bind.
+               bind, bindFrom, bindTo, dependsOn, keyValueList items[].bind.
                → This is the PRIMARY way to show a stored or derived value. To display "$.bmi",
                  use "bind": "$.bmi" — do not try to put the value in "text".
                  RIGHT: { "type": "statTile", "label": "Your BMI", "bind": "$.bmi", "format": "number" }
+               → EXCEPTION — tableColumns[].field, chartX and chartSeries[].field are NOT "$." paths.
+                 The table/chart binds the ARRAY; these name a field INSIDE one of its items, written
+                 bare, relative to the row:
+                   RIGHT: "bind": "$.entries", "chartX": "date"
+                   WRONG: "bind": "$.entries", "chartX": "$.entries.date"   ← plots nothing
 
             3. EXPRESSION fields — a JSONata expression evaluated against the model:
                text (label/badge/staticText/link), value (statTile), delta, caption, trend,
@@ -177,6 +181,18 @@ public final class SpecGenerationPrompt {
               separatorLine  horizontal rule; no extra fields
               dataTable      array as table; "bind" = $.arrayPath; extra: tableColumns [{field, header, format, width}], pageSize (int)
               dataChart      chart; "bind" = $.arrayPath; extra: chartType ("bar"|"line"|"area"|"pie"), chartX, chartSeries [{field, label, color}]
+
+            *** A GRAPH IS A COMPONENT, NOT A DERIVATION. *** When the description asks for a graph,
+            chart, trend, curve, plot, history or anything "over time", the viewDefinition MUST contain
+            a dataChart — a table of the same numbers does not answer it. A chart plots an ARRAY, so:
+            bind the array that holds the series, name its x-axis field, and list one entry per plotted
+            series. If the model has no such array yet, ADD one (the log/history of entries) and derive
+            the plotted value per item — never drop the chart because the shape was inconvenient.
+              { "id": "consumptionChart", "type": "dataChart", "label": "Consumption over time",
+                "bind": "$.entries", "chartType": "line", "chartX": "date",
+                "chartSeries": [ { "field": "consumption", "label": "l/100km" } ] }
+            Pick chartType by intent: "line"/"area" for a value over time, "bar" for per-category
+            comparison, "pie" for shares of a whole.
 
             Formatting numbers: on EVERY numeric output — label, statTile, keyValueList row and dataTable
             column — set "format": "currency" (with a "currency" ISO code), "percent" (appends a % sign;
@@ -470,6 +486,18 @@ public final class SpecGenerationPrompt {
               modulo:     WRONG: a mod b              RIGHT: a % b
               range test: WRONG: x between 1 and 12   RIGHT: (x >= 1 and x <= 12)
               membership: WRONG: x in [1, 2, 3]       RIGHT: (x = 1 or x = 2 or x = 3)
+            - JavaScript ARRAY METHODS do NOT exist: no .every(), .some(), .filter(), .map(),
+              .includes(), .find(), .length. This one is dangerous because it does not fail loudly —
+              "entries.every(function($e) { $e.liters > 0 })" parses, evaluates to NOTHING, and a
+              rollback constraint written that way reports itself violated on a perfectly good state.
+              Use a filter predicate [ ] and $count instead:
+              all rows satisfy P: WRONG: rows.every(function($r) { $r.qty > 0 })
+                                  RIGHT: $count(rows[qty <= 0]) = 0     ← count the VIOLATIONS
+              any row satisfies P: WRONG: rows.some(function($r) { $r.qty > 0 })
+                                  RIGHT: $count(rows[qty > 0]) > 0
+              select rows:        WRONG: rows.filter(...)   RIGHT: rows[qty > 0]
+              transform rows:     WRONG: rows.map(...)      RIGHT: $map(rows, function($r) { ... })
+              count rows:         WRONG: rows.length        RIGHT: $count(rows)
             - Variables are IMMUTABLE bindings. A := binding cannot be reassigned:
               WRONG: ($balance := loan; $balance := $balance - 100)  ← compile error
               RIGHT: ($balance := loan; $remaining := $balance - 100)
@@ -508,6 +536,36 @@ public final class SpecGenerationPrompt {
               constraint — array path [*]  | each array element        | — (use $ for element fields)
               defaultValues expr           | full document             | $self = new container fields; $parent = its JSON parent
               view text/visible/readOnly   | full mergedDocument       | —
+
+            *** WILDCARD [*] DERIVATIONS — the silent empty-column trap. *** The root context of a
+            [*] derivation is the WHOLE document, not the row, so a bare field name resolves at the
+            root and yields NOTHING. There is no error — just an empty column in every row:
+                WRONG: "path": "$.entries[*].cost", "expr": "liters * pricePerLiter"
+                RIGHT: "path": "$.entries[*].cost", "expr": "$parent.liters * $parent.pricePerLiter"
+            Read EVERY field of the current row through $parent — including one an earlier [*]
+            derivation computed ($parent.cost). Inside a path PREDICATE the context is the element, so
+            bare names are correct there: entries[liters > 0].
+
+            PREVIOUS ROW (refuelling logs, meter readings, running deltas): there is no row-index
+            binding anywhere — not in a derivation, not in a constraint — and $index/$all/$position do
+            not exist. Identify the previous row by VALUE, as the largest reading below this one:
+                "path": "$.entries[*].distance",
+                "expr": "$parent.odometer - $max(entries[odometer < $parent.odometer].odometer)"
+            The first row has no predecessor, so $max(...) is nothing and the result is nothing; where
+            a number is required, guard it: "$parent.distance > 0 ? $parent.liters * 100 / $parent.distance : 0".
+
+            *** NEVER DERIVE AN ARRAY FROM ITSELF. *** A user-editable list (the log, the entries, the
+            line items) is a BASE field the user writes. A derivation whose path IS that array depends
+            on itself and the spec is rejected outright:
+                WRONG: "path": "$.entries", "expr": "$map(entries, function($e) { ... })"
+                       → "Cyclic dependency detected among nodes: [$.entries]"
+            Do not try to escape it with a shadow input either ($.entriesInput, $._entries_raw): that
+            is the same cycle with an extra field, and it makes the user edit the wrong one. Instead:
+              - per-row values → a [*] derivation ON that array ("$.entries[*].consumption");
+              - whole-list results → a separate SCALAR derivation that reads it
+                ("$.averageConsumption": "$average(entries.consumption)").
+            Deriving a whole array is right only when the array itself is computed and the user never
+            edits it — an amortization schedule built from term and rate (see the patterns below).
 
             Generating computed arrays (schedules, time series, amortization tables):
             - Model per-period data as a SINGLE derived field returning an array — NEVER one
