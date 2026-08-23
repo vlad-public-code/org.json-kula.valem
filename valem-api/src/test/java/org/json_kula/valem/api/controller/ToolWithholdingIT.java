@@ -30,7 +30,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>Drives a domain that reliably needs more than one attempt and asserts, from the progress-event
  * stream, that no non-eval {@code ToolCalling} event occurs on any attempt after the first.
  *
- * <p>Skipped when the LLM is not configured (set the Mistral key + provider=mistral).
+ * <p>Skipped unless an LLM is configured (valem.llm.provider/model/api-key).
  */
 @SpringBootTest
 class ToolWithholdingIT {
@@ -48,7 +48,7 @@ class ToolWithholdingIT {
     @Test
     void network_tools_are_only_used_on_the_first_attempt() {
         Assumptions.assumeTrue(specGenerator != null,
-                "Skipping: LLM not configured (set the Mistral key + provider=mistral)");
+                "Skipping: no LLM configured — set valem.llm.provider/model/api-key (e.g. -Dvalem.llm.provider=openrouter -Dvalem.llm.model=nvidia/nemotron-3-super-120b-a12b:free -Dvalem.llm.api-key=...)");
 
         // Record the attempt in scope when each tool call fires, keeping the tool name so we can
         // distinguish the network tools (attempt-0-only) from local eval_jsonata (allowed on repairs).

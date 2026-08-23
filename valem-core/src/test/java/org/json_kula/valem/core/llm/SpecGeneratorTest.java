@@ -186,6 +186,25 @@ class SpecGeneratorTest {
     }
 
     @Test
+    void jackson_creator_jargon_is_rewritten_before_it_reaches_the_repair_prompt() {
+        // Observed live: the model read "Missing required creator property 'id'" as a missing FIELD
+        // called "creator" and answered by adding "creator": ["assistant"] to the top of the spec.
+        // The parse error IS an instruction — it goes straight into the repair prompt.
+        String humanized = SpecGenerator.humanizeParseError(
+                "Missing required creator property 'id' (index 0)");
+
+        assertThat(humanized)
+                .contains("missing its required \"id\" property")
+                .contains("Do NOT add a field named \"creator\"");
+    }
+
+    @Test
+    void an_ordinary_parse_error_is_passed_through_unchanged() {
+        String message = "Unexpected character (':' (code 58)): was expecting comma";
+        assertThat(SpecGenerator.humanizeParseError(message)).isEqualTo(message);
+    }
+
+    @Test
     void an_unterminated_object_literal_expression_is_closed() {
         // Captured verbatim from the deployed sandbox: a defaultValues seed emitted as "{ ". The JSON
         // is valid, so nothing upstream objects — it is the EXPRESSION that never closes, and it fails

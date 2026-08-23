@@ -27,10 +27,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * End-to-end test: calls the real LLM (Mistral ministral-14b-2512) to generate a
+ * End-to-end test: calls the real configured LLM to generate a
  * house heating energy consumption model spec, then registers and exercises it via the REST API.
  *
- * Skipped automatically when MISTRAL_API_KEY is not set.
+ * Skipped automatically unless an LLM is configured (valem.llm.provider/model/api-key).
  */
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -64,7 +64,7 @@ class HouseHeatingGenerateIT {
     @Test
     void generate_house_heating_model_and_register_it() throws Exception {
         Assumptions.assumeTrue(specGenerator != null,
-                "Skipping: LLM not configured (set MISTRAL_API_KEY)");
+                "Skipping: no LLM configured — set valem.llm.provider/model/api-key (e.g. -Dvalem.llm.provider=openrouter -Dvalem.llm.model=nvidia/nemotron-3-super-120b-a12b:free -Dvalem.llm.api-key=...)");
 
         // ── Step 1: generate spec via LLM ────────────────────────────────────
         log.info("Generating house heating energy model spec via LLM...");

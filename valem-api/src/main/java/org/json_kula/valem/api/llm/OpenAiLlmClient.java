@@ -11,8 +11,11 @@ import org.json_kula.valem.core.llm.LlmProgressEvent;
 import org.json_kula.valem.core.llm.SpecGenerationPrompt;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestClientException;
 
 import java.util.function.Consumer;
@@ -278,7 +281,9 @@ public class OpenAiLlmClient implements LlmClient {
                 responseSchema != null, system != null);
         try {
             ArrayNode tools = mapper.createArrayNode();
+            java.util.Set<String> offered = new java.util.HashSet<>();
             for (ToolDefinition tool : toolDefs) {
+                offered.add(tool.name());
                 ObjectNode toolNode = tools.addObject();
                 toolNode.put("type", "function");
                 ObjectNode func = toolNode.putObject("function");
@@ -319,7 +324,7 @@ public class OpenAiLlmClient implements LlmClient {
                 JsonNode response    = mapper.readTree(responseJson);
                 JsonNode choices     = response.path("choices");
                 if (!choices.isArray() || choices.isEmpty())
-                    throw new LlmException("Unexpected response: choices missing — " + responseJson);
+                    throw providerError(response, responseJson);
 
                 JsonNode choice      = choices.get(0);
                 String finishReason  = choice.path("finish_reason").asText();
@@ -345,6 +350,24 @@ public class OpenAiLlmClient implements LlmClient {
                 for (JsonNode toolCall : message.path("tool_calls")) {
                     String toolCallId = toolCall.path("id").asText();
                     String toolName   = toolCall.path("function").path("name").asText();
+
+                    // The offered set is authoritative. A model can name a tool that was NOT offered
+                    // — a weak one hallucinates them (including its own delimiter, "tool_call_begin|")
+                    // and, more importantly, keeps asking for the NETWORK tools that the generator
+                    // deliberately withholds on repair attempts. Routing by name alone executed them
+                    // anyway, silently defeating the withholding: the session-scoped fetch budget got
+                    // spent on repairs and the prompt-prefix cache-bleed risk came back. Refuse, and
+                    // tell the model, rather than running it.
+                    if (offered != null && !offered.contains(toolName)) {
+                        log.warn("Model asked for tool '{}', which was not offered on this request; refusing",
+                                toolName);
+                        ObjectNode refusal = messages.addObject();
+                        refusal.put("role", "tool");
+                        refusal.put("tool_call_id", toolCallId);
+                        refusal.put("content", "[tool '" + toolName + "' is not available on this "
+                                + "request — use only the tools listed for this turn]");
+                        continue;
+                    }
                     String argsText   = toolCall.path("function").path("arguments").asText("{}");
                     JsonNode arguments;
                     try {
@@ -398,7 +421,7 @@ public class OpenAiLlmClient implements LlmClient {
         JsonNode response   = mapper.readTree(responseJson);
         JsonNode choices    = response.path("choices");
         if (!choices.isArray() || choices.isEmpty())
-            throw new LlmException("Unexpected response: choices missing — " + responseJson);
+            throw providerError(response, responseJson);
         JsonNode choice = choices.get(0);
         if ("tool_calls".equals(choice.path("finish_reason").asText())) {
             throw new LlmException("OpenAI-compatible tool loop did not converge: model kept calling "
@@ -531,11 +554,72 @@ public class OpenAiLlmClient implements LlmClient {
                     .contentType(MediaType.APPLICATION_JSON);
             if (apiKey != null && !apiKey.isBlank())
                 requestSpec = requestSpec.header("Authorization", "Bearer " + apiKey);
-            return requestSpec.body(body).retrieve().body(String.class);
+            String responseBody = requestSpec.body(body).retrieve().body(String.class);
+            rethrowInBodyError(responseBody);
+            return responseBody;
         }, "OpenAI-compatible call");
         log.debug("OpenAI-compatible API responded: {} chars",
                 responseJson != null ? responseJson.length() : 0);
         return responseJson;
+    }
+
+    /**
+     * The exception for a response that carries no {@code choices}.
+     *
+     * <p>A gateway can answer <b>HTTP 200 with an error body</b> — OpenRouter does it for an upstream
+     * outage: {@code {"error":{"message":"Upstream error from Nvidia: Service temporarily
+     * overloaded","code":502}}}. Nothing in the transport layer objects, so the old message
+     * ("choices missing" plus the raw JSON) framed a provider outage as a malformed response and sent
+     * whoever read it looking for a parsing bug. Lead with what the provider actually said.
+     */
+    private LlmException providerError(JsonNode response, String responseJson) {
+        JsonNode error = response.path("error");
+        if (error.isObject() || error.isTextual()) {
+            String message = error.isTextual() ? error.asText() : error.path("message").asText("");
+            String code    = error.path("code").asText("");
+            return new LlmException("Provider returned an error instead of a completion"
+                    + (code.isBlank() ? "" : " (code " + code + ")") + ": "
+                    + (message.isBlank() ? responseJson : message));
+        }
+        return new LlmException("Unexpected response: choices missing — " + responseJson);
+    }
+
+    /**
+     * Re-raises a provider error that arrived with <b>HTTP 200</b> as the status it really is, from
+     * inside the retry supplier so the existing machinery handles it.
+     *
+     * <p>A gateway can answer 200 with an error body — OpenRouter does it for an upstream outage:
+     * {@code {"error":{"message":"Upstream error from Nvidia: Service temporarily overloaded",
+     * "code":502}}}. Because the transport succeeded, {@link LlmRetry} never saw it and a transient
+     * outage aborted the whole generation on its first occurrence; the sandbox router could not read
+     * a status out of it either. Converting it back into an {@link HttpStatusCodeException} makes
+     * both work again with no special cases: 429/5xx are retried with backoff here, and if they
+     * persist the router classifies and fails over on the real code.
+     *
+     * <p>Only retryable codes are converted. A 4xx in the body is a genuine bad request that retrying
+     * cannot fix, so it propagates as an {@link LlmException} for the caller to report.
+     */
+    private void rethrowInBodyError(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) return;
+        JsonNode response;
+        try {
+            response = mapper.readTree(responseBody);
+        } catch (JsonProcessingException e) {
+            return;                                   // not JSON: let the normal parse path report it
+        }
+        if (!response.isObject() || response.path("choices").isArray()) return;
+        JsonNode error = response.path("error");
+        if (!error.isObject() && !error.isTextual()) return;
+
+        int code = error.path("code").asInt(0);
+        if (code == 429 || (code >= 500 && code < 600)) {
+            String message = error.isTextual() ? error.asText() : error.path("message").asText("");
+            log.warn("Provider '{}' returned HTTP 200 carrying an error (code {}): {}",
+                    provider, code, message);
+            throw HttpServerErrorException.create(
+                    HttpStatusCode.valueOf(code), message, HttpHeaders.EMPTY,
+                    responseBody.getBytes(java.nio.charset.StandardCharsets.UTF_8), null);
+        }
     }
 
     private String extractContent(String responseJson) throws JsonProcessingException {
@@ -543,7 +627,7 @@ public class OpenAiLlmClient implements LlmClient {
         JsonNode choices  = response.path("choices");
         if (!choices.isArray() || choices.isEmpty()) {
             log.warn("OpenAI-compatible API returned unexpected response (no choices): {}", responseJson);
-            throw new LlmException("Unexpected response: choices array missing — " + responseJson);
+            throw providerError(response, responseJson);
         }
         JsonNode choice = choices.get(0);
         return terminalContent(choice.path("message"), choice.path("finish_reason").asText(), response);

@@ -104,4 +104,34 @@ class JsonataEvalToolTest {
         if (input != null) args.set("input", input);
         return new ToolCall("id1", JsonataEvalTool.TOOL_NAME, args);
     }
+
+    @Test
+    void a_wildcard_expression_resolves_parent_when_the_row_is_supplied() throws Exception {
+        // A [*] derivation reads its own row through $parent. Without the row bound the expression
+        // evaluates to nothing, and a model reading "undefined" rewrites a CORRECT expression into a
+        // broken one chasing the phantom bug — observed live, burning ~20 evals an attempt.
+        var cache  = new org.json_kula.valem.core.engine.ExpressionCache();
+        var input  = MAPPER.readTree("{\"entries\":[{\"odometer\":1000},{\"odometer\":1500}]}");
+        var row    = MAPPER.readTree("{\"odometer\":1500,\"liters\":60}");
+        String expr = "$parent.odometer - $max(entries[odometer < $parent.odometer].odometer)";
+
+        assertThat(JsonataEvalTool.evaluate(cache, expr, input, row)).isEqualTo("result: 500");
+    }
+
+    @Test
+    void an_unbound_parent_says_so_instead_of_only_reporting_undefined() throws Exception {
+        var cache = new org.json_kula.valem.core.engine.ExpressionCache();
+        var input = MAPPER.readTree("{\"entries\":[]}");
+
+        assertThat(JsonataEvalTool.evaluate(cache, "$parent.odometer", input, null))
+                .contains("undefined")
+                .contains("'parent' argument");
+    }
+
+    @Test
+    void the_tool_schema_offers_the_parent_argument() {
+        var schema = new JsonataEvalTool(5).definition().inputSchema();
+        assertThat(schema.at("/properties/parent/type").asText()).isEqualTo("object");
+        assertThat(schema.at("/properties/parent/description").asText()).contains("$parent");
+    }
 }

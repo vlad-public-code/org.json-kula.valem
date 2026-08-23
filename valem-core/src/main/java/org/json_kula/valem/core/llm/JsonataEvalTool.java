@@ -2,6 +2,7 @@ package org.json_kula.valem.core.llm;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import org.json_kula.jsonata_jvm.JsonataBindings;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.json_kula.jsonata_jvm.JsonataExpression;
 import org.json_kula.valem.core.engine.ExpressionCache;
@@ -67,6 +68,15 @@ public class JsonataEvalTool implements WebTool {
                 + "defines (e.g. {\"loan\": {\"amount\": 20000, \"annualRate\": 5}}). Field names "
                 + "resolve from this object's root, exactly like a non-wildcard derivation evaluating "
                 + "against the merged document. Optional; defaults to an empty object.");
+        ObjectNode parentProp = props.putObject("parent");
+        parentProp.put("type", "object");
+        parentProp.put("description",
+                "The current ROW, bound as $parent — supply this whenever you are testing a wildcard "
+                + "[*] derivation, whose expression reads its own row through $parent (e.g. "
+                + "\"$parent.liters * $parent.pricePerLiter\"). Pass one element of the array from "
+                + "'input', e.g. {\"odometer\": 1500, \"liters\": 60}. Without it $parent is unbound "
+                + "and the expression evaluates to nothing, which looks like a bug in YOUR expression "
+                + "when it is only a missing argument here. Optional.");
         schema.putArray("required").add("expr");
         return new ToolDefinition(
                 TOOL_NAME,
@@ -74,7 +84,8 @@ public class JsonataEvalTool implements WebTool {
                 + "computed value, or the exact compiler/runtime error. Use this to VERIFY every "
                 + "non-trivial derivation or constraint expression BEFORE writing it into the spec: "
                 + "confirm it compiles and produces the value you expect, then fix syntax "
-                + "(parentheses, lambda { } bodies, operators) and logic in place instead of guessing.",
+                + "(parentheses, lambda { } bodies, operators) and logic in place instead of guessing. "
+                + "For a wildcard [*] derivation, pass the current row as 'parent' so $parent resolves.",
                 schema);
     }
 
@@ -111,13 +122,19 @@ public class JsonataEvalTool implements WebTool {
             if (input == null || input.isNull() || input.isMissingNode())
                 input = JsonNodeFactory.instance.objectNode();
 
+            // $parent is what a wildcard [*] derivation reads its own row through. Without it bound,
+            // every such expression evaluates to nothing here — and the model, seeing "undefined",
+            // rewrites a CORRECT expression into a broken one to chase the phantom bug.
+            JsonNode parent = args.get("parent");
+            if (parent != null && (parent.isNull() || parent.isMissingNode())) parent = null;
+
             int left = remaining.getAndDecrement();
             if (left <= 0) {
                 log.warn("JsonataEvalTool: per-attempt eval limit ({}) exhausted", maxCallsPerSession);
                 return "[eval_jsonata limit reached for this attempt]";
             }
             log.info("JsonataEvalTool: evaluating expr ({} evals remaining)", left - 1);
-            return evaluate(cache, expr, input);
+            return evaluate(cache, expr, input, parent);
         }
     }
 
@@ -127,6 +144,11 @@ public class JsonataEvalTool implements WebTool {
      * Package-private so it can be unit-tested without going through a {@link ToolCall}.
      */
     static String evaluate(ExpressionCache cache, String expr, JsonNode input) {
+        return evaluate(cache, expr, input, null);
+    }
+
+    /** As above, with {@code parent} bound to {@code $parent} for wildcard-derivation expressions. */
+    static String evaluate(ExpressionCache cache, String expr, JsonNode input, JsonNode parent) {
         JsonataExpression compiled;
         try {
             compiled = cache.get(expr);
@@ -134,10 +156,16 @@ public class JsonataEvalTool implements WebTool {
             return "COMPILE ERROR: " + ce.getMessage();
         }
         try {
-            JsonNode result = compiled.evaluate(input);
+            JsonNode result = parent == null
+                    ? compiled.evaluate(input)
+                    : compiled.evaluate(input, new JsonataBindings().bindValue("parent", parent));
             if (result == null || result.isMissingNode())
                 return "result: undefined (the expression produced no value — check the field names "
-                        + "exist in the input and match the schema)";
+                        + "exist in the input and match the schema"
+                        + (parent == null && expr.contains("$parent")
+                           ? "; this expression reads $parent, so pass the current row as the "
+                             + "'parent' argument or it is unbound here" : "")
+                        + ")";
             return "result: " + truncate(result.toString());
         } catch (Exception ee) {
             return "EVALUATION ERROR: " + ee.getMessage();

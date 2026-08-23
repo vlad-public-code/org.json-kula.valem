@@ -33,7 +33,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * scorecard so a prompt/model change can be judged against a repeatable baseline rather than a single
  * anecdote.
  *
- * <p>Skipped automatically when the LLM is not configured (set a Mistral key + provider). Not run in
+ * <p>Skipped automatically unless an LLM is configured (valem.llm.provider/model/api-key). Not run in
  * the normal suite budget — invoke explicitly with {@code -Dtest=GenerationEvalIT}.
  */
 @SpringBootTest
@@ -79,7 +79,7 @@ class GenerationEvalIT {
     @Test
     void score_llm_generation_across_domains() throws Exception {
         Assumptions.assumeTrue(specGenerator != null,
-                "Skipping: LLM not configured (set the Mistral key + provider=mistral)");
+                "Skipping: no LLM configured — set valem.llm.provider/model/api-key (e.g. -Dvalem.llm.provider=openrouter -Dvalem.llm.model=nvidia/nemotron-3-super-120b-a12b:free -Dvalem.llm.api-key=...)");
 
         List<Scorecard> cards = new ArrayList<>();
         for (Scenario s : SCENARIOS) {

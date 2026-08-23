@@ -19,7 +19,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * LLM and dump the resulting view so we can inspect how the model bound read-only display
  * components (statTile / label / progressBar).
  *
- * Skipped automatically when MISTRAL_API_KEY is not set.
+ * Skipped automatically unless an LLM is configured (valem.llm.provider/model/api-key).
  */
 @SpringBootTest
 class BmiViewGenerateIT {
@@ -38,7 +38,7 @@ class BmiViewGenerateIT {
     @Test
     void generate_bmi_model_with_view() throws Exception {
         Assumptions.assumeTrue(specGenerator != null,
-                "Skipping: LLM not configured (set MISTRAL_API_KEY)");
+                "Skipping: no LLM configured — set valem.llm.provider/model/api-key (e.g. -Dvalem.llm.provider=openrouter -Dvalem.llm.model=nvidia/nemotron-3-super-120b-a12b:free -Dvalem.llm.api-key=...)");
 
         log.info("Generating BMI model spec (with viewDefinition) via LLM...");
         GenerationResult result = specGenerator.generate(MODEL_ID, DOMAIN_DESCRIPTION, true);

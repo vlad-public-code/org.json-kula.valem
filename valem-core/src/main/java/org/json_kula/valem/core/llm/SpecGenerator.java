@@ -246,11 +246,12 @@ public final class SpecGenerator {
             } catch (JsonProcessingException parseEx) {
                 // Malformed JSON — check whether the response looks truncated
                 boolean truncated = isLikelyTruncated(rawResp);
+                String parseMessage = "Response was not valid JSON: "
+                        + humanizeParseError(parseEx.getOriginalMessage());
                 lastErrors = List.of(new ModelSpecValidator.ValidationError(
-                        "root", "Response was not valid JSON: " + parseEx.getOriginalMessage(),
-                        ModelSpecValidator.Severity.ERROR));
+                        "root", parseMessage, ModelSpecValidator.Severity.ERROR));
                 onProgress.accept(new LlmProgressEvent.ValidationFailed(attempts,
-                        List.of("Response was not valid JSON: " + parseEx.getOriginalMessage())));
+                        List.of(parseMessage)));
                 if (truncated) {
                     truncationCount++;
                     Integer elevated = elevatedMaxTokens();
@@ -1731,6 +1732,30 @@ public final class SpecGenerator {
      * <p>Used to choose a "generate a shorter spec" repair prompt instead of sending the
      * broken truncated text back to the model.
      */
+    /**
+     * Rewrites deserializer jargon into something a model can act on.
+     *
+     * <p>The parse error goes straight into the repair prompt, so its wording is an instruction. Jackson
+     * says <em>"Missing required creator property 'id'"</em> — where "creator" means the record
+     * constructor — and an LLM reads it as a missing FIELD CALLED "creator": one observed repair
+     * answered by adding {@code "creator": ["assistant"]} to the top of the spec, which is neither
+     * valid nor progress. Name the actual problem instead.
+     */
+    static String humanizeParseError(String message) {
+        if (message == null) return "";
+        java.util.regex.Matcher m = java.util.regex.Pattern
+                .compile("Missing required creator property '([^']+)'")
+                .matcher(message);
+        if (m.find()) {
+            String property = m.group(1);
+            return "one of the records in the spec is missing its required \"" + property
+                    + "\" property (every derivation/constraint/test/effect entry needs it) — add "
+                    + "\"" + property + "\" to that entry. Do NOT add a field named \"creator\": "
+                    + "that word is the parser's, not part of a Valem spec.";
+        }
+        return message;
+    }
+
     private static boolean isLikelyTruncated(String raw) {
         // A BLANK response is the extreme case of truncation, not a separate one: the model emitted no
         // JSON at all, either because the whole completion budget went to a reasoning model's chain of

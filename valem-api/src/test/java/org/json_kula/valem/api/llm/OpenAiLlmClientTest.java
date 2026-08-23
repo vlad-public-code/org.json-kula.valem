@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
@@ -137,6 +138,33 @@ class OpenAiLlmClientTest {
         server.verify();
     }
 
+    @Test
+    void a_transient_provider_error_returned_with_http_200_is_retried() {
+        // OpenRouter answers 200 with {"error":{...,"code":502}} for an upstream outage. Because the
+        // transport succeeded, LlmRetry never saw it and one flaky moment aborted a whole generation.
+        mockServer.expect(requestTo(ENDPOINT)).andRespond(withSuccess(
+                "{\"error\":{\"message\":\"Upstream error from Nvidia: Service temporarily overloaded\","
+                + "\"code\":502}}", MediaType.APPLICATION_JSON));
+        mockServer.expect(requestTo(ENDPOINT)).andRespond(withSuccess(OK_RESPONSE, MediaType.APPLICATION_JSON));
+
+        assertThat(client.complete("hi")).isEqualTo("{}");
+        mockServer.verify();
+    }
+
+    @Test
+    void a_non_retryable_provider_error_returned_with_http_200_is_not_retried() {
+        // A 4xx in the body is a genuine bad request; retrying cannot fix it, so it must surface.
+        mockServer.expect(requestTo(ENDPOINT)).andRespond(withSuccess(
+                "{\"error\":{\"message\":\"model not found\",\"code\":404}}", MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.complete("hi"))
+                .isInstanceOf(LlmClient.LlmException.class)
+                .hasMessageContaining("Provider returned an error")
+                .hasMessageContaining("code 404")
+                .hasMessageContaining("model not found");
+        mockServer.verify();
+    }
+
     // ── Empty / non-string content (the "No content to map due to end-of-input" family) ────────
 
     @Test
@@ -200,6 +228,31 @@ class OpenAiLlmClientTest {
                 call -> { executed.add(call.name()); return "2"; });
 
         assertThat(executed).containsExactly("eval_jsonata");
+        assertThat(answer).isEqualTo("{}");
+        mockServer.verify();
+    }
+
+    @Test
+    void a_tool_that_was_not_offered_is_refused_rather_than_executed() {
+        // The generator withholds the NETWORK tools on repair attempts on purpose: their budget is
+        // session-scoped and re-offering them is where prompt-prefix cache bleed leaks in. But the
+        // withholding only chose what to OFFER — a model that named web_search anyway had it executed,
+        // because the executor routes by name over every tool it knows. ToolWithholdingIT caught it
+        // live: web_search ran five times on attempt 2.
+        mockServer.expect(requestTo(ENDPOINT)).andRespond(withSuccess(
+                "{\"choices\":[{\"finish_reason\":\"tool_calls\",\"message\":{\"role\":\"assistant\","
+                + "\"content\":\"\",\"tool_calls\":[{\"id\":\"c1\",\"type\":\"function\","
+                + "\"function\":{\"name\":\"web_search\",\"arguments\":\"{\\\"query\\\":\\\"x\\\"}\"}}]}}]}",
+                MediaType.APPLICATION_JSON));
+        mockServer.expect(requestTo(ENDPOINT)).andRespond(withSuccess(OK_RESPONSE, MediaType.APPLICATION_JSON));
+
+        List<String> executed = new ArrayList<>();
+        String answer = client.completeWithTools("hi",
+                // Only eval_jsonata is offered — exactly what a repair attempt gets.
+                List.of(new LlmClient.ToolDefinition("eval_jsonata", "evaluate", MAPPER.createObjectNode())),
+                call -> { executed.add(call.name()); return "result"; });
+
+        assertThat(executed).as("a tool that was not offered must never reach the executor").isEmpty();
         assertThat(answer).isEqualTo("{}");
         mockServer.verify();
     }
