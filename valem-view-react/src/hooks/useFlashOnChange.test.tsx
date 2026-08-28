@@ -16,7 +16,7 @@ function tree(state: ModelState) {
       value={{
         modelId: 'm', state, meta: {},
         onMutate: vi.fn().mockResolvedValue(undefined), onNavigate: vi.fn(),
-        activeViewId: 'main', fieldErrors: {}, formErrors: [], readOnly: false,
+        activeViewId: 'main', fieldErrors: {}, formErrors: [], readOnly: false, provenance: null,
       }}
     >
       <ComponentRenderer component={tile} state={state} />

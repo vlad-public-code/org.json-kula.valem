@@ -22,6 +22,7 @@ import org.json_kula.valem.core.state.PathConverter;
 import org.json_kula.valem.core.util.SemVer;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -412,6 +413,192 @@ public final class ModelSpecValidator {
                     "viewDefinition.views." + (vid == null ? "?" : vid),
                     known, haveKnown, out);
         }
+        lintNavigation(views, textField(vd, "defaultView"), out);
+    }
+
+    // ── Navigation lint: how the user moves between views, and what an item view edits ────────
+
+    /** A {@code sectionList} that hands its elements to a separate view. */
+    private record ItemViewLink(String arrayBind, String itemView, String where) {}
+
+    /**
+     * Lints view-to-view navigation — three mistakes that no parse or bind check catches, all of
+     * which an LLM makes most often around a list of items:
+     *
+     * <ol>
+     *   <li><b>An item view editing the wrong element.</b> A {@code sectionList} opens its
+     *       {@code itemView} scoped to the row the user clicked, which the item view expresses by
+     *       binding the array pattern ({@code $.debts[*].name}). An item view that binds a fixed
+     *       index ({@code $.debts[0].name}) instead edits the first element from every row, and one
+     *       that binds nothing under the array edits nothing at all — silently, in both cases.</li>
+     *   <li><b>A view nothing reaches.</b> Not the default view, not any button/menu/stepper target,
+     *       not any {@code itemView}: authored, evaluated, and unreachable by the user.</li>
+     *   <li><b>An element editor with no way back.</b> The renderer supplies a Back control for this
+     *       (which is why it is a warning and not an error), but a generic one: an authored button
+     *       can say what returning means here, and — unlike a renderer affordance — it is visible to
+     *       a non-browser consumer of {@code GET /models/{id}/view}.</li>
+     * </ol>
+     */
+    private static void lintNavigation(
+            com.fasterxml.jackson.databind.JsonNode views, String defaultView, List<ValidationError> out) {
+        Map<String, com.fasterxml.jackson.databind.JsonNode> byId = new LinkedHashMap<>();
+        for (com.fasterxml.jackson.databind.JsonNode view : views) {
+            String vid = textField(view, "id");
+            if (vid != null) byId.putIfAbsent(vid, view);
+        }
+        if (byId.isEmpty()) return;
+
+        // The view the renderer opens on: the declared default, else the first one.
+        String home = defaultView != null && byId.containsKey(defaultView)
+                ? defaultView
+                : byId.keySet().iterator().next();
+
+        Set<String> reachable = new LinkedHashSet<>();
+        reachable.add(home);
+        List<ItemViewLink> itemLinks = new ArrayList<>();
+        for (Map.Entry<String, com.fasterxml.jackson.databind.JsonNode> e : byId.entrySet()) {
+            collectNavigation(e.getValue().get("components"),
+                    "viewDefinition.views." + e.getKey(), reachable, itemLinks);
+        }
+
+        for (String vid : byId.keySet()) {
+            if (!reachable.contains(vid)) {
+                out.add(warn("viewDefinition.views." + vid, "view '" + vid + "' is unreachable — it is "
+                        + "not the defaultView and no button, menu, stepper or sectionList itemView "
+                        + "navigates to it, so the user can never see it. Either add a navigation "
+                        + "control that targets it, or fold its components into a view that is reached."));
+            }
+        }
+
+        // Two lists may legitimately share one itemView; the view is still only one dead end.
+        Set<String> deadEndReported = new LinkedHashSet<>();
+        for (ItemViewLink link : itemLinks) {
+            com.fasterxml.jackson.databind.JsonNode target = byId.get(link.itemView());
+            if (target == null) continue;   // dangling itemView is already an ERROR
+
+            if (link.arrayBind() != null) {
+                lintItemViewBinds(target, link, out);
+            }
+            if (deadEndReported.add(link.itemView())
+                    && !navigatesAway(target.get("components"), link.itemView())) {
+                String subject = link.arrayBind() != null
+                        ? "one element of " + link.arrayBind()
+                        : "one element of the list at " + link.where();
+                out.add(warn("viewDefinition.views." + link.itemView(),
+                        "view '" + link.itemView() + "' edits " + subject
+                        + " but has no control leading back to the list. Add a button, e.g. "
+                        + "{\"id\": \"backToList\", \"type\": \"button\", \"label\": \"Done\", "
+                        + "\"onClick\": {\"navigate\": \"" + homeOf(link, byId, defaultView) + "\"}}."));
+            }
+        }
+    }
+
+    /** Whether the item view addresses the element the list opened it on. */
+    private static void lintItemViewBinds(
+            com.fasterxml.jackson.databind.JsonNode target, ItemViewLink link, List<ValidationError> out) {
+        List<String> binds = new ArrayList<>();
+        collectBindPaths(target.get("components"), binds);
+
+        String wildcard = link.arrayBind() + "[*].";
+        if (binds.stream().anyMatch(b -> b.startsWith(wildcard))) return;
+
+        String fixedIndex = link.arrayBind() + "[";
+        boolean bindsFixedElement = binds.stream()
+                .anyMatch(b -> b.startsWith(fixedIndex) && !b.startsWith(wildcard));
+        String loc = "viewDefinition.views." + link.itemView();
+        if (bindsFixedElement) {
+            out.add(warn(loc, "view '" + link.itemView() + "' is the itemView of " + link.where()
+                    + " but binds a FIXED element of " + link.arrayBind() + " — every row would edit "
+                    + "that same element. Bind the array pattern instead (" + link.arrayBind()
+                    + "[*].<field>); the renderer replaces [*] with the row the user opened."));
+        } else {
+            out.add(warn(loc, "view '" + link.itemView() + "' is the itemView of " + link.where()
+                    + " but binds no field of " + link.arrayBind() + ", so it edits nothing. Bind the "
+                    + "element's fields as " + link.arrayBind() + "[*].<field>."));
+        }
+    }
+
+    /** Every view a component subtree can navigate to, plus the {@code itemView} links it declares. */
+    private static void collectNavigation(
+            com.fasterxml.jackson.databind.JsonNode components, String loc,
+            Set<String> reachable, List<ItemViewLink> itemLinks) {
+        if (components == null || !components.isArray()) return;
+        for (com.fasterxml.jackson.databind.JsonNode c : components) {
+            String cid = textField(c, "id");
+            String where = loc + (cid != null ? "." + cid : "");
+
+            String navigate = textField(c.get("onClick"), "navigate");
+            if (navigate != null) reachable.add(navigate);
+
+            com.fasterxml.jackson.databind.JsonNode menuItems = c.get("menuItems");
+            if (menuItems != null && menuItems.isArray()) {
+                for (com.fasterxml.jackson.databind.JsonNode item : menuItems) {
+                    String targetView = textField(item, "targetView");
+                    if (targetView != null) reachable.add(targetView);
+                }
+            }
+
+            String itemView = textField(c, "itemView");
+            if (itemView != null) {
+                reachable.add(itemView);
+                itemLinks.add(new ItemViewLink(textField(c, "bind"), itemView, where));
+            }
+
+            collectNavigation(c.get("components"), where, reachable, itemLinks);
+        }
+    }
+
+    /** The Java twin of the renderer's dead-end test: an authored control leading off this view. */
+    private static boolean navigatesAway(
+            com.fasterxml.jackson.databind.JsonNode components, String viewId) {
+        if (components == null || !components.isArray()) return false;
+        for (com.fasterxml.jackson.databind.JsonNode c : components) {
+            String navigate = textField(c.get("onClick"), "navigate");
+            if (navigate != null && !navigate.equals(viewId)) return true;
+
+            com.fasterxml.jackson.databind.JsonNode menuItems = c.get("menuItems");
+            if (menuItems != null && menuItems.isArray()) {
+                for (com.fasterxml.jackson.databind.JsonNode item : menuItems) {
+                    String targetView = textField(item, "targetView");
+                    if (targetView != null && !targetView.equals(viewId)) return true;
+                }
+            }
+            if (navigatesAway(c.get("components"), viewId)) return true;
+        }
+        return false;
+    }
+
+    private static void collectBindPaths(
+            com.fasterxml.jackson.databind.JsonNode components, List<String> out) {
+        if (components == null || !components.isArray()) return;
+        for (com.fasterxml.jackson.databind.JsonNode c : components) {
+            for (String f : VIEW_BIND_FIELDS) {
+                String bind = textField(c, f);
+                if (bind != null) out.add(bind);
+            }
+            com.fasterxml.jackson.databind.JsonNode items = c.get("items");
+            if (items != null && items.isArray()) {
+                for (com.fasterxml.jackson.databind.JsonNode item : items) {
+                    String bind = textField(item, "bind");
+                    if (bind != null) out.add(bind);
+                }
+            }
+            collectBindPaths(c.get("components"), out);
+        }
+    }
+
+    /** The view to suggest returning to: the one that owns the list, by its location prefix. */
+    private static String homeOf(ItemViewLink link,
+                                 Map<String, com.fasterxml.jackson.databind.JsonNode> byId,
+                                 String defaultView) {
+        String prefix = "viewDefinition.views.";
+        if (link.where().startsWith(prefix)) {
+            String rest = link.where().substring(prefix.length());
+            int dot = rest.indexOf('.');
+            String vid = dot < 0 ? rest : rest.substring(0, dot);
+            if (byId.containsKey(vid)) return vid;
+        }
+        return defaultView != null ? defaultView : byId.keySet().iterator().next();
     }
 
     /** Public entry for the generation loop's soft view gate: the view-lint findings alone. */

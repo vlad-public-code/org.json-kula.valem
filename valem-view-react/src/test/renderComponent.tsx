@@ -26,7 +26,7 @@ export interface Harness {
  */
 export function renderComponent(component: ComponentSpec, harness: Harness = {}) {
   const onMutate = vi.fn<(m: MutationMap) => Promise<void>>().mockResolvedValue(undefined);
-  const onNavigate = vi.fn<(id: string) => void>();
+  const onNavigate = vi.fn<(id: string, itemIndex?: number) => void>();
   const state = harness.state ?? {};
 
   const ui: ReactElement = (

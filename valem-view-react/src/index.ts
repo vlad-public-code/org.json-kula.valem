@@ -22,6 +22,9 @@ export { useFlashOnChange } from './hooks/useFlashOnChange';
 // Formatting — the `format` / `currency` fields on inputs, tiles and summary rows
 export { formatValue, currencySymbol } from './format';
 
+// Navigation — item scoping ([*] → [n]) and the dead-end detection behind the automatic Back
+export { scopeToIndex, hasNavigationAway } from './navigation';
+
 // Types
 export type {
   OptionSpec,

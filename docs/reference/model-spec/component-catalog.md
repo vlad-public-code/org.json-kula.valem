@@ -745,12 +745,14 @@ HTML `<fieldset>` with a legend caption. Functionally equivalent to `group`.
 
 #### `sectionList`
 
-Displays an array field with add/remove controls. Each item is edited in a separate view
-identified by `itemView`.
+An array field with add/remove controls. Its `components` are the editor for **one** element,
+repeated per row, with each `bind` written through the array wildcard `[*]` — the renderer
+substitutes the row's index (`$.items[*].qty` → `$.items[2].qty`).
 
 | Extra field | Description |
 |---|---|
-| `itemView` | `id` of the `ViewSpec` used to edit a single array element |
+| `components` | The element editor: the fields of a single array element, bound through `[*]` |
+| `itemView` | Alternative to `components` — the `id` of a `ViewSpec` that edits one element on its own screen |
 | `canAdd` | bool or JSONata expression controlling whether Add is available |
 | `canRemove` | bool or JSONata expression controlling whether Remove is available |
 | `addLabel` | Label for the Add button (default `"Add"`) |
@@ -760,16 +762,48 @@ identified by `itemView`.
 {
   "id": "itemsList", "type": "sectionList",
   "label": "Order Items", "bind": "$.items",
-  "itemView": "item-editor",
-  "canAdd": true, "canRemove": true,
-  "addLabel": "Add Item", "removeLabel": "Remove"
+  "addLabel": "Add Item", "removeLabel": "Remove",
+  "components": [
+    { "id": "itemName", "type": "textField",    "label": "Product", "bind": "$.items[*].name" },
+    { "id": "itemQty",  "type": "numericField", "label": "Qty",     "bind": "$.items[*].qty" }
+  ]
 }
 ```
 
+Add appends an **empty** element and expands its editor in place; the list stays on screen
+throughout. Empty and not pre-seeded with nulls, because JSONata propagates a null out of
+arithmetic and out of `$sum` — one null field in one row blanks every total over the array, while
+an absent field is simply skipped. It also leaves a `defaultValues` rule for the element free to
+fill it, since those fill only caller-absent fields.
+
+**`itemView` — one element per screen.** Worth it only when an element has more fields than fit in
+a row. The list opens the view **scoped to the row the user clicked**, which the item view
+expresses by binding the same `[*]` pattern:
+
+```json
+{ "id": "order", "label": "Order", "components": [
+  { "id": "itemsList", "type": "sectionList", "bind": "$.items", "itemView": "item-editor" }
+] }
+```
+```json
+{ "id": "item-editor", "label": "Item", "components": [
+  { "id": "nameField",  "type": "textField",    "label": "Product Name", "bind": "$.items[*].name" },
+  { "id": "priceField", "type": "numericField", "label": "Price",        "bind": "$.items[*].price" },
+  { "id": "backToList", "type": "button", "label": "Done", "onClick": { "navigate": "order" } }
+] }
+```
+
+A **fixed index** (`$.items[0].name`) in an item view is a bug, not a shorthand: every row would
+edit element 0. `ModelSpecValidator` warns about it, about an item view that binds nothing of the
+array, and about one with no control leading back. The renderer supplies a **Back** control on any
+navigated-to view that authors none of its own, so an item view missing its button is recoverable
+rather than a trap — but an authored button can say what returning means, and is visible to a
+non-browser consumer of `GET /models/{id}/view`.
+
 #### `sectionItem`
 
-Single-element editor for use inside a view named by a `sectionList`'s `itemView`. The
-`bind` points to the specific array element path; `components` describes its fields.
+Groups an element's fields inside a view named by a `sectionList`'s `itemView` — a `group` that
+reads as one element. `bind` anchors it to the element (`$.items[*]`), `components` are its fields.
 
 | Extra field | Description |
 |---|---|
@@ -778,10 +812,10 @@ Single-element editor for use inside a view named by a `sectionList`'s `itemView
 ```json
 {
   "id": "itemEditor", "type": "sectionItem",
-  "bind": "$.items[0]",
+  "bind": "$.items[*]",
   "components": [
-    { "id": "nameField",  "type": "textField",    "label": "Product Name", "bind": "$.items[0].name" },
-    { "id": "priceField", "type": "numericField",  "label": "Price",        "bind": "$.items[0].price" }
+    { "id": "nameField",  "type": "textField",    "label": "Product Name", "bind": "$.items[*].name" },
+    { "id": "priceField", "type": "numericField", "label": "Price",        "bind": "$.items[*].price" }
   ]
 }
 ```

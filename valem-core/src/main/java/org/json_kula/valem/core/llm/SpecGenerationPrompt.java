@@ -203,12 +203,32 @@ public final class SpecGenerationPrompt {
             Containers:
               group       layout box; extra: layout ("vertical"|"horizontal"|"grid"), columns, components []
               fieldSet    fieldset with legend; extra: legend (string), components []
-              sectionList editable array; extra: bind ($.arrayPath), itemView (view-id), canAdd, canRemove
-              sectionItem single element editor; extra: components []; bind = $.array[index]
+              sectionList editable array with add/remove; extra: bind ($.arrayPath), components [] (the
+                          element editor — see below), canAdd, canRemove, addLabel, removeLabel
+              sectionItem single element editor; extra: components []
+
+            *** A LIST OF ITEMS IS EDITED INLINE, IN ONE VIEW. *** When the user adds, edits and removes
+            items (debts, expenses, passengers, line items), put the element's fields in the sectionList's
+            OWN "components" and bind each one through the array wildcard [*]:
+              { "id": "debtsList", "type": "sectionList", "label": "Your debts", "bind": "$.debts",
+                "addLabel": "Add a debt", "components": [
+                  { "id": "debtName", "type": "textField", "label": "Name", "bind": "$.debts[*].name" },
+                  { "id": "debtBalance", "type": "numericField", "label": "Balance", "bind": "$.debts[*].balance" } ] }
+            The renderer repeats that editor per row and replaces [*] with the row's index, so Add opens a
+            new row in place and the list never leaves the screen. Do NOT move the fields to a second view
+            unless an item has many of them — a separate view is a whole screen the user has to find their
+            way back from. If you do use one, put "itemView": "<view-id>" on the sectionList INSTEAD of
+            "components", bind that view's fields through [*] exactly the same way (never $.debts[0] — that
+            edits the first row from every row), and give that view a button that navigates back to the list.
 
             Actions:
-              button   extra: variant ("primary"|"secondary"|"danger"|"ghost"), icon, onClick (EventHandler)
+              button   extra: variant ("primary"|"secondary"|"danger"|"ghost"), icon, onClick (EventHandler:
+                       {"mutations": <JSONata producing {"$.path": value}>, "navigate": "<view-id>"})
               menu     navigation; extra: menuItems [{label, targetView, icon}], orientation ("horizontal"|"vertical")
+
+            Every view other than the defaultView must be REACHABLE (some button "navigate", menu/stepper
+            targetView, or sectionList itemView leads to it) and must LEAD BACK (its own navigate/menuItem):
+            a view with no way out strands the user, and one nothing points at is never seen.
 
             Meta-cache inheritance: visible/readOnly/required null → evaluator reads metaDerivation values
             automatically, so metaDerivations alone can drive component visibility without view expressions.

@@ -285,7 +285,7 @@ record EventHandler(String mutations, String navigate)
 | `toolbar` / `buttonGroup` | `components` | row of actions; ignore `layout` |
 | `tabs` / `tabItem` | `label`, `components` | one panel per child, captioned by the child's `label` |
 | `accordion` / `collapsible` | `label`, `collapsed`, `components` | `collapsed` is the *initial* state, not a live binding |
-| `sectionList` | `bind`, `itemView`, `canAdd`, `canRemove`, labels | array add/remove |
+| `sectionList` | `bind`, `components`, `itemView`, `canAdd`, `canRemove`, labels | array add/remove; `components` is the element editor (see below) |
 | `sectionItem` | `bind`, `components` | single element editor (sub-view); evaluates to an `EvaluatedContainer` carrying `bind` |
 
 **Actions**:
@@ -295,6 +295,21 @@ record EventHandler(String mutations, String navigate)
 | `button` | `variant`, `icon`, `onClick`, `enabled` | |
 | `menu` | `menuItems`, `orientation` | view navigation |
 | `stepper` / `breadcrumb` | `menuItems`, `orientation` | the same items as a progression or a trail; position **is** the active view id, so it survives a reload |
+
+> **A list element is addressed by the array wildcard.** A `sectionList`'s element editor — its own
+> `components`, or the separate view named by `itemView` — is authored once against the pattern
+> (`$.items[*].qty`) and rendered per row with `[*]` replaced by that row's index
+> (`scopeToIndex` in `valem-view-react`). `ViewEvaluator` does **not** do this: it has no notion of
+> "the current row", so a `[*]` bind resolves to nothing in the server-side `EvaluatedView` and the
+> scoping is the renderer's job. A fixed index (`$.items[0].qty`) in an element editor is therefore
+> always a bug — every row would edit element 0 — and `ModelSpecValidator` warns about it.
+
+> **Any navigated-to view can be left.** Opening an `itemView` used to be one-way: nothing in the
+> spec had to lead back, and a generated one usually didn't. `ViewRenderer` keeps a navigation
+> trail and renders a Back control on a view that was reached by navigation, is not the
+> `defaultView`, and authors no navigation of its own (no `button` `onClick.navigate`, no
+> `menu`/`stepper`/`breadcrumb` `targetView`). An authored control always wins — the automatic one
+> exists so a spec that forgot cannot strand the user, not to compete with one that didn't.
 
 > **Tabs and wizards hold no model state.** Which tab is open is local UI state and deliberately
 > not in the document — it is not something a derivation, a constraint or an audit record should
@@ -477,8 +492,8 @@ interface ViewRendererProps {
   state: Record<string, unknown>;    // merged model state
   meta: Record<string, unknown>;     // meta cache
   onMutate: (mutations: Record<string, unknown>) => Promise<void>;
-  onNavigate?: (viewId: string) => void;
-  activeViewId?: string;
+  onNavigate?: (viewId: string) => void;   // reported for every navigation, Back included
+  activeViewId?: string;                   // supply it to own the active view (controlled)
 }
 ```
 

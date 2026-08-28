@@ -3,22 +3,9 @@ import { useViewContext } from '../ViewContext';
 import { useJSONataBoolean } from '../hooks/useJSONata';
 import { getByPath } from '../hooks/useDeferredMutate';
 import { ComponentRenderer } from '../ComponentRenderer';
-import type { ComponentSpec, SectionListSpec } from '../types';
-import { hasChildComponents } from '../types';
+import type { SectionListSpec } from '../types';
+import { scopeToIndex } from '../navigation';
 import type { BaseComponentProps } from '../ComponentRenderer';
-
-/** Replaces [*] in bind paths with the concrete array index. */
-function substituteIndex(components: ComponentSpec[], idx: number): ComponentSpec[] {
-  return components.map(child => {
-    const bind = child.bind?.replace('[*]', `.${idx}`);
-    if (!hasChildComponents(child)) return { ...child, bind };
-    return {
-      ...child,
-      bind,
-      components: child.components ? substituteIndex(child.components, idx) : child.components,
-    };
-  });
-}
 
 function itemLabel(item: unknown, idx: number): string {
   if (typeof item !== 'object' || item === null) return String(item);
@@ -50,14 +37,20 @@ export function SectionList({ component: c, state }: BaseComponentProps<SectionL
   function handleAdd() {
     if (!c.bind) return;
     const newIdx = items.length;
-    const defaultItem: Record<string, null> = {};
-    for (const child of c.components ?? []) {
-      const m = child.bind?.match(/\[\*\]\.(.+)$/);
-      if (m) defaultItem[m[1]] = null;
-    }
-    onMutate({ [c.bind]: [...items, defaultItem] });
+    /*
+     * The new element goes in EMPTY — no keys.
+     *
+     * It used to be seeded with one null per editor field, which looks harmless and is not: in
+     * JSONata a null propagates through arithmetic and out of an aggregate, so a single freshly
+     * added row turned every total over the array null ($sum(items.qty) → null) until the user had
+     * filled in every field. An ABSENT key is skipped instead, so the running total stays right
+     * while the row is being typed. Nothing needs the keys to exist — a mutation to
+     * `$.items[2].qty` creates the path it writes — and an absent field is also what lets a
+     * `defaultValues` rule for the element fill it, since those fill only caller-absent fields.
+     */
+    onMutate({ [c.bind]: [...items, {}] });
     if (hasInlineEditor) setEditingIndex(newIdx);
-    else if (c.itemView) onNavigate(c.itemView);
+    else if (c.itemView) onNavigate(c.itemView, newIdx);
   }
 
   function handleRemove(idx: number) {
@@ -74,7 +67,7 @@ export function SectionList({ component: c, state }: BaseComponentProps<SectionL
     if (hasInlineEditor) {
       setEditingIndex(editingIndex === idx ? null : idx);
     } else if (c.itemView) {
-      onNavigate(c.itemView);
+      onNavigate(c.itemView, idx);
     }
   }
 
@@ -149,7 +142,7 @@ export function SectionList({ component: c, state }: BaseComponentProps<SectionL
                   gap: 10,
                 }}
               >
-                {substituteIndex(c.components!, idx).map(child => (
+                {scopeToIndex(c.components!, idx).map(child => (
                   <ComponentRenderer key={child.id} component={child} state={state} />
                 ))}
               </div>

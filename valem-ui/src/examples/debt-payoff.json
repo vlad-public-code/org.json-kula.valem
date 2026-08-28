@@ -100,9 +100,15 @@
             "type": "sectionList",
             "label": "Your debts",
             "bind": "$.debts",
-            "itemView": "debtItem",
             "addLabel": "Add a debt",
-            "removeLabel": "Remove"
+            "removeLabel": "Remove",
+            "layout": "horizontal",
+            "components": [
+              { "id": "debtName", "type": "textField", "label": "Name", "bind": "$.debts[*].name", "placeholder": "Credit card" },
+              { "id": "debtBalance", "type": "numericField", "label": "Balance", "bind": "$.debts[*].balance", "placeholder": "3000" },
+              { "id": "debtApr", "type": "numericField", "label": "APR (%)", "bind": "$.debts[*].aprPct", "placeholder": "24" },
+              { "id": "debtMin", "type": "numericField", "label": "Minimum payment", "bind": "$.debts[*].minPayment", "placeholder": "60" }
+            ]
           },
           {
             "id": "planSet",
@@ -163,17 +169,6 @@
             ],
             "pageSize": 12
           }
-        ]
-      },
-      {
-        "id": "debtItem",
-        "label": "Debt",
-        "layout": "horizontal",
-        "components": [
-          { "id": "debtName", "type": "textField", "label": "Name", "bind": "$.debts[*].name", "placeholder": "Credit card" },
-          { "id": "debtBalance", "type": "numericField", "label": "Balance", "bind": "$.debts[*].balance", "placeholder": "3000" },
-          { "id": "debtApr", "type": "numericField", "label": "APR (%)", "bind": "$.debts[*].aprPct", "placeholder": "24" },
-          { "id": "debtMin", "type": "numericField", "label": "Minimum payment", "bind": "$.debts[*].minPayment", "placeholder": "60" }
         ]
       }
     ]

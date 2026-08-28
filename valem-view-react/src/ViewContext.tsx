@@ -29,7 +29,13 @@ export interface ViewContextValue {
   state: ModelState;
   meta: MetaCache;
   onMutate: (mutations: MutationMap) => Promise<void>;
-  onNavigate: (viewId: string) => void;
+  /**
+   * Switches to another view. `itemIndex` scopes the target to one element of the array the
+   * navigating component is bound to — a `sectionList` editing its elements in a separate
+   * `itemView` passes the row's index, and `ViewRenderer` rewrites that view's `[*]` binds to it.
+   * Without it the item view has no way to know which element it is editing.
+   */
+  onNavigate: (viewId: string, itemIndex?: number) => void;
   activeViewId: string;
   /**
    * When true, every input renders disabled and `onMutate` is a no-op — the whole view is a

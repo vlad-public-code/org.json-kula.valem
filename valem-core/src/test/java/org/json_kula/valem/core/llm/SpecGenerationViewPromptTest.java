@@ -63,6 +63,27 @@ class SpecGenerationViewPromptTest {
     }
 
     @Test
+    void steers_a_list_of_items_to_the_inline_editor() {
+        // The itemView shape is what the model reached for when the prompt documented only that
+        // field, and it is the one that strands the user on an element editor. The inline shape
+        // needs no second view at all, so it must be the one the prompt teaches first.
+        assertThat(view).contains("A LIST OF ITEMS IS EDITED INLINE, IN ONE VIEW");
+        assertThat(view)
+                .as("the wildcard bind is what makes the repeated editor address the right row")
+                .contains("$.debts[*].name");
+        assertThat(view)
+                .as("a fixed index in an element editor edits the first row from every row")
+                .contains("never $.debts[0]");
+    }
+
+    @Test
+    void requires_every_view_to_be_reachable_and_to_lead_back() {
+        assertThat(view).contains("REACHABLE").contains("LEAD BACK");
+        // navigate must be spelled out on the button, or the model cannot author the way back
+        assertThat(view).contains("\"navigate\": \"<view-id>\"");
+    }
+
+    @Test
     void ships_a_golden_view_exemplar_the_model_can_copy() {
         assertThat(view).contains("GOLDEN EXAMPLE");
         // the exemplar demonstrates the three fixes: plain label, bind for the value, $-badge text

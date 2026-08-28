@@ -40,6 +40,21 @@ class DomainGuidanceToolTest {
     }
 
     @Test
+    void editable_items_covers_all_three_layers_of_a_user_edited_list() {
+        // A list of items goes wrong in three places at once, so the topic has to carry all three:
+        // the array schema, the $parent-scoped per-item derivation, and the inline sectionList that
+        // keeps the user on the list instead of stranding them on a second view.
+        String g = builtin.instructionsFor(java.util.List.of("editable_items"));
+        assertThat(g).contains("USER-EDITED LIST");
+        assertThat(g).as("a bare sibling name in a wildcard derivation fails silently")
+                .contains("$parent.qty * $parent.price");
+        assertThat(g).as("the element editor belongs to the sectionList itself")
+                .contains("\"bind\": \"$.items[*].name\"");
+        assertThat(g).as("and the itemView escape hatch must carry its way back")
+                .contains("\"navigate\": \"<list-view-id>\"");
+    }
+
+    @Test
     void instructions_for_resolves_dedupes_and_ignores_unknown() {
         assertThat(builtin.instructionsFor(java.util.List.of(
                 "regulated_charge", "regulated_charge", "not_a_topic")))
