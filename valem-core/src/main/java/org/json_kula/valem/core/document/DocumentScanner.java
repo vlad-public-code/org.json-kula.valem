@@ -65,7 +65,7 @@ public final class DocumentScanner {
         } catch (LlmClient.LlmException e) {
             return new DocumentScanResult.NotFound("LLM call failed: " + e.getMessage());
         }
-        return parse(raw);
+        return parse(raw, top);
     }
 
     /**
@@ -87,7 +87,11 @@ public final class DocumentScanner {
         return out;
     }
 
-    private DocumentScanResult parse(String raw) {
+    /**
+     * @param sentChunks the exact chunks that were sent to the LLM for this call — every candidate's
+     *                   quote is cross-checked against them (never trusted from the model alone).
+     */
+    private DocumentScanResult parse(String raw, List<ScoredChunk> sentChunks) {
         JsonNode node;
         try {
             node = mapper.readTree(SpecGenerator.extractJson(raw));
@@ -100,13 +104,20 @@ public final class DocumentScanner {
         if (candidatesNode.isArray()) {
             for (JsonNode c : candidatesNode) {
                 String quote = c.path("quote").asText("");
-                int    page  = c.path("page").asInt(0);
-                // Skip malformed individual entries rather than failing the whole scan over one bad
-                // element — a partial, honest candidate list beats an all-or-nothing failure here.
-                if (quote.isBlank() || page < 1) continue;
+                if (quote.isBlank()) continue;
+
+                // The model's self-reported "page" is never trusted directly: (a) it can't represent
+                // a grouped multi-page chunk's range ("4-5") as the required integer, and (b) nothing
+                // stops a hallucinated or misattributed quote otherwise. Anchoring to the chunk the
+                // quote verbatim-matches against fixes both — a quote that doesn't appear in any
+                // excerpt actually sent is dropped, not trusted (vision doc AC-2/AC-5: verbatim quote,
+                // never a paraphrase; v1 design spec §4.3).
+                DocumentChunk matched = findChunkContaining(sentChunks, quote);
+                if (matched == null) continue;
+
                 candidates.add(new FormulaCandidate(
                         quote,
-                        page,
+                        matched.startPage(),
                         c.path("sectionHint").asText(""),
                         c.path("confidence").asDouble(0.5),
                         c.path("rationale").asText("")));
@@ -119,5 +130,23 @@ public final class DocumentScanner {
             return new DocumentScanResult.NotFound(reason);
         }
         return new DocumentScanResult.Found(candidates);
+    }
+
+    /**
+     * The sent chunk whose text contains {@code quote} verbatim (after normalizing whitespace, since
+     * a model frequently reflows a quote's line breaks), or {@code null} if it appears in none of
+     * them.
+     */
+    private static DocumentChunk findChunkContaining(List<ScoredChunk> sentChunks, String quote) {
+        String normalizedQuote = normalizeWhitespace(quote);
+        if (normalizedQuote.isEmpty()) return null;
+        for (ScoredChunk sc : sentChunks) {
+            if (normalizeWhitespace(sc.chunk().text()).contains(normalizedQuote)) return sc.chunk();
+        }
+        return null;
+    }
+
+    private static String normalizeWhitespace(String s) {
+        return s.replaceAll("\\s+", " ").strip();
     }
 }

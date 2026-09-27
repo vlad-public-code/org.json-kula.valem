@@ -37,7 +37,71 @@ class DocumentScannerTest {
         List<FormulaCandidate> candidates = ((DocumentScanResult.Found) result).candidates();
         assertThat(candidates).hasSize(1);
         assertThat(candidates.get(0).quote()).isEqualTo("Coinsurance is 20% of the allowed amount.");
-        assertThat(candidates.get(0).page()).isEqualTo(2);
+        // The model reported page 2, but both tiny pages group into ONE chunk (starting at page 1)
+        // under the 4000-char cap — the returned page is anchored to the chunk the quote actually
+        // matched, not the model's self-report (see the two tests below for why that matters).
+        assertThat(candidates.get(0).page()).isEqualTo(1);
+    }
+
+    @Test
+    void candidate_page_is_anchored_to_the_matched_chunk_not_trusted_from_the_model() {
+        // The model reports an outright wrong page (99, which doesn't exist) for a quote that DOES
+        // appear in the document — the server must still recover the correct page from the chunk,
+        // never propagate the model's unverified number.
+        LlmClient stub = prompt -> """
+                {"found": true, "candidates": [
+                  {"quote": "Early termination fee is $200.", "page": 99}
+                ]}
+                """;
+        DocumentScanner scanner = new DocumentScanner(stub, MAPPER, 6, 4000, 24000);
+
+        DocumentScanResult result = scanner.scan(
+                doc("filler intro page", "Early termination fee is $200.", "filler closing page"),
+                "what is the termination fee?");
+
+        assertThat(result).isInstanceOf(DocumentScanResult.Found.class);
+        FormulaCandidate candidate = ((DocumentScanResult.Found) result).candidates().get(0);
+        // All three tiny pages group into one chunk starting at page 1 — that's the honest anchor,
+        // not the model's fabricated "99".
+        assertThat(candidate.page()).isEqualTo(1);
+    }
+
+    @Test
+    void a_quote_not_present_in_any_sent_chunk_is_dropped_as_hallucinated() {
+        LlmClient stub = prompt -> """
+                {"found": true, "candidates": [
+                  {"quote": "This exact sentence appears nowhere in the document.", "page": 1}
+                ]}
+                """;
+        DocumentScanner scanner = new DocumentScanner(stub, MAPPER, 6, 4000, 24000);
+
+        DocumentScanResult result = scanner.scan(doc("Real content about something else entirely."),
+                "anything");
+
+        // The model's own "found":true is overridden — no candidate survived verification, so this
+        // is reported as NotFound rather than a Found result with zero (or fabricated) candidates.
+        assertThat(result).isInstanceOf(DocumentScanResult.NotFound.class);
+    }
+
+    @Test
+    void a_page_range_label_from_a_grouped_chunk_never_crashes_or_zeroes_out_the_candidate() {
+        // Regression for a real reviewed bug: if a model complies literally with "report the page
+        // exactly as given in the marker" for a chunk spanning multiple grouped pages (labelled e.g.
+        // "4-5"), the old code parsed that non-numeric string with asInt(0) and silently discarded a
+        // valid candidate. Chunk-anchoring sidesteps the problem entirely by never parsing the
+        // model's page value as a number at all.
+        LlmClient stub = prompt -> """
+                {"found": true, "candidates": [
+                  {"quote": "Multi page target clause here.", "page": "4-5"}
+                ]}
+                """;
+        DocumentScanner scanner = new DocumentScanner(stub, MAPPER, 6, 4000, 24000);
+
+        DocumentScanResult result = scanner.scan(
+                doc("a", "b", "c", "Multi page target clause here.", "e"), "anything");
+
+        assertThat(result).isInstanceOf(DocumentScanResult.Found.class);
+        assertThat(((DocumentScanResult.Found) result).candidates()).hasSize(1);
     }
 
     @Test
@@ -109,7 +173,7 @@ class DocumentScannerTest {
                 """;
         DocumentScanner scanner = new DocumentScanner(stub, MAPPER, 6, 4000, 24000);
 
-        DocumentScanResult result = scanner.scan(doc("a", "b", "c"), "anything");
+        DocumentScanResult result = scanner.scan(doc("a", "b", "valid quote here"), "anything");
 
         assertThat(result).isInstanceOf(DocumentScanResult.Found.class);
         assertThat(((DocumentScanResult.Found) result).candidates()).hasSize(1);

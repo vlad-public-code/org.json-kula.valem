@@ -69,26 +69,37 @@ public final class DocumentScanPrompt {
         return new SpecGenerationPrompt.PromptParts(system, user.toString());
     }
 
-    /** Structured-output schema for the scan response (see {@code SpecGenerationSchema} for the pattern). */
-    public static JsonNode responseSchema(ObjectMapper mapper) {
-        String json = """
-                {"type":"object",
+    private static final String RESPONSE_SCHEMA_JSON = """
+            {"type":"object",
+             "properties":{
+               "found":{"type":"boolean"},
+               "candidates":{"type":"array","items":{"type":"object",
                  "properties":{
-                   "found":{"type":"boolean"},
-                   "candidates":{"type":"array","items":{"type":"object",
-                     "properties":{
-                       "quote":{"type":"string"},
-                       "page":{"type":"integer"},
-                       "sectionHint":{"type":"string"},
-                       "confidence":{"type":"number"},
-                       "rationale":{"type":"string"}},
-                     "required":["quote","page"]}},
-                   "reason":{"type":"string"}},
-                 "required":["found","candidates"]}""";
+                   "quote":{"type":"string"},
+                   "page":{"type":"integer"},
+                   "sectionHint":{"type":"string"},
+                   "confidence":{"type":"number"},
+                   "rationale":{"type":"string"}},
+                 "required":["quote","page"]}},
+               "reason":{"type":"string"}},
+             "required":["found","candidates"]}""";
+
+    // Parsed once at class-init, not per call: the schema is a fixed JSON structure, and a plain
+    // structural readTree() doesn't depend on any caller-specific ObjectMapper configuration (no
+    // custom deserializers/modules come into play), so every call sharing this immutable JsonNode is
+    // safe and avoids re-parsing the same literal on every scan request.
+    private static final JsonNode RESPONSE_SCHEMA = parseResponseSchema();
+
+    private static JsonNode parseResponseSchema() {
         try {
-            return mapper.readTree(json);
+            return new ObjectMapper().readTree(RESPONSE_SCHEMA_JSON);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Invalid embedded schema JSON", e);
         }
+    }
+
+    /** Structured-output schema for the scan response (see {@code SpecGenerationSchema} for the pattern). */
+    public static JsonNode responseSchema(ObjectMapper mapper) {
+        return RESPONSE_SCHEMA;
     }
 }

@@ -31,7 +31,7 @@ class DocumentExtractionServiceTest {
 
     @Test
     void rejects_empty_upload() {
-        DocumentExtractionService service = new DocumentExtractionService(List.of(), 1000, 10);
+        DocumentExtractionService service = new DocumentExtractionService(List.of(), 1000, 10, 1_000_000);
         MockMultipartFile file = new MockMultipartFile("file", "x.pdf", "application/pdf", new byte[0]);
 
         assertThatThrownBy(() -> service.extract(file))
@@ -50,7 +50,7 @@ class DocumentExtractionServiceTest {
                 throw new AssertionError("extractor must not be invoked when the size cap is exceeded");
             }
         };
-        DocumentExtractionService service = new DocumentExtractionService(List.of(neverCalled), 10, 300);
+        DocumentExtractionService service = new DocumentExtractionService(List.of(neverCalled), 10, 300, 1_000_000);
         MockMultipartFile file = new MockMultipartFile("file", "x.pdf", "application/pdf",
                 "this content is longer than ten bytes".getBytes());
 
@@ -63,7 +63,7 @@ class DocumentExtractionServiceTest {
     @Test
     void rejects_unsupported_format() {
         DocumentExtractionService service = new DocumentExtractionService(
-                List.of(fakeExtractor(false, docWithPages(1))), 1_000_000, 300);
+                List.of(fakeExtractor(false, docWithPages(1))), 1_000_000, 300, 1_000_000);
         MockMultipartFile file = new MockMultipartFile("file", "spreadsheet.xlsx",
                 "application/vnd.ms-excel", "data".getBytes());
 
@@ -77,7 +77,7 @@ class DocumentExtractionServiceTest {
     void rejects_document_with_no_extractable_text() {
         ExtractedDocument empty = new ExtractedDocument("x.pdf", ExtractedDocument.SourceKind.PDF, List.of());
         DocumentExtractionService service = new DocumentExtractionService(
-                List.of(fakeExtractor(true, empty)), 1_000_000, 300);
+                List.of(fakeExtractor(true, empty)), 1_000_000, 300, 1_000_000);
         MockMultipartFile file = new MockMultipartFile("file", "scanned.pdf", "application/pdf", "data".getBytes());
 
         assertThatThrownBy(() -> service.extract(file))
@@ -87,9 +87,26 @@ class DocumentExtractionServiceTest {
     }
 
     @Test
+    void rejects_document_exceeding_extracted_char_cap_even_within_the_page_cap() {
+        // A single page can still carry an enormous amount of text (a decompression-ratio outlier,
+        // or just a pathologically busy page) without ever tripping the page-count cap — this check
+        // is independent of it (defense in depth alongside POI's own zip-bomb guard for DOCX).
+        ExtractedDocument huge = new ExtractedDocument("x.pdf", ExtractedDocument.SourceKind.PDF,
+                List.of(new DocumentPage(1, "x".repeat(2_000_000))));
+        DocumentExtractionService service = new DocumentExtractionService(
+                List.of(fakeExtractor(true, huge)), 10_000_000, 300, 1_000_000);
+        MockMultipartFile file = new MockMultipartFile("file", "big.pdf", "application/pdf", "data".getBytes());
+
+        assertThatThrownBy(() -> service.extract(file))
+                .isInstanceOf(DocumentExtractionException.class)
+                .satisfies(e -> assertThat(((DocumentExtractionException) e).reason())
+                        .isEqualTo(DocumentExtractionException.Reason.CONTENT_TOO_LARGE));
+    }
+
+    @Test
     void rejects_document_exceeding_page_cap_after_extraction() {
         DocumentExtractionService service = new DocumentExtractionService(
-                List.of(fakeExtractor(true, docWithPages(301))), 1_000_000, 300);
+                List.of(fakeExtractor(true, docWithPages(301))), 1_000_000, 300, 1_000_000);
         MockMultipartFile file = new MockMultipartFile("file", "big.pdf", "application/pdf", "data".getBytes());
 
         assertThatThrownBy(() -> service.extract(file))
@@ -101,7 +118,7 @@ class DocumentExtractionServiceTest {
     @Test
     void returns_extracted_document_within_limits() throws Exception {
         DocumentExtractionService service = new DocumentExtractionService(
-                List.of(fakeExtractor(true, docWithPages(5))), 1_000_000, 300);
+                List.of(fakeExtractor(true, docWithPages(5))), 1_000_000, 300, 1_000_000);
         MockMultipartFile file = new MockMultipartFile("file", "ok.pdf", "application/pdf", "data".getBytes());
 
         ExtractedDocument result = service.extract(file);
@@ -114,7 +131,7 @@ class DocumentExtractionServiceTest {
         DocumentTextExtractor doesNotSupport = fakeExtractor(false, docWithPages(1));
         DocumentTextExtractor supports = fakeExtractor(true, docWithPages(2));
         DocumentExtractionService service = new DocumentExtractionService(
-                List.of(doesNotSupport, supports), 1_000_000, 300);
+                List.of(doesNotSupport, supports), 1_000_000, 300, 1_000_000);
         MockMultipartFile file = new MockMultipartFile("file", "ok.docx",
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "data".getBytes());
 

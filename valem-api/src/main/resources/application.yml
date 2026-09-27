@@ -76,6 +76,8 @@ valem:
   document:
     max-file-size-bytes: 26214400  # 25 MB, enforced before parsing (DocumentExtractionService)
     max-pages: 300                 # enforced after extraction
+    max-extracted-chars: 5000000   # ~5M chars, enforced on the extraction RESULT (defense in depth
+                                    # against a decompression-ratio outlier or pathological page)
     scan:
       top-k: 6                     # chunks sent to the LLM per scan — bounds cost regardless of document length
       max-chars-per-chunk: 4000    # cap per chunk (also the DOCX pseudo-page size)

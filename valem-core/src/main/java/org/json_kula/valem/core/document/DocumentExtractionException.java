@@ -11,7 +11,16 @@ public class DocumentExtractionException extends Exception {
         FILE_TOO_LARGE,
         TOO_MANY_PAGES,
         EMPTY_DOCUMENT,
-        PARSE_FAILED
+        PARSE_FAILED,
+        /**
+         * Extracted text exceeds the char-count ceiling — checked on the RESULT, after extraction
+         * completes, as a backstop against a small upload producing a pathologically large amount of
+         * text (a decompression-ratio outlier, a busy single page, or any other cause), independent
+         * of {@link #TOO_MANY_PAGES}. Does not bound the transient memory used *during* extraction
+         * itself; for DOCX, POI's own {@code ZipSecureFile} (min-inflate-ratio + max-entry-size) is
+         * the primary zip-bomb defense, active by default.
+         */
+        CONTENT_TOO_LARGE
     }
 
     private final Reason reason;

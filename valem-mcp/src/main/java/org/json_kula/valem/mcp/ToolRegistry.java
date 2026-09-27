@@ -153,7 +153,9 @@ class ToolRegistry {
     // conservative, safe defaults rather than a per-deployment tuning knob.
     private static final long SEARCH_MAX_FILE_SIZE_BYTES  = 26_214_400L; // 25 MB
     private static final int  SEARCH_MAX_PAGES            = 300;
+    private static final int  SEARCH_MAX_EXTRACTED_CHARS  = 5_000_000;
     private static final int  SEARCH_DEFAULT_TOP_K        = 6;
+    private static final int  SEARCH_MAX_TOP_K            = 20;
     private static final int  SEARCH_MAX_CHARS_PER_CHUNK  = 4_000;
     private static final List<DocumentTextExtractor> SEARCH_EXTRACTORS =
             List.of(new PdfTextExtractor(), new DocxTextExtractor());
@@ -747,7 +749,8 @@ class ToolRegistry {
                 stringProp(props, "filename", "Original filename — picks PDF vs DOCX extraction, e.g. "
                         + "'policy.pdf'.");
                 stringProp(props, "query", "What you're looking for, e.g. \"early termination fee\".");
-                intProp(props, "topK", "Max matches to return (default " + SEARCH_DEFAULT_TOP_K + ").");
+                intProp(props, "topK", "Max matches to return (default " + SEARCH_DEFAULT_TOP_K
+                        + ", capped at " + SEARCH_MAX_TOP_K + ").");
                 schema.putArray("required").add("data").add("filename").add("query");
             }),
             objectSchema(schema -> {
@@ -769,7 +772,11 @@ class ToolRegistry {
                 String query    = requiredText(args, "query");
                 int topK = args.hasNonNull("topK") ? args.get("topK").asInt(SEARCH_DEFAULT_TOP_K)
                                                     : SEARCH_DEFAULT_TOP_K;
+                // Clamp both directions: <=0 falls back to the default, and an unbounded topK would
+                // let a caller request effectively the whole document, defeating the "cost is bounded
+                // by topK, never by document length" guarantee this tool advertises.
                 if (topK <= 0) topK = SEARCH_DEFAULT_TOP_K;
+                if (topK > SEARCH_MAX_TOP_K) topK = SEARCH_MAX_TOP_K;
 
                 DocumentTextExtractor extractor = SEARCH_EXTRACTORS.stream()
                         .filter(e -> e.supports(filename, null))
@@ -786,6 +793,15 @@ class ToolRegistry {
                     throw new DocumentExtractionException(DocumentExtractionException.Reason.EMPTY_DOCUMENT,
                             "No extractable text found — the document may be a scanned image "
                             + "(OCR is not supported)");
+                }
+                // Independent of the page-count cap below — a decompression-ratio outlier or a
+                // pathologically busy single page could otherwise still produce far more in-memory
+                // text than the (already-capped) upload size would suggest. Mirrors
+                // DocumentExtractionService's REST-side check.
+                if (doc.charCount() > SEARCH_MAX_EXTRACTED_CHARS) {
+                    throw new DocumentExtractionException(DocumentExtractionException.Reason.CONTENT_TOO_LARGE,
+                            "Extracted text is " + doc.charCount() + " characters, exceeding the "
+                            + SEARCH_MAX_EXTRACTED_CHARS + " character limit");
                 }
                 if (doc.pageCount() > SEARCH_MAX_PAGES) {
                     throw new DocumentExtractionException(DocumentExtractionException.Reason.TOO_MANY_PAGES,

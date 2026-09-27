@@ -24,21 +24,26 @@ public class DocumentExtractionService {
     private final List<DocumentTextExtractor> extractors;
     private final long maxFileSizeBytes;
     private final int  maxPages;
+    private final int  maxExtractedChars;
 
     // Explicit @Autowired: a second (package-private, test-only) constructor exists below, and
     // Spring cannot pick a constructor implicitly once there is more than one candidate.
     @Autowired
     public DocumentExtractionService(
             @Value("${valem.document.max-file-size-bytes:26214400}") long maxFileSizeBytes,
-            @Value("${valem.document.max-pages:300}") int maxPages) {
-        this(List.of(new PdfTextExtractor(), new DocxTextExtractor()), maxFileSizeBytes, maxPages);
+            @Value("${valem.document.max-pages:300}") int maxPages,
+            @Value("${valem.document.max-extracted-chars:5000000}") int maxExtractedChars) {
+        this(List.of(new PdfTextExtractor(), new DocxTextExtractor()), maxFileSizeBytes, maxPages,
+                maxExtractedChars);
     }
 
     /** Package-private — lets tests substitute fake extractors without touching Spring config. */
-    DocumentExtractionService(List<DocumentTextExtractor> extractors, long maxFileSizeBytes, int maxPages) {
+    DocumentExtractionService(List<DocumentTextExtractor> extractors, long maxFileSizeBytes, int maxPages,
+                              int maxExtractedChars) {
         this.extractors        = extractors;
         this.maxFileSizeBytes  = maxFileSizeBytes;
         this.maxPages          = maxPages;
+        this.maxExtractedChars = maxExtractedChars;
     }
 
     public ExtractedDocument extract(MultipartFile file) throws DocumentExtractionException, IOException {
@@ -73,6 +78,15 @@ public class DocumentExtractionService {
             throw new DocumentExtractionException(DocumentExtractionException.Reason.EMPTY_DOCUMENT,
                     "No extractable text found — the document may be a scanned image "
                     + "(OCR is not supported in v1)");
+        }
+        // Checked on the RESULT, independent of the page-count cap below: a decompression-ratio
+        // outlier or a pathologically busy single page could otherwise produce far more in-memory
+        // text than the (already-capped) upload size would suggest. Defense in depth alongside POI's
+        // own ZipSecureFile zip-bomb guard for DOCX (min-inflate-ratio + max-entry-size, on by default).
+        if (extracted.charCount() > maxExtractedChars) {
+            throw new DocumentExtractionException(DocumentExtractionException.Reason.CONTENT_TOO_LARGE,
+                    "Extracted text is " + extracted.charCount() + " characters, exceeding the "
+                    + maxExtractedChars + " character limit");
         }
         if (extracted.pageCount() > maxPages) {
             throw new DocumentExtractionException(DocumentExtractionException.Reason.TOO_MANY_PAGES,

@@ -94,7 +94,9 @@ public record ModelSpec(
     /** A copy of this spec carrying different {@code effects}; every other field is shared unchanged. */
     public ModelSpec withEffects(List<EffectSpec> newEffects) {
         return new ModelSpec(id, version, schema, derivations, metaDerivations, constraints,
-                tests, defaultValues, constants, viewDefinition, newEffects, template, lineage, library);
+                tests, defaultValues, constants, viewDefinition,
+                newEffects == null ? List.of() : List.copyOf(newEffects),
+                template, lineage, library);
     }
 
     /** The library's layers in bind order, or an empty list when the spec declares no library. */
