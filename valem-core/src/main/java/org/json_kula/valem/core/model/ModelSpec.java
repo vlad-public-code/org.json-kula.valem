@@ -91,6 +91,12 @@ public record ModelSpec(
                 tests, defaultValues, constants, viewDefinition, effects, template, lineage, newLibrary);
     }
 
+    /** A copy of this spec carrying different {@code effects}; every other field is shared unchanged. */
+    public ModelSpec withEffects(List<EffectSpec> newEffects) {
+        return new ModelSpec(id, version, schema, derivations, metaDerivations, constraints,
+                tests, defaultValues, constants, viewDefinition, newEffects, template, lineage, library);
+    }
+
     /** The library's layers in bind order, or an empty list when the spec declares no library. */
     public List<LibraryLayer> libraryLayers() {
         return library != null ? library.layers() : List.of();

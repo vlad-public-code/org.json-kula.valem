@@ -81,7 +81,8 @@ class ToolRegistryTest {
                 "get_audit", "verify_audit", "get_effective_schema", "snapshot", "restore",
                 "upload_blob", "download_blob",
                 "evolve_spec", "delete_model", "get_view", "get_library",
-                "get_domain_guidance", "validate_spec", "eval_expression", "test_spec", "dry_run");
+                "get_domain_guidance", "validate_spec", "eval_expression", "test_spec", "dry_run",
+                "search_document");
     }
 
     // ── library ──────────────────────────────────────────────────────────────────

@@ -31,6 +31,20 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
+        <!-- Document-to-spec (docs/design/llm/document-to-spec-v1-design.md §4.1/§6): text extraction
+             from an uploaded PDF/DOCX, shared by the REST scan phase (valem-api) and the MCP
+             search_document tool (valem-mcp), so it lives here rather than in either module.
+             Apache-2.0, pure-Java, no external service — documents never leave the process. -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.3</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.3.0</version>
+        </dependency>
 
         <dependency>
             <groupId>org.junit.jupiter</groupId>
