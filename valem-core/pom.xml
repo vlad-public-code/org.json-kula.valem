@@ -31,6 +31,18 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
+        <!-- Excel-to-spec (excel-to-spec-v1-design.md §2.1): the real XSSFWorkbook-backed CellGrid
+             adapter and its formula evaluator (the independent correctness oracle, AC-4). Shared by
+             the REST surface (valem-api) and the MCP convert_spreadsheet tool (valem-mcp), so it
+             lives here rather than in either module, same placement rationale as the PDF/DOCX
+             extractors in the sibling document-to-spec feature. Apache-2.0, pure-Java, no external
+             service; previously approved for the same purpose (PDF/DOCX text extraction) in this
+             codebase's document-to-spec work. -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.3.0</version>
+        </dependency>
 
         <dependency>
             <groupId>org.junit.jupiter</groupId>

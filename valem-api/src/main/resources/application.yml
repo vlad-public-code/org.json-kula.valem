@@ -34,6 +34,12 @@ management:
       max-request-size: 55MB     # cap on the whole multipart request
 
 valem:
+  # Excel-to-spec (excel-to-spec-v1-design.md): compiling an uploaded .xlsx workbook's own formulas
+  # into a Valem model. No LLM involved -- a deterministic transpiler, not an LLM pipeline.
+  spreadsheet:
+    max-file-size-bytes: 26214400  # 25 MB, enforced before parsing (SpreadsheetCompileService)
+    max-rows: 10000                # enforced after opening the workbook
+    max-columns: 200
   limits:
     # Max compiled-JSONata-expression entries (bounded LRU, shared process-wide). Each entry pins a
     # generated class + its classloader in Metaspace — native memory a container's heap cap does not

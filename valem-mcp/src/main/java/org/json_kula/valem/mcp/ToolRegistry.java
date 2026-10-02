@@ -22,6 +22,11 @@ import org.json_kula.valem.core.model.LibraryLayer;
 import org.json_kula.valem.core.model.BlobRef;
 import org.json_kula.valem.core.model.ModelSpec;
 import org.json_kula.valem.core.model.TestCase;
+import org.json_kula.valem.core.spreadsheet.SpreadsheetCompiler;
+import org.json_kula.valem.core.spreadsheet.SpreadsheetExtractionException;
+import org.json_kula.valem.core.spreadsheet.UnsupportedFormulaException;
+import org.json_kula.valem.core.spreadsheet.XssfCellGrid;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.json_kula.valem.core.state.PathConverter;
 import org.json_kula.valem.core.state.Snapshot;
 import org.json_kula.valem.cli.RemoteOperationException;
@@ -137,6 +142,12 @@ class ToolRegistry {
 
     /** Upper bound on postfix attempts, so a persistent non-duplicate failure still surfaces promptly. */
     private static final int MAX_ID_COLLISION_RETRIES = 100;
+
+    // ── convert_spreadsheet (excel-to-spec-v1-design.md §8) ────────────────────
+    // Same caps as the REST surface's defaults (valem.spreadsheet.*) — this tool has no server-side
+    // config plumbing, same posture as search_document's own hardcoded caps.
+    private static final long CONVERT_SPREADSHEET_MAX_FILE_SIZE_BYTES = 26_214_400L; // 25 MB
+    private static final int  CONVERT_SPREADSHEET_MAX_ROWS            = 10_000;
 
     /**
      * Creates {@code spec}, retrying with an appended numeric postfix ({@code -2}, {@code -3}, …) if the
@@ -710,6 +721,68 @@ class ToolRegistry {
                     if (!muts.isEmpty()) throwaway.mutate(spec.id(), muts);
                 }
                 return throwaway.getState(spec.id(), null);
+            });
+
+        add("convert_spreadsheet", "Convert spreadsheet",
+            "Compile an uploaded .xlsx workbook's OWN formulas into a ready ModelSpec — deterministic "
+            + "transpilation (Excel formula language -> JSONata), never an LLM call: every number the "
+            + "compiled spec computes is checked to exactly match what the source workbook itself "
+            + "computed. One worksheet, one header-row table, a bounded numeric/boolean function set "
+            + "(IF/AND/OR/NOT/ROUND/ABS/SUM/AVERAGE/MIN/MAX/COUNT) — anything else (VLOOKUP, cross-sheet "
+            + "refs, non-uniform per-row formulas, …) is named and reported in rejectedColumns rather "
+            + "than guessed; the rest of the sheet still compiles. The returned spec is NOT yet "
+            + "registered — review it, then call create_model yourself.",
+            objectSchema(schema -> {
+                ObjectNode props = schema.putObject("properties");
+                stringProp(props, "data", "The .xlsx file content, base64-encoded.");
+                stringProp(props, "filename", "Original filename, e.g. 'pricing.xlsx'.");
+                stringProp(props, "modelId", "The desired model id for the compiled spec.");
+                schema.putArray("required").add("data").add("filename").add("modelId");
+            }),
+            objectSchema(schema -> {
+                ObjectNode props = schema.putObject("properties");
+                boolProp(props, "valid", "True if at least one column compiled.");
+                props.set("spec", describedSchema(SpecGenerationSchema.modelSpec(mapper),
+                        "The compiled ModelSpec (only present when valid)."));
+                arrayProp(props, "rejectedColumns",
+                        "Columns that could not be translated: {header, reason, detail}.");
+            }),
+            annotations(true, false, true),
+            args -> {
+                String filename = requiredText(args, "filename");
+                if (!filename.toLowerCase(java.util.Locale.ROOT).endsWith(".xlsx")) {
+                    throw new IllegalArgumentException(
+                            "Unsupported file format: " + filename + " — only .xlsx is supported in v1");
+                }
+                byte[] bytes = decodeBase64(requiredText(args, "data"));
+                if (bytes.length > CONVERT_SPREADSHEET_MAX_FILE_SIZE_BYTES) {
+                    throw new IllegalArgumentException("File size " + bytes.length
+                            + " bytes exceeds the " + CONVERT_SPREADSHEET_MAX_FILE_SIZE_BYTES + " byte limit");
+                }
+                String modelId = requiredText(args, "modelId");
+
+                SpreadsheetCompiler.CompileResult result;
+                try (InputStream in = new ByteArrayInputStream(bytes);
+                     XSSFWorkbook workbook = new XSSFWorkbook(in)) {
+                    XssfCellGrid grid = new XssfCellGrid(workbook);
+                    if (grid.rowCount() > CONVERT_SPREADSHEET_MAX_ROWS) {
+                        throw new SpreadsheetExtractionException(
+                                SpreadsheetExtractionException.Reason.TOO_MANY_ROWS,
+                                "Workbook has " + grid.rowCount() + " rows, exceeding the "
+                                + CONVERT_SPREADSHEET_MAX_ROWS + " row limit");
+                    }
+                    result = SpreadsheetCompiler.compile(grid, modelId, mapper);
+                } catch (UnsupportedFormulaException e) {
+                    return Map.of("valid", false, "reason", e.reason().name(), "error", e.getMessage());
+                }
+
+                Map<String, Object> out = new LinkedHashMap<>();
+                out.put("valid", true);
+                out.put("spec", result.spec());
+                out.put("rejectedColumns", result.rejectedColumns().stream()
+                        .map(r -> Map.of("header", r.header(), "reason", r.reason().name(), "detail", r.detail()))
+                        .toList());
+                return out;
             });
 
         // ── remote_with_browser mode only: the device-flow pairing entry point ──
