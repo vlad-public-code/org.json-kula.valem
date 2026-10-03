@@ -74,7 +74,7 @@ public final class XssfCellGrid implements CellGrid {
      * name and reject on its own with a far more specific reason (vision doc AC-3: a rejected column
      * must not fail the whole compile). So an unevaluable formula gets a placeholder computed value
      * instead of an exception — it is only ever consulted for a column that SURVIVES translation,
-     * and this bounded v1 function set (§5.2) evaluates cleanly to numeric/boolean whenever its
+     * and this bounded v1 function set (§5.2) evaluates cleanly to numeric/boolean/text whenever its
      * inputs do, so a surviving column landing here would itself be the surprise worth investigating.
      */
     private CellValue evaluateFormula(Cell cell) {
@@ -87,6 +87,7 @@ public final class XssfCellGrid implements CellGrid {
         return switch (evaluated.getCellType()) {
             case NUMERIC -> new CellValue.NumberValue(evaluated.getNumberValue());
             case BOOLEAN -> new CellValue.BooleanValue(evaluated.getBooleanValue());
+            case STRING -> new CellValue.StringValue(evaluated.getStringValue());
             default -> new CellValue.NumberValue(0);
         };
     }

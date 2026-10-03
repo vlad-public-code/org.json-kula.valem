@@ -89,9 +89,12 @@ class ExcelFormulaTranslatorTest {
     }
 
     @Test
-    void whole_column_range_inside_a_per_row_formula_is_rejected() {
+    void whole_column_aggregate_over_a_literal_column_inside_a_per_row_formula_translates() {
         // The range is $-locked, as a real fill-down formula would, so it stays identical on every
-        // row (otherwise it wouldn't even pass the uniform-shape check).
+        // row (otherwise it wouldn't even pass the uniform-shape check), and spans the table's full
+        // data-row span -- the "percent of total" pattern: $$ reliably resolves to the document root
+        // even from inside this wildcard derivation's own per-item context (measured empirically
+        // against the real engine, unlike a bare sibling field name).
         InMemoryCellGrid grid = new InMemoryCellGrid()
                 .str(0, 0, "Price").str(0, 1, "ShareOfTotal")
                 .num(1, 0, 10).formula(1, 1, "A2/SUM($A$2:$A$3)")
@@ -99,6 +102,39 @@ class ExcelFormulaTranslatorTest {
 
         TranslationResult r = translate(grid);
         ColumnOutcome outcome = outcomeOf(r, "ShareOfTotal");
+        assertThat(outcome).isInstanceOf(ColumnOutcome.PerItemDerivation.class);
+        assertThat(((ColumnOutcome.PerItemDerivation) outcome).jsonataExpr())
+                .isEqualTo("($parent.price / $sum($$.items.price))");
+    }
+
+    @Test
+    void whole_column_aggregate_over_a_formula_column_inside_a_per_row_formula_is_rejected() {
+        // Same shape as above, but the aggregated column ("Total") is itself a FORMULA column, not
+        // a literal -- a materially bigger case (recomputing a formula's own expression INSIDE
+        // another per-row formula), deliberately deferred rather than guessed.
+        InMemoryCellGrid grid = new InMemoryCellGrid()
+                .str(0, 0, "Qty").str(0, 1, "Total").str(0, 2, "ShareOfTotal")
+                .num(1, 0, 2).formula(1, 1, "A2*2").formula(1, 2, "B2/SUM($B$2:$B$3)")
+                .num(2, 0, 3).formula(2, 1, "A3*2").formula(2, 2, "B3/SUM($B$2:$B$3)");
+
+        TranslationResult r = translate(grid);
+        ColumnOutcome outcome = outcomeOf(r, "ShareOfTotal");
+        assertThat(outcome).isInstanceOf(ColumnOutcome.Rejected.class);
+        assertThat(((ColumnOutcome.Rejected) outcome).reason())
+                .isEqualTo(UnsupportedFormulaException.Reason.UNSUPPORTED_RANGE_SHAPE);
+    }
+
+    @Test
+    void a_whole_column_range_not_spanning_the_full_data_block_is_rejected() {
+        // $A$2:$A$2 only covers the first data row, not the table's full data span -- not the
+        // "percent of total" shape, and not a same-row range either.
+        InMemoryCellGrid grid = new InMemoryCellGrid()
+                .str(0, 0, "Price").str(0, 1, "Ratio")
+                .num(1, 0, 10).formula(1, 1, "A2/SUM($A$2:$A$2)")
+                .num(2, 0, 20).formula(2, 1, "A3/SUM($A$2:$A$2)");
+
+        TranslationResult r = translate(grid);
+        ColumnOutcome outcome = outcomeOf(r, "Ratio");
         assertThat(outcome).isInstanceOf(ColumnOutcome.Rejected.class);
         assertThat(((ColumnOutcome.Rejected) outcome).reason())
                 .isEqualTo(UnsupportedFormulaException.Reason.UNSUPPORTED_RANGE_SHAPE);

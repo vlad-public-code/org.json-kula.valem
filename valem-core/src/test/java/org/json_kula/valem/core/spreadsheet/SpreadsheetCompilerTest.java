@@ -180,6 +180,25 @@ class SpreadsheetCompilerTest {
     }
 
     @Test
+    void a_percent_of_total_formula_using_a_whole_column_aggregate_passes_the_real_engine() {
+        InMemoryCellGrid grid = new InMemoryCellGrid()
+                .str(0, 0, "Price").str(0, 1, "ShareOfTotal")
+                .num(1, 0, 10).formula(1, 1, "A2/SUM($A$2:$A$3)", 0.25)
+                .num(2, 0, 30).formula(2, 1, "A3/SUM($A$2:$A$3)", 0.75);
+
+        CompileResult result = SpreadsheetCompiler.compile(grid, "share-of-total", MAPPER);
+
+        assertThat(result.rejectedColumns()).isEmpty();
+        ModelSpecValidator.ValidationResult validation = ModelSpecValidator.validate(result.spec());
+        assertThat(validation.isValid()).as("validation errors: %s", validation.errors()).isTrue();
+
+        List<TestCaseRunner.TestResult> testResults = TestCaseRunner.run(result.spec(), result.spec().tests());
+        assertThat(testResults).hasSize(1);
+        assertThat(testResults.get(0).passed())
+                .as("failures: %s", testResults.get(0).failures()).isTrue();
+    }
+
+    @Test
     void no_constraints_are_invented() {
         InMemoryCellGrid grid = new InMemoryCellGrid()
                 .str(0, 0, "Quantity")

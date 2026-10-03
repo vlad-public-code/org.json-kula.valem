@@ -143,4 +143,39 @@ class XssfCellGridTest {
             assertThat(testResults.get(0).passed()).as("failures: %s", testResults.get(0).failures()).isTrue();
         }
     }
+
+    /** Text-function concatenation and a "percent of total" whole-column aggregate, both inside a
+     *  per-row formula, checked against POI's own evaluator as the independent oracle — not just
+     *  hand-set "computed" values as in the compiler-level unit tests. */
+    @Test
+    void full_pipeline_compiles_text_and_whole_column_aggregate_formulas_from_a_real_poi_workbook() throws Exception {
+        byte[] bytes;
+        try (XSSFWorkbook wb = new XSSFWorkbook()) {
+            XSSFSheet sheet = wb.createSheet();
+            Row header = sheet.createRow(0);
+            setCell(header, 0, "First"); setCell(header, 1, "Last"); setCell(header, 2, "Price");
+            setCell(header, 3, "FullName"); setCell(header, 4, "ShareOfTotal");
+
+            Row r1 = sheet.createRow(1);
+            setCell(r1, 0, "Ada"); setCell(r1, 1, "Lovelace"); setCell(r1, 2, 10);
+            setCell(r1, 3, "=A2&\" \"&B2"); setCell(r1, 4, "=C2/SUM($C$2:$C$3)");
+            Row r2 = sheet.createRow(2);
+            setCell(r2, 0, "Alan"); setCell(r2, 1, "Turing"); setCell(r2, 2, 30);
+            setCell(r2, 3, "=A3&\" \"&B3"); setCell(r2, 4, "=C3/SUM($C$2:$C$3)");
+
+            bytes = toBytes(wb);
+        }
+
+        try (XSSFWorkbook wb = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
+            XssfCellGrid grid = new XssfCellGrid(wb);
+            SpreadsheetCompiler.CompileResult result = SpreadsheetCompiler.compile(
+                    grid, "poi-built-text", new com.fasterxml.jackson.databind.ObjectMapper());
+
+            assertThat(result.rejectedColumns()).isEmpty();
+            java.util.List<org.json_kula.valem.core.engine.TestCaseRunner.TestResult> testResults =
+                    org.json_kula.valem.core.engine.TestCaseRunner.run(result.spec(), result.spec().tests());
+            assertThat(testResults).hasSize(1);
+            assertThat(testResults.get(0).passed()).as("failures: %s", testResults.get(0).failures()).isTrue();
+        }
+    }
 }

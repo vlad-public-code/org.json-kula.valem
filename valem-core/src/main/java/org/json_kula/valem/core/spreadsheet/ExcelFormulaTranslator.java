@@ -312,13 +312,24 @@ public final class ExcelFormulaTranslator {
             throw new UnsupportedFormulaException(UNSUPPORTED_FUNCTION,
                     excelName + "() is only supported with a single range argument in v1");
         }
-        if (range.from().row() != templateRow || range.to().row() != templateRow
-                || range.from().rowAbsolute() || range.to().rowAbsolute()) {
-            throw new UnsupportedFormulaException(UNSUPPORTED_RANGE_SHAPE,
-                    excelName + "(" + describeRange(range) + "): only a same-row (horizontal) range is "
-                    + "supported inside a per-row formula in v1 — a whole-column total belongs in a "
-                    + "separate summary cell outside the table");
+        boolean sameRow = !range.from().rowAbsolute() && !range.to().rowAbsolute()
+                && range.from().row() == templateRow && range.to().row() == templateRow;
+        if (sameRow) {
+            return emitSameRowRangeAggregate(excelName, range, deps);
         }
+        boolean wholeColumnOverFullSpan = range.from().col() == range.to().col()
+                && range.from().rowAbsolute() && range.to().rowAbsolute()
+                && range.from().row() == bounds.firstDataRow() && range.to().row() == bounds.lastDataRow();
+        if (wholeColumnOverFullSpan) {
+            return emitWholeColumnAggregateInPerRow(excelName, range.from().col(), deps);
+        }
+        throw new UnsupportedFormulaException(UNSUPPORTED_RANGE_SHAPE,
+                excelName + "(" + describeRange(range) + "): only a same-row (horizontal) range, or a "
+                + "$-locked whole-column range over the table's full data span, is supported inside a "
+                + "per-row formula in v1");
+    }
+
+    private String emitSameRowRangeAggregate(String excelName, RangeRef range, Set<Integer> deps) {
         int fromCol = range.from().col();
         int toCol = range.to().col();
         if (fromCol > toCol) { int tmp = fromCol; fromCol = toCol; toCol = tmp; }
@@ -333,6 +344,48 @@ public final class ExcelFormulaTranslator {
             deps.add(c);
             terms.add("$parent." + field); // same silent-failure trap as emitCellRef — see its comment
         }
+        return aggregateOverTerms(excelName, terms);
+    }
+
+    /**
+     * A whole-column aggregate used <b>inside</b> a per-row formula (e.g. a "percent of total"
+     * pattern: {@code =C2/SUM($C$2:$C$10)} on every row) — distinct from the standalone summary-cell
+     * case {@code SpreadsheetCompiler.detectSummaryAggregates} handles.
+     *
+     * <p>{@code $$} reliably resolves to the document root even from inside a wildcard derivation's
+     * own per-item context (measured empirically against the real engine — unlike a bare sibling
+     * field name, this is <b>not</b> one of this engine's silent-failure traps), so the aggregate
+     * reads every item's own field directly: {@code $sum($$.items.field)}.
+     *
+     * <p>Restricted to a <b>literal</b> target column in v1: aggregating a column that is itself a
+     * formula would need to recompute that formula's own per-item expression inline (the same trick
+     * {@code detectSummaryAggregates} uses) while already being nested inside a *different* per-row
+     * formula — a materially bigger case, deferred rather than guessed.
+     */
+    private String emitWholeColumnAggregateInPerRow(String excelName, int col, Set<Integer> deps) {
+        String field = fieldNamesByCol.get(col);
+        if (field == null) {
+            throw new UnsupportedFormulaException(UNRESOLVED_REFERENCE,
+                    "Whole-column range in " + excelName + "() includes a column outside the detected table");
+        }
+        if (!literalKindByCol.containsKey(col)) {
+            throw new UnsupportedFormulaException(UNSUPPORTED_RANGE_SHAPE,
+                    excelName + "(): a whole-column range inside a per-row formula is only supported "
+                    + "when it aggregates a literal column in v1, not a formula column");
+        }
+        deps.add(col);
+        String jsonataFunc = switch (excelName) {
+            case "SUM" -> "$sum";
+            case "AVERAGE" -> "$average";
+            case "MIN" -> "$min";
+            case "MAX" -> "$max";
+            case "COUNT" -> "$count";
+            default -> throw new IllegalStateException("unreachable: " + excelName);
+        };
+        return jsonataFunc + "($$.items." + field + ")";
+    }
+
+    private static String aggregateOverTerms(String excelName, List<String> terms) {
         return switch (excelName) {
             case "SUM" -> "(" + String.join(" + ", terms) + ")";
             case "AVERAGE" -> "$average([" + String.join(", ", terms) + "])";
