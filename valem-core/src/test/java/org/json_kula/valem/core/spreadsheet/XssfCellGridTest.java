@@ -178,4 +178,41 @@ class XssfCellGridTest {
             assertThat(testResults.get(0).passed()).as("failures: %s", testResults.get(0).failures()).isTrue();
         }
     }
+
+    /** VLOOKUP against a real POI-evaluated side table, checked against POI's own VLOOKUP
+     *  evaluator (not just the hand-set "computed" values the unit tests use). */
+    @Test
+    void full_pipeline_compiles_vlookup_against_a_side_table_from_a_real_poi_workbook() throws Exception {
+        byte[] bytes;
+        try (XSSFWorkbook wb = new XSSFWorkbook()) {
+            XSSFSheet sheet = wb.createSheet();
+            Row header = sheet.createRow(0);
+            setCell(header, 0, "Category"); setCell(header, 1, "Rate");
+            setCell(header, 5, "A"); setCell(header, 6, 10);
+
+            // Row 2 (Excel) carries both the main table's data row AND the side table's 2nd row --
+            // different, non-overlapping columns on the same physical row.
+            Row r1 = sheet.createRow(1);
+            setCell(r1, 0, "B"); setCell(r1, 1, "=VLOOKUP(A2,$F$1:$G$2,2,FALSE)");
+            setCell(r1, 5, "B"); setCell(r1, 6, 20);
+
+            Row r2 = sheet.createRow(2);
+            setCell(r2, 0, "A"); setCell(r2, 1, "=VLOOKUP(A3,$F$1:$G$2,2,FALSE)");
+
+            bytes = toBytes(wb);
+        }
+
+        try (XSSFWorkbook wb = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
+            XssfCellGrid grid = new XssfCellGrid(wb);
+            SpreadsheetCompiler.CompileResult result = SpreadsheetCompiler.compile(
+                    grid, "poi-built-vlookup", new com.fasterxml.jackson.databind.ObjectMapper());
+
+            assertThat(result.rejectedColumns()).isEmpty();
+            assertThat(result.spec().library()).isNotNull();
+            java.util.List<org.json_kula.valem.core.engine.TestCaseRunner.TestResult> testResults =
+                    org.json_kula.valem.core.engine.TestCaseRunner.run(result.spec(), result.spec().tests());
+            assertThat(testResults).hasSize(1);
+            assertThat(testResults.get(0).passed()).as("failures: %s", testResults.get(0).failures()).isTrue();
+        }
+    }
 }

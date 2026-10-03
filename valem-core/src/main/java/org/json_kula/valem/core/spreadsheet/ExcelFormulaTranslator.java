@@ -20,8 +20,10 @@ import java.util.Set;
 
 import static org.json_kula.valem.core.spreadsheet.UnsupportedFormulaException.Reason.CROSS_ROW_REFERENCE;
 import static org.json_kula.valem.core.spreadsheet.UnsupportedFormulaException.Reason.DEPENDS_ON_REJECTED_COLUMN;
+import static org.json_kula.valem.core.spreadsheet.UnsupportedFormulaException.Reason.LOOKUP_TABLE_CONTAINS_FORMULA;
 import static org.json_kula.valem.core.spreadsheet.UnsupportedFormulaException.Reason.UNRESOLVED_REFERENCE;
 import static org.json_kula.valem.core.spreadsheet.UnsupportedFormulaException.Reason.UNSUPPORTED_FUNCTION;
+import static org.json_kula.valem.core.spreadsheet.UnsupportedFormulaException.Reason.UNSUPPORTED_LOOKUP_MODE;
 import static org.json_kula.valem.core.spreadsheet.UnsupportedFormulaException.Reason.UNSUPPORTED_RANGE_SHAPE;
 
 /**
@@ -56,7 +58,12 @@ public final class ExcelFormulaTranslator {
      *  fall back to the same {@link #toFieldName} default). */
     public record ColumnResult(int col, String header, String fieldName, ColumnOutcome outcome) {}
 
-    public record TranslationResult(List<ColumnResult> columns, Map<String, Double> constants) {}
+    /** {@code lookupTables} are VLOOKUP's {@code table_array} blocks, read verbatim from the grid and
+     *  keyed by the library-export name {@code emitVlookup} assigned them (§5.2a); each row is the
+     *  table_array's own columns left to right. Assembled into the spec's {@code library} by
+     *  {@code SpreadsheetCompiler}, not here — this class stays free of any JSON-building concern. */
+    public record TranslationResult(List<ColumnResult> columns, Map<String, Double> constants,
+            Map<String, List<List<CellValue>>> lookupTables) {}
 
     private static final Map<String, String> SIMPLE_FUNCS = Map.of(
             "ABS", "$abs", "ROUND", "$round",
@@ -71,6 +78,8 @@ public final class ExcelFormulaTranslator {
      *  needed so a formula column can infer its own result type even when it references a literal
      *  column to its RIGHT (not yet reached by the left-to-right translation loop). */
     private final Map<Integer, ColumnClassification.LiteralKind> literalKindByCol = new LinkedHashMap<>();
+    private final Map<String, List<List<CellValue>>> lookupTables = new LinkedHashMap<>();
+    private final Map<String, String> lookupTableKeyToName = new LinkedHashMap<>();
 
     public ExcelFormulaTranslator(CellGrid grid, TableDetector.TableBounds bounds) {
         this.grid = grid;
@@ -117,7 +126,7 @@ public final class ExcelFormulaTranslator {
             results.add(new ColumnResult(col, bounds.headers().get(col - firstCol), fieldNamesByCol.get(col),
                     outcomes.get(col)));
         }
-        return new TranslationResult(results, constants);
+        return new TranslationResult(results, constants, lookupTables);
     }
 
     private void cascadeRejections(Map<Integer, ColumnOutcome> outcomes) {
@@ -275,8 +284,103 @@ public final class ExcelFormulaTranslator {
         if (isAggregateFunc(name)) {
             return emitRowLocalAggregate(name, call, templateRow, deps);
         }
+        if ("VLOOKUP".equals(name)) {
+            return emitVlookup(call, templateRow, deps);
+        }
         throw new UnsupportedFormulaException(UNSUPPORTED_FUNCTION,
                 "Function '" + name + "' is not supported in v1");
+    }
+
+    /**
+     * {@code VLOOKUP(lookup_value, table_array, col_index_num, range_lookup)} — exact match only
+     * (§5.2a). {@code table_array} must be a fully {@code $}-locked range: a small reference table
+     * sitting elsewhere on the sheet, read verbatim and embedded in the spec's {@code library} as a
+     * named static export (measured empirically to resolve correctly from inside a {@code
+     * $.items[*].x} derivation, the same discipline as the {@code $$} probe for whole-column
+     * aggregates — see excel-to-spec-v1-design.md §16). Approximate match (the 4th argument omitted
+     * or {@code TRUE}) is rejected by name: it requires the lookup column to be sorted ascending,
+     * which cannot be verified at compile time, and guessing would risk a silently wrong result —
+     * exactly what this feature's whole design exists to avoid.
+     */
+    private String emitVlookup(FuncCall call, int templateRow, Set<Integer> deps) {
+        if (call.args().size() != 4) {
+            throw new UnsupportedFormulaException(UNSUPPORTED_FUNCTION,
+                    "VLOOKUP() must be called with all 4 arguments in v1, including an explicit "
+                    + "FALSE for exact match");
+        }
+        ExcelExpr lookupValueExpr = call.args().get(0);
+        ExcelExpr tableExpr = call.args().get(1);
+        ExcelExpr colIndexExpr = call.args().get(2);
+        ExcelExpr rangeLookupExpr = call.args().get(3);
+
+        if (!(rangeLookupExpr instanceof BoolLit exact) || exact.value()) {
+            throw new UnsupportedFormulaException(UNSUPPORTED_LOOKUP_MODE,
+                    "VLOOKUP()'s 4th argument must be a literal FALSE in v1 — approximate match "
+                    + "(TRUE or omitted) requires the lookup column to be sorted ascending, which "
+                    + "cannot be verified at compile time");
+        }
+        if (!(tableExpr instanceof RangeRef table) || !table.from().rowAbsolute() || !table.from().colAbsolute()
+                || !table.to().rowAbsolute() || !table.to().colAbsolute()) {
+            throw new UnsupportedFormulaException(UNSUPPORTED_RANGE_SHAPE,
+                    "VLOOKUP()'s table_array must be a fully $-locked range (e.g. $B$2:$D$10) in v1");
+        }
+        if (!(colIndexExpr instanceof NumberLit colLit) || colLit.value() != Math.rint(colLit.value())) {
+            throw new UnsupportedFormulaException(UNSUPPORTED_RANGE_SHAPE,
+                    "VLOOKUP()'s col_index_num must be a literal whole number in v1");
+        }
+
+        int fromCol = Math.min(table.from().col(), table.to().col());
+        int toCol = Math.max(table.from().col(), table.to().col());
+        int colIndex = (int) colLit.value();
+        int tableCols = toCol - fromCol + 1;
+        if (colIndex < 1 || colIndex > tableCols) {
+            throw new UnsupportedFormulaException(UNSUPPORTED_RANGE_SHAPE,
+                    "VLOOKUP()'s col_index_num " + colIndex + " is outside table_array's " + tableCols
+                    + " column(s)");
+        }
+
+        String tableName = resolveLookupTable(table, fromCol, toCol);
+        String lookupValueJsonata = emit(lookupValueExpr, templateRow, deps);
+        return "($" + tableName + "[c1 = (" + lookupValueJsonata + ")].c" + colIndex + ")[0]";
+    }
+
+    /** Reads {@code table}'s cells verbatim (deduped by its absolute coordinates, same discipline as
+     *  {@code resolveConstant}), rejecting a formula cell inside it by name rather than guessing what
+     *  it would evaluate to — a lookup table embedded as a static library export must itself be
+     *  static. Row objects are keyed {@code c1, c2, …} (1-based, matching VLOOKUP's own
+     *  {@code col_index_num} numbering directly); {@code c1} is always the lookup key column. */
+    private String resolveLookupTable(RangeRef table, int fromCol, int toCol) {
+        int fromRow = Math.min(table.from().row(), table.to().row());
+        int toRow = Math.max(table.from().row(), table.to().row());
+        String key = fromRow + ":" + fromCol + ":" + toRow + ":" + toCol;
+        String existing = lookupTableKeyToName.get(key);
+        if (existing != null) return existing;
+
+        List<List<CellValue>> rows = new java.util.ArrayList<>();
+        for (int r = fromRow; r <= toRow; r++) {
+            List<CellValue> rowValues = new java.util.ArrayList<>();
+            for (int c = fromCol; c <= toCol; c++) {
+                CellValue v = grid.valueAt(r, c);
+                if (v instanceof CellValue.Formula) {
+                    throw new UnsupportedFormulaException(LOOKUP_TABLE_CONTAINS_FORMULA,
+                            "VLOOKUP()'s table_array contains a formula cell at row " + (r + 1)
+                            + ", column " + TableDetector.columnLetter(c)
+                            + " — only a literal lookup table is supported in v1");
+                }
+                rowValues.add(v);
+            }
+            rows.add(rowValues);
+        }
+
+        String name = "lookup" + TableDetector.columnLetter(fromCol) + (fromRow + 1);
+        String unique = name;
+        int suffix = 2;
+        while (lookupTables.containsKey(unique)) {
+            unique = name + suffix++;
+        }
+        lookupTables.put(unique, rows);
+        lookupTableKeyToName.put(key, unique);
+        return unique;
     }
 
     /** {@code LEFT(text[,n])} / {@code RIGHT(text[,n])} — Excel defaults {@code n} to 1 when omitted. */
@@ -469,7 +573,25 @@ public final class ExcelFormulaTranslator {
             case "AND", "OR", "NOT" -> ColumnClassification.LiteralKind.BOOLEAN;
             case "CONCATENATE", "LEFT", "RIGHT", "MID", "UPPER", "LOWER", "TRIM" ->
                     ColumnClassification.LiteralKind.STRING;
+            // By the time this runs, emit() has already validated this VLOOKUP call successfully
+            // (inferResultType is only ever called after emit() on the same AST, in
+            // translateFormulaColumn) -- safe to re-read the same table_array/col_index shape
+            // without re-validating it.
+            case "VLOOKUP" -> inferVlookupResultType(call);
             default -> ColumnClassification.LiteralKind.NUMBER; // ROUND/ABS/LEN/SUM/AVERAGE/MIN/MAX/COUNT
+        };
+    }
+
+    private ColumnClassification.LiteralKind inferVlookupResultType(FuncCall call) {
+        RangeRef table = (RangeRef) call.args().get(1);
+        int colIndex = (int) ((NumberLit) call.args().get(2)).value();
+        int fromCol = Math.min(table.from().col(), table.to().col());
+        int fromRow = Math.min(table.from().row(), table.to().row());
+        CellValue sample = grid.valueAt(fromRow, fromCol + colIndex - 1);
+        return switch (sample) {
+            case CellValue.StringValue ignored -> ColumnClassification.LiteralKind.STRING;
+            case CellValue.BooleanValue ignored -> ColumnClassification.LiteralKind.BOOLEAN;
+            default -> ColumnClassification.LiteralKind.NUMBER;
         };
     }
 

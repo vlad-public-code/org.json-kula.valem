@@ -199,6 +199,30 @@ class SpreadsheetCompilerTest {
     }
 
     @Test
+    void a_vlookup_against_a_side_table_passes_the_real_engine() {
+        InMemoryCellGrid grid = new InMemoryCellGrid()
+                .str(0, 0, "Category").str(0, 1, "Rate")
+                .str(0, 5, "A").num(0, 6, 10)
+                .str(1, 5, "B").num(1, 6, 20)
+                .str(1, 0, "B").formula(1, 1, "VLOOKUP(A2,$F$1:$G$2,2,FALSE)", 20)
+                .str(2, 0, "A").formula(2, 1, "VLOOKUP(A3,$F$1:$G$2,2,FALSE)", 10);
+
+        CompileResult result = SpreadsheetCompiler.compile(grid, "vlookup-rates", MAPPER);
+
+        assertThat(result.rejectedColumns()).isEmpty();
+        assertThat(result.spec().library()).isNotNull();
+        assertThat(result.spec().library().ownLayer().define()).contains("$lookupF1").contains("\"lookupF1\"");
+
+        ModelSpecValidator.ValidationResult validation = ModelSpecValidator.validate(result.spec());
+        assertThat(validation.isValid()).as("validation errors: %s", validation.errors()).isTrue();
+
+        List<TestCaseRunner.TestResult> testResults = TestCaseRunner.run(result.spec(), result.spec().tests());
+        assertThat(testResults).hasSize(1);
+        assertThat(testResults.get(0).passed())
+                .as("failures: %s", testResults.get(0).failures()).isTrue();
+    }
+
+    @Test
     void no_constraints_are_invented() {
         InMemoryCellGrid grid = new InMemoryCellGrid()
                 .str(0, 0, "Quantity")

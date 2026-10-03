@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.json_kula.valem.core.model.DefaultValueSpec;
 import org.json_kula.valem.core.model.DerivationSpec;
+import org.json_kula.valem.core.model.LibrarySpec;
 import org.json_kula.valem.core.model.ModelSpec;
 import org.json_kula.valem.core.model.TestCase;
 import org.json_kula.valem.core.spreadsheet.ExcelFormulaTranslator.ColumnOutcome;
@@ -79,6 +80,7 @@ public final class SpreadsheetCompiler {
             derivations.add(a.derivation());
         }
         addAggregateExpectations(grid, aggregates, tests);
+        LibrarySpec library = buildLibrary(translation.lookupTables(), nf);
 
         ModelSpec spec = new ModelSpec(
                 modelId, "1.0.0", schema,
@@ -90,7 +92,7 @@ public final class SpreadsheetCompiler {
                 toConstantsMap(translation.constants(), mapper),
                 null,                    // viewDefinition
                 List.of(),               // effects
-                null, List.of(), null);  // template, lineage, library
+                null, List.of(), library);  // template, lineage, library
 
         return new CompileResult(spec, rejected);
     }
@@ -200,6 +202,42 @@ public final class SpreadsheetCompiler {
             case CellValue.Formula f -> literalJson(nf, f.computedValue());
             case CellValue.Empty ignored -> nf.nullNode();
         };
+    }
+
+    // ── VLOOKUP lookup tables → library (§5.2a) ────────────────────────────────
+
+    /**
+     * Assembles every VLOOKUP {@code table_array} the translator found into a single {@code library}
+     * definition: {@code $<name> := [{"c1":...,"c2":...}, ...]} per table, exported by name. A plain
+     * JSON array/object literal is also valid JSONata literal syntax, so each table serializes via
+     * Jackson directly — no separate JSONata-literal renderer needed (string values still need the
+     * usual JSON escaping, which Jackson already does correctly).
+     */
+    private static LibrarySpec buildLibrary(Map<String, List<List<CellValue>>> lookupTables, JsonNodeFactory nf) {
+        if (lookupTables.isEmpty()) return null;
+
+        StringBuilder define = new StringBuilder("( ");
+        List<String> names = new ArrayList<>();
+        for (var entry : lookupTables.entrySet()) {
+            String name = entry.getKey();
+            names.add(name);
+            ArrayNode tableArray = nf.arrayNode();
+            for (List<CellValue> row : entry.getValue()) {
+                ObjectNode rowObj = nf.objectNode();
+                for (int i = 0; i < row.size(); i++) {
+                    rowObj.set("c" + (i + 1), literalJson(nf, row.get(i)));
+                }
+                tableArray.add(rowObj);
+            }
+            define.append('$').append(name).append(" := ").append(tableArray).append("; ");
+        }
+        define.append('[');
+        for (int i = 0; i < names.size(); i++) {
+            if (i > 0) define.append(", ");
+            define.append('"').append(names.get(i)).append('"');
+        }
+        define.append("] )");
+        return LibrarySpec.ofDefinition(define.toString());
     }
 
     // ── Whole-column aggregate summary cells (§5.5's second half, scoped down) ─

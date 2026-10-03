@@ -21,7 +21,9 @@ public class UnsupportedFormulaException extends RuntimeException {
         CROSS_ROW_REFERENCE,
         UNRESOLVED_REFERENCE,
         NAMED_RANGE_UNSUPPORTED,
-        DEPENDS_ON_REJECTED_COLUMN
+        DEPENDS_ON_REJECTED_COLUMN,
+        UNSUPPORTED_LOOKUP_MODE,
+        LOOKUP_TABLE_CONTAINS_FORMULA
     }
 
     private final Reason reason;

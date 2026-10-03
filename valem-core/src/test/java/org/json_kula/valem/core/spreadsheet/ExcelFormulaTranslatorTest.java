@@ -335,4 +335,119 @@ class ExcelFormulaTranslatorTest {
         assertThat(((ColumnOutcome.PerItemDerivation) outcomeOf(r, "IsPositive")).resultType())
                 .isEqualTo(ColumnClassification.LiteralKind.BOOLEAN);
     }
+
+    // ── VLOOKUP ─────────────────────────────────────────────────────────────
+
+    /** A small $-locked side lookup table at F1:G3 (well clear of the main table's columns, which
+     *  stay within A:C in every test below, leaving D:E as an empty gap so TableDetector's header
+     *  scan can never run into it): F1="A",G1=10 / F2="B",G2=20 / F3="C",G3=30. */
+    private static InMemoryCellGrid gridWithSideLookupTable() {
+        return new InMemoryCellGrid()
+                .str(0, 0, "Category").str(0, 1, "Rate")
+                .str(0, 5, "A").num(0, 6, 10)
+                .str(1, 5, "B").num(1, 6, 20)
+                .str(2, 5, "C").num(2, 6, 30);
+    }
+
+    @Test
+    void vlookup_against_a_dollar_locked_side_table_translates_and_reads_the_table_verbatim() {
+        InMemoryCellGrid grid = gridWithSideLookupTable()
+                .str(1, 0, "B").formula(1, 1, "VLOOKUP(A2,$F$1:$G$3,2,FALSE)")
+                .str(2, 0, "A").formula(2, 1, "VLOOKUP(A3,$F$1:$G$3,2,FALSE)");
+
+        TranslationResult r = translate(grid);
+        ColumnOutcome.PerItemDerivation d = (ColumnOutcome.PerItemDerivation) outcomeOf(r, "Rate");
+        assertThat(d.jsonataExpr()).isEqualTo("($lookupF1[c1 = ($parent.category)].c2)[0]");
+        assertThat(d.resultType()).isEqualTo(ColumnClassification.LiteralKind.NUMBER);
+
+        assertThat(r.lookupTables()).containsOnlyKeys("lookupF1");
+        List<List<CellValue>> table = r.lookupTables().get("lookupF1");
+        assertThat(table).hasSize(3);
+        assertThat(table.get(0)).containsExactly(
+                new CellValue.StringValue("A"), new CellValue.NumberValue(10));
+        assertThat(table.get(1)).containsExactly(
+                new CellValue.StringValue("B"), new CellValue.NumberValue(20));
+    }
+
+    @Test
+    void two_vlookups_against_the_same_table_array_share_one_library_table() {
+        InMemoryCellGrid grid = gridWithSideLookupTable()
+                .str(0, 2, "Rate2")
+                .str(1, 0, "B").formula(1, 1, "VLOOKUP(A2,$F$1:$G$3,2,FALSE)").formula(1, 2, "VLOOKUP(A2,$F$1:$G$3,2,FALSE)")
+                .str(2, 0, "A").formula(2, 1, "VLOOKUP(A3,$F$1:$G$3,2,FALSE)").formula(2, 2, "VLOOKUP(A3,$F$1:$G$3,2,FALSE)");
+
+        TranslationResult r = translate(grid);
+        assertThat(r.lookupTables()).hasSize(1);
+        assertThat(((ColumnOutcome.PerItemDerivation) outcomeOf(r, "Rate")).jsonataExpr())
+                .isEqualTo(((ColumnOutcome.PerItemDerivation) outcomeOf(r, "Rate2")).jsonataExpr());
+    }
+
+    @Test
+    void vlookup_with_approximate_match_is_rejected_by_name() {
+        InMemoryCellGrid grid = gridWithSideLookupTable()
+                .str(1, 0, "B").formula(1, 1, "VLOOKUP(A2,$F$1:$G$3,2,TRUE)")
+                .str(2, 0, "A").formula(2, 1, "VLOOKUP(A3,$F$1:$G$3,2,TRUE)");
+
+        TranslationResult r = translate(grid);
+        ColumnOutcome outcome = outcomeOf(r, "Rate");
+        assertThat(outcome).isInstanceOf(ColumnOutcome.Rejected.class);
+        assertThat(((ColumnOutcome.Rejected) outcome).reason())
+                .isEqualTo(UnsupportedFormulaException.Reason.UNSUPPORTED_LOOKUP_MODE);
+    }
+
+    @Test
+    void vlookup_with_a_non_dollar_locked_table_array_is_rejected_by_name() {
+        // A single data row, deliberately: with two rows a non-$-locked range's row offsets would
+        // differ row to row and get caught earlier by the uniform-shape check (NON_UNIFORM_FORMULA)
+        // rather than exercising this specific VLOOKUP validation.
+        InMemoryCellGrid grid = gridWithSideLookupTable()
+                .str(1, 0, "B").formula(1, 1, "VLOOKUP(A2,F1:G3,2,FALSE)");
+
+        TranslationResult r = translate(grid);
+        ColumnOutcome outcome = outcomeOf(r, "Rate");
+        assertThat(outcome).isInstanceOf(ColumnOutcome.Rejected.class);
+        assertThat(((ColumnOutcome.Rejected) outcome).reason())
+                .isEqualTo(UnsupportedFormulaException.Reason.UNSUPPORTED_RANGE_SHAPE);
+    }
+
+    @Test
+    void vlookup_with_an_out_of_range_col_index_is_rejected_by_name() {
+        InMemoryCellGrid grid = gridWithSideLookupTable()
+                .str(1, 0, "B").formula(1, 1, "VLOOKUP(A2,$F$1:$G$3,3,FALSE)")
+                .str(2, 0, "A").formula(2, 1, "VLOOKUP(A3,$F$1:$G$3,3,FALSE)");
+
+        TranslationResult r = translate(grid);
+        ColumnOutcome outcome = outcomeOf(r, "Rate");
+        assertThat(outcome).isInstanceOf(ColumnOutcome.Rejected.class);
+        assertThat(((ColumnOutcome.Rejected) outcome).reason())
+                .isEqualTo(UnsupportedFormulaException.Reason.UNSUPPORTED_RANGE_SHAPE);
+    }
+
+    @Test
+    void vlookup_against_a_table_containing_a_formula_cell_is_rejected_by_name() {
+        InMemoryCellGrid grid = gridWithSideLookupTable()
+                .formula(0, 6, "10+0") // F1:G3's G1 is now a formula, not a literal
+                .str(1, 0, "B").formula(1, 1, "VLOOKUP(A2,$F$1:$G$3,2,FALSE)")
+                .str(2, 0, "A").formula(2, 1, "VLOOKUP(A3,$F$1:$G$3,2,FALSE)");
+
+        TranslationResult r = translate(grid);
+        ColumnOutcome outcome = outcomeOf(r, "Rate");
+        assertThat(outcome).isInstanceOf(ColumnOutcome.Rejected.class);
+        assertThat(((ColumnOutcome.Rejected) outcome).reason())
+                .isEqualTo(UnsupportedFormulaException.Reason.LOOKUP_TABLE_CONTAINS_FORMULA);
+    }
+
+    @Test
+    void vlookup_returning_a_string_column_infers_string_result_type() {
+        InMemoryCellGrid grid = new InMemoryCellGrid()
+                .str(0, 0, "Code").str(0, 1, "Label")
+                .str(0, 5, "A").str(0, 6, "Alpha")
+                .str(1, 5, "B").str(1, 6, "Bravo")
+                .str(1, 0, "B").formula(1, 1, "VLOOKUP(A2,$F$1:$G$2,2,FALSE)")
+                .str(2, 0, "A").formula(2, 1, "VLOOKUP(A3,$F$1:$G$2,2,FALSE)");
+
+        TranslationResult r = translate(grid);
+        assertThat(((ColumnOutcome.PerItemDerivation) outcomeOf(r, "Label")).resultType())
+                .isEqualTo(ColumnClassification.LiteralKind.STRING);
+    }
 }
