@@ -45,7 +45,10 @@ public final class ExcelFormulaTranslator {
         record Rejected(UnsupportedFormulaException.Reason reason, String detail) implements ColumnOutcome {}
     }
 
-    public record ColumnResult(String header, String fieldName, ColumnOutcome outcome) {}
+    /** {@code col} is the absolute 0-based column index — never re-derived by header-text lookup,
+     *  which would silently resolve to the WRONG column whenever two columns share a header (or both
+     *  fall back to the same {@link #toFieldName} default). */
+    public record ColumnResult(int col, String header, String fieldName, ColumnOutcome outcome) {}
 
     public record TranslationResult(List<ColumnResult> columns, Map<String, Double> constants) {}
 
@@ -61,8 +64,19 @@ public final class ExcelFormulaTranslator {
     public ExcelFormulaTranslator(CellGrid grid, TableDetector.TableBounds bounds) {
         this.grid = grid;
         this.bounds = bounds;
+        // Two columns can legitimately reduce to the same field name (two headers both literally
+        // "Total", or two different headers that both collapse under toFieldName, e.g. "Unit-Price"
+        // and "Unit Price"). Without disambiguation, one column's schema property/derivation would
+        // silently overwrite the other's — same dedup discipline as resolveConstant's $const names.
+        Set<String> usedFieldNames = new java.util.HashSet<>();
         for (int col = bounds.firstCol(); col <= bounds.lastCol(); col++) {
-            fieldNamesByCol.put(col, toFieldName(bounds.headers().get(col - bounds.firstCol())));
+            String name = toFieldName(bounds.headers().get(col - bounds.firstCol()));
+            String unique = name;
+            int suffix = 2;
+            while (!usedFieldNames.add(unique)) {
+                unique = name + suffix++;
+            }
+            fieldNamesByCol.put(col, unique);
         }
     }
 
@@ -83,7 +97,7 @@ public final class ExcelFormulaTranslator {
 
         List<ColumnResult> results = new java.util.ArrayList<>();
         for (int col = bounds.firstCol(); col <= bounds.lastCol(); col++) {
-            results.add(new ColumnResult(bounds.headers().get(col - firstCol), fieldNamesByCol.get(col),
+            results.add(new ColumnResult(col, bounds.headers().get(col - firstCol), fieldNamesByCol.get(col),
                     outcomes.get(col)));
         }
         return new TranslationResult(results, constants);
@@ -297,7 +311,14 @@ public final class ExcelFormulaTranslator {
         return String.valueOf(v);
     }
 
-    /** Header text -> lowerCamelCase field name, e.g. "Unit Price" -> "unitPrice". */
+    /**
+     * Header text -> lowerCamelCase field name, e.g. "Unit Price" -> "unitPrice".
+     *
+     * <p>Never returns a name starting with a digit: the result is spliced unquoted into JSONata
+     * paths ({@code $parent.<field>}, {@code $.items[*].<field>}), where a leading digit is a parse
+     * error — a header like "2024 Revenue" or "1st Payment" would otherwise compile to a syntax
+     * error far from this code instead of the named rejection this feature always aims for.
+     */
     static String toFieldName(String header) {
         String[] words = header.trim().split("[^A-Za-z0-9]+");
         StringBuilder sb = new StringBuilder();
@@ -310,6 +331,8 @@ public final class ExcelFormulaTranslator {
                 sb.append(w.substring(0, 1).toUpperCase(Locale.ROOT)).append(w.substring(1));
             }
         }
-        return sb.isEmpty() ? "field" : sb.toString();
+        if (sb.isEmpty()) return "field";
+        if (Character.isDigit(sb.charAt(0))) sb.insert(0, 'f');
+        return sb.toString();
     }
 }

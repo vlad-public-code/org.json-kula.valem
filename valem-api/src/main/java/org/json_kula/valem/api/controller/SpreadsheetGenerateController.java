@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
@@ -54,9 +53,6 @@ public class SpreadsheetGenerateController {
             log.warn("Spreadsheet compile: nothing translatable ({}): {}", e.reason(), e.getMessage());
             return ResponseEntity.unprocessableEntity().body(Map.of(
                     "error", e.getMessage(), "reason", e.reason().name()));
-        } catch (IOException e) {
-            log.error("Spreadsheet compile: could not read upload", e);
-            return ResponseEntity.status(500).body(Map.of("error", "Could not read uploaded file"));
         }
 
         log.info("Spreadsheet compile succeeded: modelId={} rejectedColumns={}",

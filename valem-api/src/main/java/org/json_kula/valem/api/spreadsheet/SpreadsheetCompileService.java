@@ -10,7 +10,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.util.Locale;
 
@@ -46,7 +45,14 @@ public class SpreadsheetCompileService {
         this.mapper = mapper;
     }
 
-    public SpreadsheetCompiler.CompileResult compile(MultipartFile file, String modelId) throws IOException {
+    /**
+     * Never actually throws a checked {@code IOException}: the try-with-resources below catches
+     * everything (including any read/parse failure from opening the workbook) and rewraps it as a
+     * named {@link SpreadsheetExtractionException} instead — a corrupt or unreadable upload is a
+     * client error (400), not a server error, so there is no distinct "500" case for this method's
+     * caller to handle.
+     */
+    public SpreadsheetCompiler.CompileResult compile(MultipartFile file, String modelId) {
         if (file == null || file.isEmpty()) {
             throw new SpreadsheetExtractionException(EMPTY_WORKBOOK, "Uploaded file is empty");
         }

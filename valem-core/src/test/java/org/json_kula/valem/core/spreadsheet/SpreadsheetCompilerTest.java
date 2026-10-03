@@ -108,6 +108,55 @@ class SpreadsheetCompilerTest {
     }
 
     @Test
+    void duplicate_header_columns_keep_their_own_distinct_data_and_field_names() {
+        // Two columns both named "Amount" -- the bug this guards against: resolving a column's
+        // physical index by header-text lookup always finds the FIRST match, so the second
+        // "Amount" column would silently read/seed/validate against the first one's cell data, and
+        // its schema property would silently overwrite the first's under the same field name.
+        InMemoryCellGrid grid = new InMemoryCellGrid()
+                .str(0, 0, "Amount").str(0, 1, "Amount")
+                .num(1, 0, 100).num(1, 1, 999)
+                .num(2, 0, 200).num(2, 1, 888);
+
+        CompileResult result = SpreadsheetCompiler.compile(grid, "dup-headers", MAPPER);
+
+        assertThat(result.rejectedColumns()).isEmpty();
+        // Each column's OWN values must appear, under two DIFFERENT field names.
+        String seedExpr = result.spec().defaultValues().get(0).expr();
+        assertThat(seedExpr).contains("100.0").contains("999.0").contains("200.0").contains("888.0");
+        JsonNode itemProps = MAPPER.valueToTree(result.spec().schema())
+                .path("properties").path("items").path("items").path("properties");
+        assertThat(itemProps.has("amount")).isTrue();
+        assertThat(itemProps.has("amount2")).isTrue();
+    }
+
+    @Test
+    void a_summary_aggregate_over_only_literal_columns_still_gets_a_self_test() {
+        // No per-item FORMULA column at all here -- only the bottom-row SUM makes this sheet
+        // interesting. buildSeedDefaultValue's `expect` stays empty (nothing per-item to assert),
+        // so `tests` must not be left empty just because there was nothing else to verify: the
+        // aggregate itself still needs checking against the sheet's own computed total.
+        // A second literal column is needed so the summary row (only "Amount" filled, "Label"
+        // blank) is distinguishable from a real data row -- a single-column table can't tell a
+        // trivially-"fully populated" totals row apart from one with actual data (table detection
+        // requires every table COLUMN populated to continue the data-row span, §4).
+        InMemoryCellGrid grid = new InMemoryCellGrid()
+                .str(0, 0, "Label").str(0, 1, "Amount")
+                .str(1, 0, "a").num(1, 1, 10)
+                .str(2, 0, "b").num(2, 1, 20)
+                .formula(3, 1, "SUM(B2:B3)", 30);
+
+        CompileResult result = SpreadsheetCompiler.compile(grid, "literal-plus-total", MAPPER);
+
+        assertThat(result.spec().tests()).hasSize(1);
+        List<TestCaseRunner.TestResult> testResults = TestCaseRunner.run(result.spec(), result.spec().tests());
+        assertThat(testResults).hasSize(1);
+        assertThat(testResults.get(0).passed())
+                .as("failures: %s", testResults.get(0).failures()).isTrue();
+        assertThat(result.spec().tests().get(0).expect()).containsKey("$.sumAmount");
+    }
+
+    @Test
     void no_constraints_are_invented() {
         InMemoryCellGrid grid = new InMemoryCellGrid()
                 .str(0, 0, "Quantity")

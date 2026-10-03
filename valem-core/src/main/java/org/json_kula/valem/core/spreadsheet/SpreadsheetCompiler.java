@@ -56,8 +56,15 @@ public final class SpreadsheetCompiler {
             }
         }
         if (surviving.isEmpty()) {
-            throw new UnsupportedFormulaException(UnsupportedFormulaException.Reason.MIXED_CONTENT,
-                    "No column could be translated");
+            // Surface the ACTUAL reason(s), not a generic placeholder — AC-2's "never a generic
+            // failure" applies to this aggregate failure path too, not just per-column rejections.
+            String detail = rejected.stream()
+                    .map(r -> r.header() + ": " + r.reason() + " (" + r.detail() + ")")
+                    .collect(java.util.stream.Collectors.joining("; "));
+            UnsupportedFormulaException.Reason reason = rejected.isEmpty()
+                    ? UnsupportedFormulaException.Reason.MALFORMED_FORMULA
+                    : rejected.get(0).reason();
+            throw new UnsupportedFormulaException(reason, "No column could be translated: " + detail);
         }
 
         JsonNodeFactory nf = mapper.getNodeFactory();
@@ -152,17 +159,15 @@ public final class SpreadsheetCompiler {
         for (int row = bounds.firstDataRow(); row <= bounds.lastDataRow(); row++, rowIndex++) {
             ObjectNode item = nf.objectNode();
             for (ColumnResult cr : surviving) {
-                int col = bounds.firstCol() + indexOfColumn(bounds, cr);
                 if (cr.outcome() instanceof ColumnOutcome.LiteralField) {
-                    item.set(cr.fieldName(), literalJson(nf, grid.valueAt(row, col)));
+                    item.set(cr.fieldName(), literalJson(nf, grid.valueAt(row, cr.col())));
                 }
                 // formula fields are derived -- not part of the seed, but DO belong in `expect`.
             }
             items.add(item);
             for (ColumnResult cr : surviving) {
                 if (cr.outcome() instanceof ColumnOutcome.PerItemDerivation) {
-                    int col = bounds.firstCol() + indexOfColumn(bounds, cr);
-                    CellValue.Formula f = (CellValue.Formula) grid.valueAt(row, col);
+                    CellValue.Formula f = (CellValue.Formula) grid.valueAt(row, cr.col());
                     expect.put("$.items[" + rowIndex + "]." + cr.fieldName(), literalJson(nf, f.computedValue()));
                 }
             }
@@ -182,14 +187,9 @@ public final class SpreadsheetCompiler {
             // model creation (TestCaseRunner.runOne calls initialize() before applying `given`), so
             // re-sending it as a mutation would be redundant -- and mutating path "$" directly isn't
             // the same operation as the container-creation seed, so it must not be relied on here.
-            testsOut.add(new TestCase(
-                    "Compiled formulas reproduce the source workbook's own computed values", Map.of(), expect));
+            testsOut.add(new TestCase(TEST_DESCRIPTION, Map.of(), expect));
         }
         return new DefaultValueSpec("$", seedJson, "Seeded from the uploaded workbook's own rows");
-    }
-
-    private static int indexOfColumn(TableBounds bounds, ColumnResult cr) {
-        return bounds.headers().indexOf(cr.header());
     }
 
     private static JsonNode literalJson(JsonNodeFactory nf, CellValue v) {
@@ -217,7 +217,7 @@ public final class SpreadsheetCompiler {
         ObjectNode rootProps = (ObjectNode) schema.get("properties");
 
         for (ColumnResult cr : surviving) {
-            int col = bounds.firstCol() + indexOfColumn(bounds, cr);
+            int col = cr.col();
             if (!(grid.valueAt(summaryRow, col) instanceof CellValue.Formula f)) continue;
 
             var parsed = ExcelFormulaParser.parseSafely(f.excelFormula());
@@ -258,18 +258,36 @@ public final class SpreadsheetCompiler {
         return out;
     }
 
+    private static final String TEST_DESCRIPTION =
+            "Compiled formulas reproduce the source workbook's own computed values";
+
+    /**
+     * Adds (or, when per-item expectations already exist, merges into) the self-test's {@code
+     * expect} for every detected whole-column aggregate. A sheet with ONLY literal columns plus a
+     * summary cell has no per-item derivations at all, so {@code tests} can legitimately still be
+     * empty here — that must not mean the aggregate ships unverified; a fresh test case is created
+     * for it instead of silently skipping (this feature's whole premise is exact-equality
+     * verification against the source workbook, vision doc AC-4 — an unverified aggregate would
+     * quietly break that guarantee for exactly the sheets simple enough to have no other formulas).
+     */
     private static void addAggregateExpectations(CellGrid grid, List<AggregateResult> aggregates,
             List<TestCase> tests) {
-        if (aggregates.isEmpty() || tests.isEmpty()) return;
-        Map<String, JsonNode> given = tests.get(0).given();
-        Map<String, JsonNode> expect = new LinkedHashMap<>(tests.get(0).expect());
+        if (aggregates.isEmpty()) return;
+        Map<String, JsonNode> given = tests.isEmpty() ? Map.of() : tests.get(0).given();
+        Map<String, JsonNode> expect = tests.isEmpty()
+                ? new LinkedHashMap<>() : new LinkedHashMap<>(tests.get(0).expect());
 
         for (AggregateResult a : aggregates) {
             if (grid.valueAt(a.summaryRow(), a.summaryCol()) instanceof CellValue.Formula f) {
                 expect.put(a.derivation().path(), literalJson(JsonNodeFactory.instance, f.computedValue()));
             }
         }
-        tests.set(0, new TestCase(tests.get(0).description(), given, expect));
+
+        if (tests.isEmpty()) {
+            tests.add(new TestCase(TEST_DESCRIPTION, given, expect));
+        } else {
+            tests.set(0, new TestCase(tests.get(0).description(), given, expect));
+        }
     }
 
     private static String capitalize(String s) {

@@ -99,6 +99,46 @@ class ConvertSpreadsheetToolTest {
     }
 
     @Test
+    void a_workbook_exceeding_the_column_cap_returns_a_structured_rejection_not_a_blunt_error() throws Exception {
+        byte[] bytes;
+        try (XSSFWorkbook wb = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            XSSFSheet sheet = wb.createSheet();
+            Row header = sheet.createRow(0);
+            Row data = sheet.createRow(1);
+            for (int c = 0; c <= 200; c++) { // 201 columns, one past the 200 cap
+                header.createCell(c).setCellValue("Col" + c);
+                data.createCell(c).setCellValue(c);
+            }
+            wb.write(out);
+            bytes = out.toByteArray();
+        }
+
+        var result = registry.call("convert_spreadsheet", args(bytes, "wide.xlsx", "m"));
+
+        // The tool call itself succeeds (it correctly determined and reported the rejection) --
+        // before the fix, this limit wasn't enforced at all, so the sheet would have proceeded
+        // straight into classification/translation instead.
+        assertThat(result.path("isError").asBoolean()).isFalse();
+        JsonNode payload = payload(result);
+        assertThat(payload.path("valid").asBoolean()).isFalse();
+        assertThat(payload.path("reason").asText()).isEqualTo("TOO_MANY_COLUMNS");
+    }
+
+    @Test
+    void a_corrupt_xlsx_upload_returns_a_structured_parse_failure_not_an_uncaught_exception() throws Exception {
+        // Filename ends in .xlsx (passes the extension pre-check) but the bytes are not a valid
+        // OOXML zip -- `new XSSFWorkbook(in)` throws, which before the fix was uncaught by this
+        // tool's handler and fell through to ToolRegistry's generic blunt error text instead of the
+        // documented {valid:false, reason, error} shape.
+        var result = registry.call("convert_spreadsheet", args("not a real xlsx".getBytes(), "bad.xlsx", "m"));
+
+        assertThat(result.path("isError").asBoolean()).isFalse();
+        JsonNode payload = payload(result);
+        assertThat(payload.path("valid").asBoolean()).isFalse();
+        assertThat(payload.path("reason").asText()).isEqualTo("PARSE_FAILED");
+    }
+
+    @Test
     void never_calls_an_llm() {
         // Structural proof: ToolRegistry here is built from ModelService/ModelRegistry/
         // InMemoryBlobStore only -- there is no LlmClient anywhere in its dependency graph for

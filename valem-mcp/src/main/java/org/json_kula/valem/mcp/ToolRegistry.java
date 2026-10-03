@@ -148,6 +148,7 @@ class ToolRegistry {
     // config plumbing, same posture as search_document's own hardcoded caps.
     private static final long CONVERT_SPREADSHEET_MAX_FILE_SIZE_BYTES = 26_214_400L; // 25 MB
     private static final int  CONVERT_SPREADSHEET_MAX_ROWS            = 10_000;
+    private static final int  CONVERT_SPREADSHEET_MAX_COLUMNS         = 200;
 
     /**
      * Creates {@code spec}, retrying with an appended numeric postfix ({@code -2}, {@code -3}, …) if the
@@ -771,9 +772,27 @@ class ToolRegistry {
                                 "Workbook has " + grid.rowCount() + " rows, exceeding the "
                                 + CONVERT_SPREADSHEET_MAX_ROWS + " row limit");
                     }
+                    if (grid.columnCount() > CONVERT_SPREADSHEET_MAX_COLUMNS) {
+                        throw new SpreadsheetExtractionException(
+                                SpreadsheetExtractionException.Reason.TOO_MANY_COLUMNS,
+                                "Workbook has " + grid.columnCount() + " columns, exceeding the "
+                                + CONVERT_SPREADSHEET_MAX_COLUMNS + " column limit");
+                    }
                     result = SpreadsheetCompiler.compile(grid, modelId, mapper);
-                } catch (UnsupportedFormulaException e) {
-                    return Map.of("valid", false, "reason", e.reason().name(), "error", e.getMessage());
+                } catch (UnsupportedFormulaException | SpreadsheetExtractionException e) {
+                    // Same structured {valid:false, reason, error} shape for both: a column-level
+                    // rejection (every column unsupported) and a workbook-level one (too big,
+                    // corrupt) are different causes but the same "nothing to compile" outcome.
+                    String reason = e instanceof UnsupportedFormulaException ufe
+                            ? ufe.reason().name() : ((SpreadsheetExtractionException) e).reason().name();
+                    return Map.of("valid", false, "reason", reason, "error", e.getMessage());
+                } catch (Exception e) {
+                    // A corrupt/non-OOXML upload throws from `new XSSFWorkbook(in)` itself, before
+                    // either named exception type above is reachable -- still a named, structured
+                    // failure, not a bare error string (vision doc AC-2).
+                    return Map.of("valid", false, "reason",
+                            SpreadsheetExtractionException.Reason.PARSE_FAILED.name(),
+                            "error", "Could not parse workbook: " + e.getMessage());
                 }
 
                 Map<String, Object> out = new LinkedHashMap<>();
