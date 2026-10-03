@@ -9,12 +9,16 @@ import java.util.List;
  * this set is a named parse-time rejection, never a best-effort guess.
  */
 public sealed interface ExcelExpr
-        permits ExcelExpr.NumberLit, ExcelExpr.BoolLit, ExcelExpr.CellRef, ExcelExpr.RangeRef,
-                ExcelExpr.BinaryOp, ExcelExpr.UnaryNeg, ExcelExpr.Percent, ExcelExpr.FuncCall {
+        permits ExcelExpr.NumberLit, ExcelExpr.BoolLit, ExcelExpr.StringLit, ExcelExpr.CellRef,
+                ExcelExpr.RangeRef, ExcelExpr.BinaryOp, ExcelExpr.UnaryNeg, ExcelExpr.Percent,
+                ExcelExpr.FuncCall {
 
     record NumberLit(double value) implements ExcelExpr {}
 
     record BoolLit(boolean value) implements ExcelExpr {}
+
+    /** A double-quoted Excel string literal, e.g. {@code "Yes"}. {@code ""} inside is a literal {@code "}. */
+    record StringLit(String value) implements ExcelExpr {}
 
     /**
      * A single-cell reference. {@code col}/{@code row} are 0-based (matching POI's own indexing),
@@ -25,7 +29,7 @@ public sealed interface ExcelExpr
     /** A range like {@code B2:D2} or {@code B2:B50} — always two corner {@link CellRef}s. */
     record RangeRef(CellRef from, CellRef to) implements ExcelExpr {}
 
-    /** {@code op} is one of {@code + - * / ^ = <> < > <= >=}. */
+    /** {@code op} is one of {@code + - * / ^ & = <> < > <= >=} ({@code &} is text concatenation). */
     record BinaryOp(String op, ExcelExpr left, ExcelExpr right) implements ExcelExpr {}
 
     record UnaryNeg(ExcelExpr operand) implements ExcelExpr {}

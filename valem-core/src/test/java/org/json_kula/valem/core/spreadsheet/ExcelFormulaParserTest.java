@@ -8,6 +8,7 @@ import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.FuncCall;
 import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.NumberLit;
 import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.Percent;
 import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.RangeRef;
+import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.StringLit;
 import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.UnaryNeg;
 import org.junit.jupiter.api.Test;
 
@@ -137,11 +138,36 @@ class ExcelFormulaParserTest {
     }
 
     @Test
-    void rejects_concatenation_operator_by_name() {
-        assertThatThrownBy(() -> ExcelFormulaParser.parse("A1&B1"))
+    void concatenation_operator_parses_as_a_binary_op() {
+        ExcelExpr parsed = ExcelFormulaParser.parse("A1&B1");
+        assertThat(parsed).isInstanceOf(BinaryOp.class);
+        assertThat(((BinaryOp) parsed).op()).isEqualTo("&");
+    }
+
+    @Test
+    void string_literal_parses_including_the_escaped_double_quote_convention() {
+        ExcelExpr parsed = ExcelFormulaParser.parse("\"Say \"\"hi\"\"\"");
+        assertThat(parsed).isInstanceOf(StringLit.class);
+        assertThat(((StringLit) parsed).value()).isEqualTo("Say \"hi\"");
+    }
+
+    @Test
+    void concatenation_binds_tighter_than_comparison_but_looser_than_addition() {
+        // A1&B1>1 means (A1&B1)>1, not A1&(B1>1) -- & sits below comparisons, above arithmetic.
+        ExcelExpr parsed = ExcelFormulaParser.parse("A1&B1>1");
+        assertThat(parsed).isInstanceOf(BinaryOp.class);
+        BinaryOp top = (BinaryOp) parsed;
+        assertThat(top.op()).isEqualTo(">");
+        assertThat(top.left()).isInstanceOf(BinaryOp.class);
+        assertThat(((BinaryOp) top.left()).op()).isEqualTo("&");
+    }
+
+    @Test
+    void rejects_unterminated_string_literal() {
+        assertThatThrownBy(() -> ExcelFormulaParser.parse("\"unterminated"))
                 .isInstanceOf(UnsupportedFormulaException.class)
                 .satisfies(e -> assertThat(((UnsupportedFormulaException) e).reason())
-                        .isEqualTo(UnsupportedFormulaException.Reason.UNSUPPORTED_OPERATOR));
+                        .isEqualTo(UnsupportedFormulaException.Reason.MALFORMED_FORMULA));
     }
 
     @Test

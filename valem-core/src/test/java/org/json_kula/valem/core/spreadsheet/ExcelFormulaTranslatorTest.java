@@ -108,8 +108,8 @@ class ExcelFormulaTranslatorTest {
     void a_formula_depending_on_a_rejected_column_is_cascaded_to_rejected() {
         InMemoryCellGrid grid = new InMemoryCellGrid()
                 .str(0, 0, "Bad").str(0, 1, "DependsOnBad")
-                .formula(1, 0, "A2&\"x\"").formula(1, 1, "A2*2")
-                .formula(2, 0, "A3&\"x\"").formula(2, 1, "A3*2");
+                .formula(1, 0, "VLOOKUP(A2,A1:B1,2)").formula(1, 1, "A2*2")
+                .formula(2, 0, "VLOOKUP(A3,A1:B1,2)").formula(2, 1, "A3*2");
 
         TranslationResult r = translate(grid);
         ColumnOutcome bad = outcomeOf(r, "Bad");
@@ -188,5 +188,115 @@ class ExcelFormulaTranslatorTest {
         ColumnOutcome outcome = outcomeOf(r, "Grown");
         assertThat(((ColumnOutcome.PerItemDerivation) outcome).jsonataExpr())
                 .isEqualTo("($parent.base * (1 + ((20)/100)))");
+    }
+
+    // ── Text functions, &, string literals, result-type inference ─────────────
+
+    @Test
+    void concatenation_operator_translates_to_jsonata_concat() {
+        InMemoryCellGrid grid = new InMemoryCellGrid()
+                .str(0, 0, "First").str(0, 1, "Last").str(0, 2, "Full")
+                .str(1, 0, "Ada").str(1, 1, "Lovelace").formula(1, 2, "A2&\" \"&B2")
+                .str(2, 0, "Alan").str(2, 1, "Turing").formula(2, 2, "A3&\" \"&B3");
+
+        TranslationResult r = translate(grid);
+        ColumnOutcome outcome = outcomeOf(r, "Full");
+        assertThat(outcome).isInstanceOf(ColumnOutcome.PerItemDerivation.class);
+        ColumnOutcome.PerItemDerivation d = (ColumnOutcome.PerItemDerivation) outcome;
+        assertThat(d.jsonataExpr()).isEqualTo("(($parent.first & \" \") & $parent.last)");
+        assertThat(d.resultType()).isEqualTo(ColumnClassification.LiteralKind.STRING);
+    }
+
+    @Test
+    void concatenate_function_chains_with_the_concat_operator() {
+        InMemoryCellGrid grid = new InMemoryCellGrid()
+                .str(0, 0, "First").str(0, 1, "Last").str(0, 2, "Full")
+                .str(1, 0, "Ada").str(1, 1, "Lovelace").formula(1, 2, "CONCATENATE(A2,\" \",B2)")
+                .str(2, 0, "Alan").str(2, 1, "Turing").formula(2, 2, "CONCATENATE(A3,\" \",B3)");
+
+        TranslationResult r = translate(grid);
+        ColumnOutcome.PerItemDerivation d = (ColumnOutcome.PerItemDerivation) outcomeOf(r, "Full");
+        assertThat(d.jsonataExpr()).isEqualTo("($parent.first & \" \" & $parent.last)");
+        assertThat(d.resultType()).isEqualTo(ColumnClassification.LiteralKind.STRING);
+    }
+
+    @Test
+    void left_right_mid_len_functions_translate_to_substring_and_length() {
+        InMemoryCellGrid grid = new InMemoryCellGrid()
+                .str(0, 0, "Code").str(0, 1, "Head").str(0, 2, "Tail").str(0, 3, "Mid").str(0, 4, "Size")
+                .str(1, 0, "ABCDEF").formula(1, 1, "LEFT(A2,2)").formula(1, 2, "RIGHT(A2,2)")
+                .formula(1, 3, "MID(A2,2,3)").formula(1, 4, "LEN(A2)")
+                .str(2, 0, "GHIJKL").formula(2, 1, "LEFT(A3,2)").formula(2, 2, "RIGHT(A3,2)")
+                .formula(2, 3, "MID(A3,2,3)").formula(2, 4, "LEN(A3)");
+
+        TranslationResult r = translate(grid);
+        assertThat(((ColumnOutcome.PerItemDerivation) outcomeOf(r, "Head")).jsonataExpr())
+                .isEqualTo("$substring($parent.code, 0, 2)");
+        assertThat(((ColumnOutcome.PerItemDerivation) outcomeOf(r, "Tail")).jsonataExpr())
+                .isEqualTo("$substring($parent.code, $length($parent.code) - (2), 2)");
+        assertThat(((ColumnOutcome.PerItemDerivation) outcomeOf(r, "Mid")).jsonataExpr())
+                .isEqualTo("$substring($parent.code, (2) - 1, 3)");
+        ColumnOutcome.PerItemDerivation size = (ColumnOutcome.PerItemDerivation) outcomeOf(r, "Size");
+        assertThat(size.jsonataExpr()).isEqualTo("$length($parent.code)");
+        assertThat(size.resultType()).isEqualTo(ColumnClassification.LiteralKind.NUMBER);
+    }
+
+    @Test
+    void upper_lower_trim_functions_translate() {
+        InMemoryCellGrid grid = new InMemoryCellGrid()
+                .str(0, 0, "Raw").str(0, 1, "Upper").str(0, 2, "Lower").str(0, 3, "Trimmed")
+                .str(1, 0, " Ada ").formula(1, 1, "UPPER(A2)").formula(1, 2, "LOWER(A2)").formula(1, 3, "TRIM(A2)")
+                .str(2, 0, " Alan ").formula(2, 1, "UPPER(A3)").formula(2, 2, "LOWER(A3)").formula(2, 3, "TRIM(A3)");
+
+        TranslationResult r = translate(grid);
+        assertThat(((ColumnOutcome.PerItemDerivation) outcomeOf(r, "Upper")).jsonataExpr())
+                .isEqualTo("$uppercase($parent.raw)");
+        assertThat(((ColumnOutcome.PerItemDerivation) outcomeOf(r, "Lower")).jsonataExpr())
+                .isEqualTo("$lowercase($parent.raw)");
+        assertThat(((ColumnOutcome.PerItemDerivation) outcomeOf(r, "Trimmed")).jsonataExpr())
+                .isEqualTo("$trim($parent.raw)");
+    }
+
+    @Test
+    void string_literal_emits_as_an_escaped_jsonata_string() {
+        InMemoryCellGrid grid = new InMemoryCellGrid()
+                .str(0, 0, "Qty").str(0, 1, "Label")
+                .num(1, 0, 2).formula(1, 1, "IF(A2>1,\"Say \"\"hi\"\"\",\"no\")")
+                .num(2, 0, 0).formula(2, 1, "IF(A3>1,\"Say \"\"hi\"\"\",\"no\")");
+
+        TranslationResult r = translate(grid);
+        ColumnOutcome.PerItemDerivation d = (ColumnOutcome.PerItemDerivation) outcomeOf(r, "Label");
+        assertThat(d.jsonataExpr()).isEqualTo("(($parent.qty > 1) ? \"Say \\\"hi\\\"\" : \"no\")");
+        assertThat(d.resultType()).isEqualTo(ColumnClassification.LiteralKind.STRING);
+    }
+
+    @Test
+    void an_if_branch_that_is_a_reference_into_a_literal_string_column_infers_string() {
+        // IF's own result type takes the type of its branch (here a bare CellRef), which in turn is
+        // resolved from the REFERENCED column's own literal kind (here Name, a literal string
+        // column) -- exercising the CellRef-into-literal-column leg of inferResultType, distinct
+        // from the always-STRING `&`/CONCATENATE/etc. operators tested above.
+        InMemoryCellGrid grid = new InMemoryCellGrid()
+                .str(0, 0, "Name").str(0, 1, "Qty").str(0, 2, "Label")
+                .str(1, 0, "Ada").num(1, 1, 2).formula(1, 2, "IF(B2>1,A2,A2)")
+                .str(2, 0, "Alan").num(2, 1, 0).formula(2, 2, "IF(B3>1,A3,A3)");
+
+        TranslationResult r = translate(grid);
+        ColumnOutcome.PerItemDerivation d = (ColumnOutcome.PerItemDerivation) outcomeOf(r, "Label");
+        assertThat(d.resultType()).isEqualTo(ColumnClassification.LiteralKind.STRING);
+    }
+
+    @Test
+    void numeric_and_boolean_formula_columns_still_infer_their_own_result_type() {
+        InMemoryCellGrid grid = new InMemoryCellGrid()
+                .str(0, 0, "Qty").str(0, 1, "Total").str(0, 2, "IsPositive")
+                .num(1, 0, 2).formula(1, 1, "A2*2").formula(1, 2, "A2>0")
+                .num(2, 0, 3).formula(2, 1, "A3*2").formula(2, 2, "A3>0");
+
+        TranslationResult r = translate(grid);
+        assertThat(((ColumnOutcome.PerItemDerivation) outcomeOf(r, "Total")).resultType())
+                .isEqualTo(ColumnClassification.LiteralKind.NUMBER);
+        assertThat(((ColumnOutcome.PerItemDerivation) outcomeOf(r, "IsPositive")).resultType())
+                .isEqualTo(ColumnClassification.LiteralKind.BOOLEAN);
     }
 }

@@ -52,8 +52,8 @@ class SpreadsheetCompilerTest {
     void a_rejected_column_does_not_fail_the_whole_compile() {
         InMemoryCellGrid grid = new InMemoryCellGrid()
                 .str(0, 0, "Quantity").str(0, 1, "Price").str(0, 2, "Total").str(0, 3, "Bad")
-                .num(1, 0, 2).num(1, 1, 10).formula(1, 2, "A2*B2", 20).formula(1, 3, "A2&\"x\"", 0)
-                .num(2, 0, 3).num(2, 1, 20).formula(2, 2, "A3*B3", 60).formula(2, 3, "A3&\"x\"", 0);
+                .num(1, 0, 2).num(1, 1, 10).formula(1, 2, "A2*B2", 20).formula(1, 3, "VLOOKUP(A2,A1:B1,2)", 0)
+                .num(2, 0, 3).num(2, 1, 20).formula(2, 2, "A3*B3", 60).formula(2, 3, "VLOOKUP(A3,A1:B1,2)", 0);
 
         CompileResult result = SpreadsheetCompiler.compile(grid, "partial", MAPPER);
 
@@ -70,8 +70,8 @@ class SpreadsheetCompilerTest {
     void every_column_rejected_throws_rather_than_producing_an_empty_spec() {
         InMemoryCellGrid grid = new InMemoryCellGrid()
                 .str(0, 0, "Bad")
-                .formula(1, 0, "A2&\"x\"", 0)
-                .formula(2, 0, "A3&\"x\"", 0);
+                .formula(1, 0, "VLOOKUP(A2,A1:B1,2)", 0)
+                .formula(2, 0, "VLOOKUP(A3,A1:B1,2)", 0);
 
         assertThatThrownBy(() -> SpreadsheetCompiler.compile(grid, "all-bad", MAPPER))
                 .isInstanceOf(UnsupportedFormulaException.class);
@@ -154,6 +154,29 @@ class SpreadsheetCompilerTest {
         assertThat(testResults.get(0).passed())
                 .as("failures: %s", testResults.get(0).failures()).isTrue();
         assertThat(result.spec().tests().get(0).expect()).containsKey("$.sumAmount");
+    }
+
+    @Test
+    void a_text_formula_column_is_typed_string_in_the_schema_and_passes_the_real_engine() {
+        InMemoryCellGrid grid = new InMemoryCellGrid()
+                .str(0, 0, "First").str(0, 1, "Last").str(0, 2, "FullName")
+                .str(1, 0, "Ada").str(1, 1, "Lovelace").formula(1, 2, "A2&\" \"&B2", "Ada Lovelace")
+                .str(2, 0, "Alan").str(2, 1, "Turing").formula(2, 2, "A3&\" \"&B3", "Alan Turing");
+
+        CompileResult result = SpreadsheetCompiler.compile(grid, "names", MAPPER);
+
+        assertThat(result.rejectedColumns()).isEmpty();
+        ModelSpecValidator.ValidationResult validation = ModelSpecValidator.validate(result.spec());
+        assertThat(validation.isValid()).as("validation errors: %s", validation.errors()).isTrue();
+
+        JsonNode itemProps = MAPPER.valueToTree(result.spec().schema())
+                .path("properties").path("items").path("items").path("properties");
+        assertThat(itemProps.path("fullName").path("type").asText()).isEqualTo("string");
+
+        List<TestCaseRunner.TestResult> testResults = TestCaseRunner.run(result.spec(), result.spec().tests());
+        assertThat(testResults).hasSize(1);
+        assertThat(testResults.get(0).passed())
+                .as("failures: %s", testResults.get(0).failures()).isTrue();
     }
 
     @Test

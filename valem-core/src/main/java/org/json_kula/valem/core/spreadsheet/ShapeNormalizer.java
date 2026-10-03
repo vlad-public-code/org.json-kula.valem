@@ -8,6 +8,7 @@ import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.FuncCall;
 import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.NumberLit;
 import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.Percent;
 import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.RangeRef;
+import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.StringLit;
 import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.UnaryNeg;
 
 /**
@@ -33,6 +34,7 @@ final class ShapeNormalizer {
             case FuncCall f -> new FuncCall(f.name(), f.args().stream().map(a -> normalize(a, formulaRow)).toList());
             case NumberLit n -> n;
             case BoolLit b -> b;
+            case StringLit s -> s;
         };
     }
 }

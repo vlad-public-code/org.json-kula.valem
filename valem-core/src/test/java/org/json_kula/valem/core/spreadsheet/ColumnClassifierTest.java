@@ -90,15 +90,15 @@ class ColumnClassifierTest {
     @Test
     void an_unparseable_formula_rejects_the_column_with_the_parser_reason() {
         InMemoryCellGrid grid = baseGrid()
-                .num(1, 0, 2).num(1, 1, 10).formula(1, 2, "A2&B2") // '&' unsupported
-                .num(2, 0, 3).num(2, 1, 20).formula(2, 2, "A3&B3");
+                .num(1, 0, 2).num(1, 1, 10).formula(1, 2, "Sheet2!B2") // cross-sheet ref unsupported
+                .num(2, 0, 3).num(2, 1, 20).formula(2, 2, "Sheet2!B3");
         TableBounds bounds = TableDetector.detect(grid);
 
         List<ColumnClassification> result = ColumnClassifier.classify(grid, bounds);
 
         assertThat(result.get(2)).isInstanceOf(Rejected.class);
         assertThat(((Rejected) result.get(2)).reason())
-                .isEqualTo(UnsupportedFormulaException.Reason.UNSUPPORTED_OPERATOR);
+                .isEqualTo(UnsupportedFormulaException.Reason.CROSS_SHEET_REFERENCE);
     }
 
     @Test

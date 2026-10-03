@@ -103,8 +103,8 @@ public final class SpreadsheetCompiler {
             ObjectNode prop = nf.objectNode();
             switch (cr.outcome()) {
                 case ColumnOutcome.LiteralField lit -> prop.put("type", jsonTypeOf(lit.kind()));
-                case ColumnOutcome.PerItemDerivation ignored -> {
-                    prop.put("type", "number");
+                case ColumnOutcome.PerItemDerivation d -> {
+                    prop.put("type", jsonTypeOf(d.resultType()));
                     prop.put("readOnly", true);
                 }
                 case ColumnOutcome.Rejected ignored -> { /* unreachable: not in `surviving` */ }

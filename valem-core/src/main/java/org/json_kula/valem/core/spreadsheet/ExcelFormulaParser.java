@@ -8,6 +8,7 @@ import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.FuncCall;
 import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.NumberLit;
 import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.Percent;
 import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.RangeRef;
+import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.StringLit;
 import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.UnaryNeg;
 
 import java.util.ArrayList;
@@ -16,7 +17,6 @@ import java.util.Locale;
 
 import static org.json_kula.valem.core.spreadsheet.UnsupportedFormulaException.Reason.CROSS_SHEET_REFERENCE;
 import static org.json_kula.valem.core.spreadsheet.UnsupportedFormulaException.Reason.MALFORMED_FORMULA;
-import static org.json_kula.valem.core.spreadsheet.UnsupportedFormulaException.Reason.UNSUPPORTED_OPERATOR;
 
 /**
  * A hand-rolled recursive-descent parser for the bounded Excel-formula grammar v1 supports
@@ -28,14 +28,17 @@ import static org.json_kula.valem.core.spreadsheet.UnsupportedFormulaException.R
  * <p>Grammar:
  * <pre>
  * expr        := comparison
- * comparison  := additive (('='|'&lt;&gt;'|'&lt;'|'&gt;'|'&lt;='|'&gt;=') additive)*
+ * comparison  := concat (('='|'&lt;&gt;'|'&lt;'|'&gt;'|'&lt;='|'&gt;=') concat)*
+ * concat      := additive ('&' additive)*
  * additive    := term (('+'|'-') term)*
  * term        := unary (('*'|'/') unary)*
  * unary       := '-' unary | power
  * power       := postfix ('^' unary)?
  * postfix     := primary '%'?
- * primary     := NUMBER | TRUE | FALSE | cellRef (':' cellRef)? | IDENT '(' (expr (',' expr)*)? ')' | '(' expr ')'
+ * primary     := NUMBER | STRING | TRUE | FALSE | cellRef (':' cellRef)?
+ *              | IDENT '(' (expr (',' expr)*)? ')' | '(' expr ')'
  * cellRef     := ('$')? COLLETTERS ('$')? ROWNUM
+ * STRING      := '"' ( any-char-except-quote | '""' )* '"'   -- '""' is a literal quote
  * </pre>
  */
 public final class ExcelFormulaParser {
@@ -64,13 +67,14 @@ public final class ExcelFormulaParser {
     // ── Tokens ──────────────────────────────────────────────────────────────
 
     private enum TokenType {
-        NUMBER, IDENT, CELLREF, SHEET_REF, SYMBOL, EOF
+        NUMBER, STRING, IDENT, CELLREF, SHEET_REF, SYMBOL, EOF
     }
 
     private record Token(TokenType type, String text, double number, int col, int row,
                          boolean colAbsolute, boolean rowAbsolute) {
         static Token symbol(String s) { return new Token(TokenType.SYMBOL, s, 0, 0, 0, false, false); }
         static Token ident(String s) { return new Token(TokenType.IDENT, s, 0, 0, 0, false, false); }
+        static Token string(String s) { return new Token(TokenType.STRING, s, 0, 0, 0, false, false); }
         static Token number(double v) { return new Token(TokenType.NUMBER, null, v, 0, 0, false, false); }
         static Token cellRef(int col, int row, boolean colAbs, boolean rowAbs) {
             return new Token(TokenType.CELLREF, null, 0, col, row, colAbs, rowAbs);
@@ -98,9 +102,30 @@ public final class ExcelFormulaParser {
                         "Cross-sheet reference is not supported in v1: '" + formula + "'");
             }
 
-            if (c == '&') {
-                throw new UnsupportedFormulaException(UNSUPPORTED_OPERATOR,
-                        "The '&' (text concatenation) operator is not supported in v1: '" + formula + "'");
+            if (c == '"') {
+                int start = i + 1;
+                StringBuilder value = new StringBuilder();
+                int j = start;
+                while (true) {
+                    if (j >= n) {
+                        throw new UnsupportedFormulaException(MALFORMED_FORMULA,
+                                "Unterminated string literal in '" + formula + "'");
+                    }
+                    char cj = formula.charAt(j);
+                    if (cj == '"') {
+                        if (j + 1 < n && formula.charAt(j + 1) == '"') { // "" -> literal "
+                            value.append('"');
+                            j += 2;
+                            continue;
+                        }
+                        break; // closing quote
+                    }
+                    value.append(cj);
+                    j++;
+                }
+                out.add(Token.string(value.toString()));
+                i = j + 1;
+                continue;
             }
 
             if (Character.isLetter(c) || c == '$') {
@@ -151,7 +176,7 @@ public final class ExcelFormulaParser {
                 else { out.add(Token.symbol(">")); i++; }
                 continue;
             }
-            if ("+-*/^%=(),:".indexOf(c) >= 0) {
+            if ("+-*/^%=(),:&".indexOf(c) >= 0) {
                 out.add(Token.symbol(String.valueOf(c)));
                 i++;
                 continue;
@@ -228,11 +253,21 @@ public final class ExcelFormulaParser {
     private static final List<String> COMPARISON_OPS = List.of("=", "<>", "<=", ">=", "<", ">");
 
     private static ExcelExpr parseComparison(Cursor c) {
-        ExcelExpr left = parseAdditive(c);
+        ExcelExpr left = parseConcat(c);
         while (c.peek().type() == TokenType.SYMBOL && COMPARISON_OPS.contains(c.peek().text())) {
             String op = c.advance().text();
-            ExcelExpr right = parseAdditive(c);
+            ExcelExpr right = parseConcat(c);
             left = new BinaryOp(op, left, right);
+        }
+        return left;
+    }
+
+    private static ExcelExpr parseConcat(Cursor c) {
+        ExcelExpr left = parseAdditive(c);
+        while (c.atSymbol("&")) {
+            c.advance();
+            ExcelExpr right = parseAdditive(c);
+            left = new BinaryOp("&", left, right);
         }
         return left;
     }
@@ -288,6 +323,7 @@ public final class ExcelFormulaParser {
         Token t = c.peek();
         switch (t.type()) {
             case NUMBER -> { c.advance(); return new NumberLit(t.number()); }
+            case STRING -> { c.advance(); return new StringLit(t.text()); }
             case CELLREF -> {
                 c.advance();
                 CellRef from = new CellRef(t.col(), t.row(), t.colAbsolute(), t.rowAbsolute());

@@ -35,6 +35,10 @@ final class InMemoryCellGrid implements CellGrid {
         return formula(row, col, f, new CellValue.NumberValue(computedValue));
     }
 
+    InMemoryCellGrid formula(int row, int col, String f, String computedValue) {
+        return formula(row, col, f, new CellValue.StringValue(computedValue));
+    }
+
     @Override public int rowCount() { return rows; }
     @Override public int columnCount() { return cols; }
 

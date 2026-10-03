@@ -8,6 +8,7 @@ import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.FuncCall;
 import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.NumberLit;
 import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.Percent;
 import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.RangeRef;
+import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.StringLit;
 import org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.UnaryNeg;
 
 import java.util.LinkedHashMap;
@@ -41,7 +42,12 @@ public final class ExcelFormulaTranslator {
     public sealed interface ColumnOutcome permits ColumnOutcome.LiteralField, ColumnOutcome.PerItemDerivation,
             ColumnOutcome.Rejected {
         record LiteralField(ColumnClassification.LiteralKind kind) implements ColumnOutcome {}
-        record PerItemDerivation(String jsonataExpr, Set<Integer> dependsOnCols) implements ColumnOutcome {}
+        /** {@code resultType} drives the derived field's JSON Schema {@code type} (§5.4a) — inferred
+         *  from the formula's own AST, not hardcoded to "number" as in the pre-text-function version.
+         *  A CellRef into another FORMULA column (as opposed to a literal column) defaults to NUMBER:
+         *  full cross-formula type propagation isn't implemented in v1 (see {@code inferResultType}). */
+        record PerItemDerivation(String jsonataExpr, Set<Integer> dependsOnCols,
+                ColumnClassification.LiteralKind resultType) implements ColumnOutcome {}
         record Rejected(UnsupportedFormulaException.Reason reason, String detail) implements ColumnOutcome {}
     }
 
@@ -53,13 +59,18 @@ public final class ExcelFormulaTranslator {
     public record TranslationResult(List<ColumnResult> columns, Map<String, Double> constants) {}
 
     private static final Map<String, String> SIMPLE_FUNCS = Map.of(
-            "ABS", "$abs", "ROUND", "$round");
+            "ABS", "$abs", "ROUND", "$round",
+            "UPPER", "$uppercase", "LOWER", "$lowercase", "TRIM", "$trim", "LEN", "$length");
 
     private final CellGrid grid;
     private final TableDetector.TableBounds bounds;
     private final Map<Integer, String> fieldNamesByCol = new LinkedHashMap<>();
     private final Map<String, Double> constants = new LinkedHashMap<>();
     private final Map<Long, String> constantKeyToName = new LinkedHashMap<>();
+    /** Known upfront for every LITERAL column, regardless of which column is processed first —
+     *  needed so a formula column can infer its own result type even when it references a literal
+     *  column to its RIGHT (not yet reached by the left-to-right translation loop). */
+    private final Map<Integer, ColumnClassification.LiteralKind> literalKindByCol = new LinkedHashMap<>();
 
     public ExcelFormulaTranslator(CellGrid grid, TableDetector.TableBounds bounds) {
         this.grid = grid;
@@ -83,6 +94,12 @@ public final class ExcelFormulaTranslator {
     public TranslationResult translate(List<ColumnClassification> classifications) {
         Map<Integer, ColumnOutcome> outcomes = new LinkedHashMap<>();
         int firstCol = bounds.firstCol();
+
+        for (int col = firstCol; col <= bounds.lastCol(); col++) {
+            if (classifications.get(col - firstCol) instanceof ColumnClassification.Literal lit) {
+                literalKindByCol.put(col, lit.kind());
+            }
+        }
 
         for (int col = bounds.firstCol(); col <= bounds.lastCol(); col++) {
             ColumnClassification c = classifications.get(col - firstCol);
@@ -128,7 +145,7 @@ public final class ExcelFormulaTranslator {
             ExcelExpr ast = ExcelFormulaParser.parse(f.excelFormula());
             Set<Integer> deps = new LinkedHashSet<>();
             String expr = emit(ast, templateRow, deps);
-            return new ColumnOutcome.PerItemDerivation(expr, deps);
+            return new ColumnOutcome.PerItemDerivation(expr, deps, inferResultType(ast));
         } catch (UnsupportedFormulaException e) {
             return new ColumnOutcome.Rejected(e.reason(), e.getMessage());
         }
@@ -140,6 +157,7 @@ public final class ExcelFormulaTranslator {
         return switch (expr) {
             case NumberLit n -> formatNumber(n.value());
             case BoolLit b -> String.valueOf(b.value());
+            case StringLit s -> emitStringLit(s.value());
             case CellRef ref -> emitCellRef(ref, templateRow, deps);
             case RangeRef r -> throw new UnsupportedFormulaException(UNSUPPORTED_RANGE_SHAPE,
                     "A range reference may only appear directly as an aggregate-function argument");
@@ -230,6 +248,27 @@ public final class ExcelFormulaTranslator {
         if ("NOT".equals(name) && call.args().size() == 1) {
             return "$not(" + emit(call.args().get(0), templateRow, deps) + ")";
         }
+        if ("CONCATENATE".equals(name)) {
+            if (call.args().isEmpty()) {
+                throw new UnsupportedFormulaException(UNSUPPORTED_FUNCTION,
+                        "CONCATENATE() needs at least one argument");
+            }
+            StringBuilder sb = new StringBuilder("(");
+            for (int i = 0; i < call.args().size(); i++) {
+                if (i > 0) sb.append(" & ");
+                sb.append(emit(call.args().get(i), templateRow, deps));
+            }
+            return sb.append(")").toString();
+        }
+        if ("LEFT".equals(name) || "RIGHT".equals(name)) {
+            return emitLeftRight(name, call, templateRow, deps);
+        }
+        if ("MID".equals(name) && call.args().size() == 3) {
+            String text = emit(call.args().get(0), templateRow, deps);
+            String start = emit(call.args().get(1), templateRow, deps);
+            String len = emit(call.args().get(2), templateRow, deps);
+            return "$substring(" + text + ", (" + start + ") - 1, " + len + ")";
+        }
         if (SIMPLE_FUNCS.containsKey(name)) {
             return emitPlainFuncCall(SIMPLE_FUNCS.get(name), call, templateRow, deps);
         }
@@ -238,6 +277,18 @@ public final class ExcelFormulaTranslator {
         }
         throw new UnsupportedFormulaException(UNSUPPORTED_FUNCTION,
                 "Function '" + name + "' is not supported in v1");
+    }
+
+    /** {@code LEFT(text[,n])} / {@code RIGHT(text[,n])} — Excel defaults {@code n} to 1 when omitted. */
+    private String emitLeftRight(String name, FuncCall call, int templateRow, Set<Integer> deps) {
+        if (call.args().isEmpty() || call.args().size() > 2) {
+            throw new UnsupportedFormulaException(UNSUPPORTED_FUNCTION, name + "() takes 1 or 2 arguments");
+        }
+        String text = emit(call.args().get(0), templateRow, deps);
+        String n = call.args().size() == 2 ? emit(call.args().get(1), templateRow, deps) : "1";
+        return "LEFT".equals(name)
+                ? "$substring(" + text + ", 0, " + n + ")"
+                : "$substring(" + text + ", $length(" + text + ") - (" + n + "), " + n + ")";
     }
 
     private String emitPlainFuncCall(String jsonataName, FuncCall call, int templateRow, Set<Integer> deps) {
@@ -309,6 +360,64 @@ public final class ExcelFormulaTranslator {
     private static String formatNumber(double v) {
         if (v == Math.rint(v) && !Double.isInfinite(v)) return String.valueOf((long) v);
         return String.valueOf(v);
+    }
+
+    /** JSONata string-literal syntax mirrors JSON's — backslash and double-quote need escaping. */
+    private static String emitStringLit(String value) {
+        StringBuilder sb = new StringBuilder("\"");
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            switch (c) {
+                case '"' -> sb.append("\\\"");
+                case '\\' -> sb.append("\\\\");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                default -> sb.append(c);
+            }
+        }
+        return sb.append('"').toString();
+    }
+
+    // ── Result-type inference (drives the derived field's JSON Schema "type", §5.4a) ──────────
+
+    /**
+     * Infers a formula's result type from its own AST. A {@link CellRef} into another FORMULA
+     * column (as opposed to a LITERAL one) defaults to NUMBER — full cross-formula type propagation
+     * (e.g. a formula-of-a-formula text chain) is a v1 boundary, not implemented. This only affects
+     * the derived field's declared schema {@code type}, never the computed value itself, which is
+     * always correct regardless (JSONata doesn't type-check a derivation against its own schema
+     * entry at evaluation time).
+     */
+    private ColumnClassification.LiteralKind inferResultType(ExcelExpr expr) {
+        return switch (expr) {
+            case NumberLit n -> ColumnClassification.LiteralKind.NUMBER;
+            case BoolLit b -> ColumnClassification.LiteralKind.BOOLEAN;
+            case StringLit s -> ColumnClassification.LiteralKind.STRING;
+            case CellRef ref -> ref.rowAbsolute()
+                    ? ColumnClassification.LiteralKind.NUMBER // resolveConstant only accepts numeric constants
+                    : literalKindByCol.getOrDefault(ref.col(), ColumnClassification.LiteralKind.NUMBER);
+            case RangeRef r -> ColumnClassification.LiteralKind.NUMBER; // only valid as an aggregate-func arg
+            case UnaryNeg u -> ColumnClassification.LiteralKind.NUMBER;
+            case Percent p -> ColumnClassification.LiteralKind.NUMBER;
+            case BinaryOp b -> switch (b.op()) {
+                case "&" -> ColumnClassification.LiteralKind.STRING;
+                case "=", "<>", "<", ">", "<=", ">=" -> ColumnClassification.LiteralKind.BOOLEAN;
+                default -> ColumnClassification.LiteralKind.NUMBER; // + - * / ^
+            };
+            case FuncCall call -> inferFuncResultType(call);
+        };
+    }
+
+    private ColumnClassification.LiteralKind inferFuncResultType(FuncCall call) {
+        return switch (call.name()) {
+            case "IF" -> call.args().size() == 3
+                    ? inferResultType(call.args().get(1)) : ColumnClassification.LiteralKind.NUMBER;
+            case "AND", "OR", "NOT" -> ColumnClassification.LiteralKind.BOOLEAN;
+            case "CONCATENATE", "LEFT", "RIGHT", "MID", "UPPER", "LOWER", "TRIM" ->
+                    ColumnClassification.LiteralKind.STRING;
+            default -> ColumnClassification.LiteralKind.NUMBER; // ROUND/ABS/LEN/SUM/AVERAGE/MIN/MAX/COUNT
+        };
     }
 
     /**
