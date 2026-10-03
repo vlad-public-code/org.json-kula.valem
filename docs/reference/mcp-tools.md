@@ -98,6 +98,16 @@ core even in remote mode.
 | `test_spec` | `TestCaseRunner` | Run a spec's embedded tests (or ad-hoc `given`→`expect` cases, keyed by canonical JSON Path) in a throwaway runtime → pass/fail + per-field failures. Certify domain behavior before promotion. |
 | `dry_run` | throwaway `ModelService` | Compile a candidate spec in an isolated runtime, apply optional sample mutations, return the resulting merged state — preview the full reactive cascade without registering anything. |
 
+## Spreadsheet compilation
+
+Unlike every tool above, this one does **not** follow "the agent generates, Valem verifies" — the
+formula is already machine-readable, so Valem compiles it itself, deterministically. No LLM call is
+involved anywhere, and none is needed: there is nothing to interpret, only to transpile.
+
+| Tool | Backed by | Purpose |
+|---|---|---|
+| `convert_spreadsheet` | `SpreadsheetCompiler` | Compile an uploaded `.xlsx` workbook's own formulas into a ready `ModelSpec` (Excel formula language → JSONata). Args: `data` (base64), `filename`, `modelId`. One worksheet, one header-row table, a bounded numeric/boolean function set (`IF`/`AND`/`OR`/`NOT`/`ROUND`/`ABS`/`SUM`/`AVERAGE`/`MIN`/`MAX`/`COUNT`) — anything else (`VLOOKUP`, a cross-sheet reference, a non-uniform per-row formula, …) is named and listed in `rejectedColumns` rather than guessed; the rest of the sheet still compiles. Every computed value in the returned spec is checked to exactly match what the source workbook itself computed (POI's own formula evaluator, not Valem's own translation, is the oracle). Returns `{valid:true, spec, rejectedColumns}` or `{valid:false, reason, error}` (`UNSUPPORTED_FORMAT`/`FILE_TOO_LARGE`/`TOO_MANY_ROWS`/`TOO_MANY_COLUMNS`/`PARSE_FAILED`/or a column-rejection reason when every column failed). The spec is **not** registered — review it, then call `create_model` yourself. |
+
 ## Token economy
 
 Response size — not latency — is the dominant cost of driving a model over a long agent session,
