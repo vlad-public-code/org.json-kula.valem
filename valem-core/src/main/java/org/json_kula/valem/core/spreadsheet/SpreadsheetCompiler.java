@@ -74,7 +74,8 @@ public final class SpreadsheetCompiler {
         List<TestCase> tests = new ArrayList<>();
         DefaultValueSpec seed = buildSeedDefaultValue(grid, bounds, surviving, mapper, tests, nf);
 
-        List<AggregateResult> aggregates = detectSummaryAggregates(grid, bounds, surviving, schema);
+        List<AggregateResult> aggregates = new ArrayList<>(detectSummaryAggregates(grid, bounds, surviving, schema));
+        aggregates.addAll(detectSumproductAggregates(grid, bounds, surviving, schema));
         derivations = new ArrayList<>(derivations);
         for (AggregateResult a : aggregates) {
             derivations.add(a.derivation());
@@ -294,6 +295,78 @@ public final class SpreadsheetCompiler {
             out.add(new AggregateResult(derivation, summaryRow, col));
         }
         return out;
+    }
+
+    /**
+     * {@code SUMPRODUCT(rangeA, rangeB)} — a weighted-sum / dot-product summary cell, the single
+     * most common real-world use of array-formula-style element-wise computation (vision doc's
+     * "array formulas" non-goal, scoped to this one bounded, non-CSE, directly-callable shape rather
+     * than legacy {@code {=...}} CSE array formulas generally — see v1 design doc §17). Unlike
+     * {@link #detectSummaryAggregates}, the two ranges being multiplied need not be the same column
+     * the summary cell itself sits in — {@code rangeA}/{@code rangeB} name <b>any</b> two surviving
+     * columns, each a {@code $}-locked whole-column range over the table's full data span. Restricted
+     * to exactly 2 ranges (Excel's own signature is variadic); translates to
+     * {@code $sum(items.(exprA * exprB))}, exactly the "recompute a derived column inline" pattern
+     * {@link #detectSummaryAggregates} already uses, generalized to two factors instead of one.
+     */
+    private static List<AggregateResult> detectSumproductAggregates(CellGrid grid, TableBounds bounds,
+            List<ColumnResult> surviving, ObjectNode schema) {
+        int summaryRow = bounds.lastDataRow() + 1;
+        if (summaryRow >= grid.rowCount()) return List.of();
+
+        Map<Integer, ColumnResult> byCol = new LinkedHashMap<>();
+        for (ColumnResult cr : surviving) byCol.put(cr.col(), cr);
+
+        List<AggregateResult> out = new ArrayList<>();
+        ObjectNode rootProps = (ObjectNode) schema.get("properties");
+
+        for (int col = bounds.firstCol(); col <= bounds.lastCol(); col++) {
+            if (!(grid.valueAt(summaryRow, col) instanceof CellValue.Formula f)) continue;
+
+            var parsed = ExcelFormulaParser.parseSafely(f.excelFormula());
+            if (parsed.isEmpty()) continue;
+            if (!(parsed.get() instanceof org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.FuncCall call)) continue;
+            if (!"SUMPRODUCT".equals(call.name()) || call.args().size() != 2) continue;
+            if (!(call.args().get(0) instanceof org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.RangeRef rangeA)
+                    || !(call.args().get(1) instanceof org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.RangeRef rangeB)) {
+                continue;
+            }
+            ColumnResult crA = wholeColumnFactor(rangeA, bounds, byCol);
+            ColumnResult crB = wholeColumnFactor(rangeB, bounds, byCol);
+            if (crA == null || crB == null) continue;
+
+            String fieldName = "sumproduct" + capitalize(crA.fieldName()) + capitalize(crB.fieldName());
+            rootProps.set(fieldName, JsonNodeFactory.instance.objectNode()
+                    .put("type", "number").put("readOnly", true));
+            String jsonataExpr = "$sum(items.(" + perItemExprFor(crA) + " * " + perItemExprFor(crB) + "))";
+            DerivationSpec derivation = new DerivationSpec("$." + fieldName, jsonataExpr, null, null);
+            out.add(new AggregateResult(derivation, summaryRow, col));
+        }
+        return out;
+    }
+
+    /** {@code range} qualifies as a SUMPRODUCT factor when it is a single-column, {@code $}-locked
+     *  range spanning exactly the table's full data-row span — the same "whole column, full span"
+     *  shape {@link #detectSummaryAggregates} already requires, just not tied to the summary cell's
+     *  own column. Returns {@code null} (meaning "not recognized, skip") for anything else. */
+    private static ColumnResult wholeColumnFactor(org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.RangeRef range,
+            TableBounds bounds, Map<Integer, ColumnResult> byCol) {
+        if (range.from().col() != range.to().col()) return null;
+        if (!range.from().rowAbsolute() || !range.to().rowAbsolute()) return null;
+        if (range.from().row() != bounds.firstDataRow() || range.to().row() != bounds.lastDataRow()) return null;
+        return byCol.get(range.from().col());
+    }
+
+    /** The bare per-item expression for a surviving column, suitable for splicing inside
+     *  {@code items.(...)}: a literal column's own field name, or a derived column's own per-item
+     *  expression recomputed inline (the dotted-path-into-a-derived-field trap, same as
+     *  {@link #detectSummaryAggregates}). */
+    private static String perItemExprFor(ColumnResult cr) {
+        return switch (cr.outcome()) {
+            case ColumnOutcome.LiteralField ignored -> cr.fieldName();
+            case ColumnOutcome.PerItemDerivation d -> "(" + d.jsonataExpr().replace("$parent.", "") + ")";
+            case ColumnOutcome.Rejected ignored -> throw new IllegalStateException("unreachable: not in `surviving`");
+        };
     }
 
     private static final String TEST_DESCRIPTION =

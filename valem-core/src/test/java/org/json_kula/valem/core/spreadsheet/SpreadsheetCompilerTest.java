@@ -223,6 +223,37 @@ class SpreadsheetCompilerTest {
     }
 
     @Test
+    void sumproduct_of_two_whole_columns_becomes_a_top_level_dot_product_derivation() {
+        // The vision doc's "array formulas" non-goal, scoped to its single most common real-world
+        // shape: a weighted-sum / dot-product summary cell. Not a legacy CSE {=...} array formula
+        // -- SUMPRODUCT is a normal, directly-callable function -- but it IS the computation legacy
+        // array formulas are most often used for, and needs no CSE entry at all.
+        InMemoryCellGrid grid = new InMemoryCellGrid()
+                .str(0, 0, "Qty").str(0, 1, "Price")
+                .num(1, 0, 2).num(1, 1, 10)
+                .num(2, 0, 3).num(2, 1, 20)
+                // Qty*Price summed: 2*10 + 3*20 = 80.
+                .formula(3, 1, "SUMPRODUCT($A$2:$A$3,$B$2:$B$3)", 80);
+
+        CompileResult result = SpreadsheetCompiler.compile(grid, "weighted-total", MAPPER);
+
+        assertThat(result.rejectedColumns()).isEmpty();
+        JsonNode itemProps = MAPPER.valueToTree(result.spec().schema())
+                .path("properties").path("items").path("items").path("properties");
+        assertThat(itemProps.has("sumproductQtyPrice")).isFalse(); // it's a ROOT field, not per-item
+        JsonNode rootProps = MAPPER.valueToTree(result.spec().schema()).path("properties");
+        assertThat(rootProps.has("sumproductQtyPrice")).isTrue();
+
+        ModelSpecValidator.ValidationResult validation = ModelSpecValidator.validate(result.spec());
+        assertThat(validation.isValid()).as("validation errors: %s", validation.errors()).isTrue();
+
+        List<TestCaseRunner.TestResult> testResults = TestCaseRunner.run(result.spec(), result.spec().tests());
+        assertThat(testResults).hasSize(1);
+        assertThat(testResults.get(0).passed())
+                .as("failures: %s", testResults.get(0).failures()).isTrue();
+    }
+
+    @Test
     void no_constraints_are_invented() {
         InMemoryCellGrid grid = new InMemoryCellGrid()
                 .str(0, 0, "Quantity")
