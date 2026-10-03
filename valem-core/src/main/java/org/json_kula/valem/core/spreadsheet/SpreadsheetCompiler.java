@@ -284,10 +284,16 @@ public final class SpreadsheetCompiler {
             // a literal column reads it directly; aggregating a formula column recomputes that
             // column's own per-item expression inline inside the aggregate instead of reading the
             // separately-derived field, exactly the pattern the shipped order-items-price-total
-            // example already uses for its own grand total.
+            // example already uses for its own grand total. The recomputed expression is bound to
+            // $item (not left as a bare name) because a derived expression that itself contains a
+            // nested predicate — VLOOKUP's own `[c1 = ...]` filter, e.g. — rebinds `$` to ITS OWN
+            // element while evaluating that predicate; a bare field name would then try to resolve
+            // against the wrong context and silently return nothing. $item, captured before any
+            // such nesting, stays valid at any depth (measured empirically, not assumed).
             String aggregateArg = switch (cr.outcome()) {
                 case ColumnOutcome.LiteralField ignored -> "items." + cr.fieldName();
-                case ColumnOutcome.PerItemDerivation d -> "items.(" + d.jsonataExpr().replace("$parent.", "") + ")";
+                case ColumnOutcome.PerItemDerivation d ->
+                        "items.($item := $; " + d.jsonataExpr().replace("$parent.", "$item.") + ")";
                 case ColumnOutcome.Rejected ignored -> throw new IllegalStateException("unreachable: not in `surviving`");
             };
             DerivationSpec derivation = new DerivationSpec("$." + fieldName,
@@ -338,7 +344,11 @@ public final class SpreadsheetCompiler {
             String fieldName = "sumproduct" + capitalize(crA.fieldName()) + capitalize(crB.fieldName());
             rootProps.set(fieldName, JsonNodeFactory.instance.objectNode()
                     .put("type", "number").put("readOnly", true));
-            String jsonataExpr = "$sum(items.(" + perItemExprFor(crA) + " * " + perItemExprFor(crB) + "))";
+            // $item := $ once, then both factors reference it explicitly — see the comment on
+            // detectSummaryAggregates' own PerItemDerivation branch for why a bare name isn't safe
+            // here (a VLOOKUP factor's own nested predicate rebinds $ while it runs).
+            String jsonataExpr = "$sum(items.($item := $; "
+                    + perItemExprFor(crA) + " * " + perItemExprFor(crB) + "))";
             DerivationSpec derivation = new DerivationSpec("$." + fieldName, jsonataExpr, null, null);
             out.add(new AggregateResult(derivation, summaryRow, col));
         }
@@ -357,14 +367,17 @@ public final class SpreadsheetCompiler {
         return byCol.get(range.from().col());
     }
 
-    /** The bare per-item expression for a surviving column, suitable for splicing inside
-     *  {@code items.(...)}: a literal column's own field name, or a derived column's own per-item
-     *  expression recomputed inline (the dotted-path-into-a-derived-field trap, same as
-     *  {@link #detectSummaryAggregates}). */
+    /** The per-item expression for a surviving column, suitable for splicing inside an
+     *  {@code items.($item := $; ...)} block: a literal column's own field read off {@code $item}
+     *  explicitly, or a derived column's own per-item expression recomputed inline (the
+     *  dotted-path-into-a-derived-field trap, same as {@link #detectSummaryAggregates}) with
+     *  {@code $parent.} rewritten to {@code $item.} rather than stripped to a bare name — a bare
+     *  name would break the moment the derived expression contains its own nested predicate
+     *  (VLOOKUP's {@code [c1 = ...]}, e.g.), which rebinds {@code $} while it runs. */
     private static String perItemExprFor(ColumnResult cr) {
         return switch (cr.outcome()) {
-            case ColumnOutcome.LiteralField ignored -> cr.fieldName();
-            case ColumnOutcome.PerItemDerivation d -> "(" + d.jsonataExpr().replace("$parent.", "") + ")";
+            case ColumnOutcome.LiteralField ignored -> "$item." + cr.fieldName();
+            case ColumnOutcome.PerItemDerivation d -> "(" + d.jsonataExpr().replace("$parent.", "$item.") + ")";
             case ColumnOutcome.Rejected ignored -> throw new IllegalStateException("unreachable: not in `surviving`");
         };
     }
