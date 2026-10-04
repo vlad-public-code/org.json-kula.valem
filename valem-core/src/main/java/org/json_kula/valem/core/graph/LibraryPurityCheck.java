@@ -180,6 +180,13 @@ public final class LibraryPurityCheck {
             case AstNode.PartialPlaceholder ignored -> { }
             case AstNode.ContextBinding ignored -> { }
             case AstNode.PositionBinding ignored -> { }
+
+            // Added by jsonata-jvm-compiler 1.0.7: the node the compiler parks where it cannot
+            // translate a fragment, which then throws on evaluation instead of crashing codegen.
+            // It names no field, so it is not a document read and yields no finding. Kept as an
+            // explicit arm rather than a `default` so the next new variant is a compile error here
+            // too, instead of being quietly waved through this purity check.
+            case AstNode.DeferredError ignored -> { }
         }
     }
 

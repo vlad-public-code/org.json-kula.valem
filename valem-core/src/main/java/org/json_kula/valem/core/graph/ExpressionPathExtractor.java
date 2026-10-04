@@ -193,6 +193,19 @@ public final class ExpressionPathExtractor {
             case AstNode.PartialPlaceholder ignored -> {}
             case AstNode.ContextBinding    ignored -> {}
             case AstNode.PositionBinding   ignored -> {}
+
+            // jsonata-jvm-compiler 1.0.7 added this variant, and handling it is not a formality:
+            // it is how the compiler stopped crashing in codegen on an expression it cannot
+            // translate (e.g. $filter(items) with the function argument missing). Instead of
+            // throwing out of compile(), it now parks a DeferredError in the tree that throws when
+            // EVALUATED -- which is also where reference JSONata reports a bad builtin signature.
+            //
+            // It contributes no paths, and that is the safe answer rather than a lossy one: the
+            // node can never yield a value, so there is no dependency to miss and no number that
+            // could come out stale. Deliberately NOT a `default` arm -- the exhaustive switch is
+            // what turned this upstream change into a compile error instead of a silently ignored
+            // node, and that is worth keeping for the next new variant.
+            case AstNode.DeferredError     ignored -> {}
         }
     }
 
