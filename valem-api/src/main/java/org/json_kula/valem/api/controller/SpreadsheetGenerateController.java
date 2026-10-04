@@ -49,8 +49,12 @@ public class SpreadsheetGenerateController {
             return ResponseEntity.badRequest().body(Map.of(
                     "error", e.getMessage(), "reason", e.reason().name()));
         } catch (UnsupportedFormulaException e) {
-            // Thrown only when EVERY column was rejected -- nothing survived to compile.
-            log.warn("Spreadsheet compile: nothing translatable ({}): {}", e.reason(), e.getMessage());
+            // Either every column was rejected (nothing survived to compile), or enough columns
+            // survived but the resulting seed data is too large to embed as a single JSONata
+            // literal (TOO_MUCH_SEED_DATA) -- a whole-workbook problem either way, not a per-column
+            // one, so the whole compile fails rather than returning a spec that would silently be
+            // unable to compile later.
+            log.warn("Spreadsheet compile: cannot produce a valid spec ({}): {}", e.reason(), e.getMessage());
             return ResponseEntity.unprocessableEntity().body(Map.of(
                     "error", e.getMessage(), "reason", e.reason().name()));
         }

@@ -254,6 +254,46 @@ class SpreadsheetCompilerTest {
     }
 
     @Test
+    void a_workbook_whose_seed_data_is_too_large_to_embed_is_rejected_whole() {
+        // The seed is embedded as ONE JSONata literal, and a single generated string constant caps
+        // out around 64KB of UTF-8 (a JVM classfile limit), so an oversized sheet would otherwise
+        // produce a spec that cannot compile later. The guard must fire inside compile() itself.
+        String wide = "x".repeat(200);
+        InMemoryCellGrid grid = new InMemoryCellGrid()
+                .str(0, 0, "Quantity").str(0, 1, "Note").str(0, 2, "Total");
+        for (int row = 1; row <= 400; row++) {
+            grid.num(row, 0, row)
+                .str(row, 1, wide + row)
+                .formula(row, 2, "A" + (row + 1) + "*2", row * 2);
+        }
+
+        assertThatThrownBy(() -> SpreadsheetCompiler.compile(grid, "too-big", MAPPER))
+                .isInstanceOf(UnsupportedFormulaException.class)
+                .asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.type(UnsupportedFormulaException.class))
+                .extracting(UnsupportedFormulaException::reason)
+                .isEqualTo(UnsupportedFormulaException.Reason.TOO_MUCH_SEED_DATA);
+    }
+
+    @Test
+    void a_workbook_whose_seed_data_fits_is_not_rejected() {
+        // The other side of the guard: a sheet of the same shape but comfortably under the limit
+        // still compiles, so the guard is a ceiling and not an across-the-board rejection.
+        InMemoryCellGrid grid = new InMemoryCellGrid()
+                .str(0, 0, "Quantity").str(0, 1, "Note").str(0, 2, "Total");
+        for (int row = 1; row <= 50; row++) {
+            grid.num(row, 0, row)
+                .str(row, 1, "note-" + row)
+                .formula(row, 2, "A" + (row + 1) + "*2", row * 2);
+        }
+
+        CompileResult result = SpreadsheetCompiler.compile(grid, "fits", MAPPER);
+
+        assertThat(result.rejectedColumns()).isEmpty();
+        ModelSpecValidator.ValidationResult validation = ModelSpecValidator.validate(result.spec());
+        assertThat(validation.isValid()).as("validation errors: %s", validation.errors()).isTrue();
+    }
+
+    @Test
     void no_constraints_are_invented() {
         InMemoryCellGrid grid = new InMemoryCellGrid()
                 .str(0, 0, "Quantity")

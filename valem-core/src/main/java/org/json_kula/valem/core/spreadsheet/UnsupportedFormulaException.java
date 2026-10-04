@@ -23,7 +23,8 @@ public class UnsupportedFormulaException extends RuntimeException {
         NAMED_RANGE_UNSUPPORTED,
         DEPENDS_ON_REJECTED_COLUMN,
         UNSUPPORTED_LOOKUP_MODE,
-        LOOKUP_TABLE_CONTAINS_FORMULA
+        LOOKUP_TABLE_CONTAINS_FORMULA,
+        TOO_MUCH_SEED_DATA
     }
 
     private final Reason reason;

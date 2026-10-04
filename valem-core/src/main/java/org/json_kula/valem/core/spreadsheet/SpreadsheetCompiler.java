@@ -185,6 +185,25 @@ public final class SpreadsheetCompiler {
             throw new IllegalStateException("Failed to serialize seed data", e);
         }
 
+        // The whole seed is embedded as ONE JSONata literal (a plain JSON array/object literal is
+        // also valid JSONata literal syntax). The underlying JSONata-to-Java compiler hits a hard
+        // JVM classfile limit (a single generated string constant caps at 65535 UTF-8 bytes) well
+        // before that — measured empirically against the real engine with a bare string literal,
+        // not assumed: 60KB compiled, 64KB did not. A real multi-hundred-row sheet with non-trivial
+        // text columns crosses this easily (found against an actual downloaded 1000-row dataset).
+        // Splitting the literal into bound sub-expressions does NOT route around it — the total
+        // source text is what the limit is measured against, and chunking only adds boilerplate —
+        // confirmed empirically before settling on this guard instead. So: reject cleanly here,
+        // inside the compile call itself, rather than silently handing back a spec whose defaultValues
+        // can never actually compile (a failure that would otherwise only surface much later, e.g.
+        // when the spec is registered or its self-test is run).
+        if (seedJson.length() > MAX_SEED_JSON_CHARS) {
+            throw new UnsupportedFormulaException(UnsupportedFormulaException.Reason.TOO_MUCH_SEED_DATA,
+                    "The workbook's data (" + items.size() + " rows) is too large to embed as a single "
+                    + "seed in v1 (" + seedJson.length() + " chars, over the " + MAX_SEED_JSON_CHARS
+                    + "-char safe limit) — reduce the number of rows or columns and try again");
+        }
+
         if (!expect.isEmpty()) {
             // No `given` mutation: the defaultValues rule above already seeds this exact data at
             // model creation (TestCaseRunner.runOne calls initialize() before applying `given`), so
@@ -194,6 +213,11 @@ public final class SpreadsheetCompiler {
         }
         return new DefaultValueSpec("$", seedJson, "Seeded from the uploaded workbook's own rows");
     }
+
+    /** Conservative margin under the ~64KB point where a single generated string constant starts
+     *  failing to compile (measured at 60KB OK / 64KB failing) — leaves room for the "items":[...]
+     *  wrapper and for any non-ASCII cell text, which costs more than one byte per character. */
+    private static final int MAX_SEED_JSON_CHARS = 55_000;
 
     private static JsonNode literalJson(JsonNodeFactory nf, CellValue v) {
         return switch (v) {
