@@ -31,6 +31,28 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
+        <!-- Document-to-spec (docs/design/llm/document-to-spec-v1-design.md §4.1/§6): text extraction
+             from an uploaded PDF, shared by the REST scan phase (valem-api) and the MCP
+             search_document tool (valem-mcp), so it lives here rather than in either module.
+             Apache-2.0, pure-Java, no external service — documents never leave the process. -->
+        <dependency>
+            <groupId>org.apache.pdfbox</groupId>
+            <artifactId>pdfbox</artifactId>
+            <version>3.0.3</version>
+        </dependency>
+        <!-- poi-ooxml below serves BOTH document-to-spec and Excel-to-spec, which is why it is one
+             dependency and not two:
+               - document-to-spec: DOCX text extraction (the .docx half of the extractor pair above);
+               - Excel-to-spec (excel-to-spec-v1-design.md §2.1): the real XSSFWorkbook-backed
+                 CellGrid adapter and its formula evaluator (the independent correctness oracle, AC-4).
+             Both features share it across valem-api (REST) and valem-mcp (the convert_spreadsheet and
+             search_document tools), so it belongs here rather than in either module. Apache-2.0,
+             pure-Java, no external service. -->
+        <dependency>
+            <groupId>org.apache.poi</groupId>
+            <artifactId>poi-ooxml</artifactId>
+            <version>5.3.0</version>
+        </dependency>
 
         <dependency>
             <groupId>org.junit.jupiter</groupId>

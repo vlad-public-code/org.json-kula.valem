@@ -1,0 +1,451 @@
+package org.json_kula.valem.core.spreadsheet;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.json_kula.valem.core.model.DefaultValueSpec;
+import org.json_kula.valem.core.model.DerivationSpec;
+import org.json_kula.valem.core.model.LibrarySpec;
+import org.json_kula.valem.core.model.ModelSpec;
+import org.json_kula.valem.core.model.TestCase;
+import org.json_kula.valem.core.spreadsheet.ExcelFormulaTranslator.ColumnOutcome;
+import org.json_kula.valem.core.spreadsheet.ExcelFormulaTranslator.ColumnResult;
+import org.json_kula.valem.core.spreadsheet.ExcelFormulaTranslator.TranslationResult;
+import org.json_kula.valem.core.spreadsheet.TableDetector.TableBounds;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+/**
+ * Orchestrates the one deterministic pass (excel-to-spec-v1-design.md §3): detect the table, classify
+ * and translate every column, then assemble a {@link ModelSpec} from whatever survives — a column
+ * rejected elsewhere on the sheet does not fail the whole compile (vision doc AC-3).
+ *
+ * <p>Also detects the one whole-column-aggregate shape v1 supports as a standalone summary cell: a
+ * formula in the row immediately below the table, in the SAME column as the data it aggregates,
+ * whose only argument is a range spanning exactly that column's full data-row span. Deliberately
+ * narrow — see {@link #detectSummaryAggregates} — because a general "any aggregate cell anywhere on
+ * the sheet" detector is a layout-inference problem of its own (vision doc Open Question 2's sibling).
+ */
+public final class SpreadsheetCompiler {
+
+    private SpreadsheetCompiler() {}
+
+    public record RejectedColumn(String header, UnsupportedFormulaException.Reason reason, String detail) {}
+
+    public record CompileResult(ModelSpec spec, List<RejectedColumn> rejectedColumns) {}
+
+    private static final List<String> AGGREGATE_FUNCS = List.of("SUM", "AVERAGE", "MIN", "MAX", "COUNT");
+
+    public static CompileResult compile(CellGrid grid, String modelId, ObjectMapper mapper) {
+        TableBounds bounds = TableDetector.detect(grid);
+        List<ColumnClassification> classifications = ColumnClassifier.classify(grid, bounds);
+        TranslationResult translation = new ExcelFormulaTranslator(grid, bounds).translate(classifications);
+
+        List<ColumnResult> surviving = new ArrayList<>();
+        List<RejectedColumn> rejected = new ArrayList<>();
+        for (ColumnResult cr : translation.columns()) {
+            if (cr.outcome() instanceof ColumnOutcome.Rejected r) {
+                rejected.add(new RejectedColumn(cr.header(), r.reason(), r.detail()));
+            } else {
+                surviving.add(cr);
+            }
+        }
+        if (surviving.isEmpty()) {
+            // Surface the ACTUAL reason(s), not a generic placeholder — AC-2's "never a generic
+            // failure" applies to this aggregate failure path too, not just per-column rejections.
+            String detail = rejected.stream()
+                    .map(r -> r.header() + ": " + r.reason() + " (" + r.detail() + ")")
+                    .collect(java.util.stream.Collectors.joining("; "));
+            UnsupportedFormulaException.Reason reason = rejected.isEmpty()
+                    ? UnsupportedFormulaException.Reason.MALFORMED_FORMULA
+                    : rejected.get(0).reason();
+            throw new UnsupportedFormulaException(reason, "No column could be translated: " + detail);
+        }
+
+        JsonNodeFactory nf = mapper.getNodeFactory();
+        ObjectNode schema = buildSchema(nf, surviving);
+        List<DerivationSpec> derivations = buildDerivations(surviving);
+        List<TestCase> tests = new ArrayList<>();
+        DefaultValueSpec seed = buildSeedDefaultValue(grid, bounds, surviving, mapper, tests, nf);
+
+        List<AggregateResult> aggregates = new ArrayList<>(detectSummaryAggregates(grid, bounds, surviving, schema));
+        aggregates.addAll(detectSumproductAggregates(grid, bounds, surviving, schema));
+        derivations = new ArrayList<>(derivations);
+        for (AggregateResult a : aggregates) {
+            derivations.add(a.derivation());
+        }
+        addAggregateExpectations(grid, aggregates, tests);
+        LibrarySpec library = buildLibrary(translation.lookupTables(), nf);
+
+        ModelSpec spec = new ModelSpec(
+                modelId, "1.0.0", schema,
+                derivations,
+                List.of(),               // metaDerivations
+                List.of(),               // constraints — nothing in a spreadsheet's cells specifies one (§6)
+                tests,
+                List.of(seed),
+                toConstantsMap(translation.constants(), mapper),
+                null,                    // viewDefinition
+                List.of(),               // effects
+                null, List.of(), library);  // template, lineage, library
+
+        return new CompileResult(spec, rejected);
+    }
+
+    // ── Schema ──────────────────────────────────────────────────────────────
+
+    private static ObjectNode buildSchema(JsonNodeFactory nf, List<ColumnResult> surviving) {
+        ObjectNode itemProps = nf.objectNode();
+        for (ColumnResult cr : surviving) {
+            ObjectNode prop = nf.objectNode();
+            switch (cr.outcome()) {
+                case ColumnOutcome.LiteralField lit -> prop.put("type", jsonTypeOf(lit.kind()));
+                case ColumnOutcome.PerItemDerivation d -> {
+                    prop.put("type", jsonTypeOf(d.resultType()));
+                    prop.put("readOnly", true);
+                }
+                case ColumnOutcome.Rejected ignored -> { /* unreachable: not in `surviving` */ }
+            }
+            itemProps.set(cr.fieldName(), prop);
+        }
+        ObjectNode itemSchema = nf.objectNode();
+        itemSchema.put("type", "object");
+        itemSchema.set("properties", itemProps);
+
+        ObjectNode itemsArray = nf.objectNode();
+        itemsArray.put("type", "array");
+        itemsArray.set("items", itemSchema);
+
+        ObjectNode rootProps = nf.objectNode();
+        rootProps.set("items", itemsArray);
+
+        ObjectNode root = nf.objectNode();
+        root.put("type", "object");
+        root.set("properties", rootProps);
+        return root;
+    }
+
+    private static String jsonTypeOf(ColumnClassification.LiteralKind kind) {
+        return switch (kind) {
+            case NUMBER -> "number";
+            case BOOLEAN -> "boolean";
+            case STRING -> "string";
+        };
+    }
+
+    // ── Derivations ─────────────────────────────────────────────────────────
+
+    private static List<DerivationSpec> buildDerivations(List<ColumnResult> surviving) {
+        List<DerivationSpec> out = new ArrayList<>();
+        for (ColumnResult cr : surviving) {
+            if (cr.outcome() instanceof ColumnOutcome.PerItemDerivation d) {
+                out.add(new DerivationSpec("$.items[*]." + cr.fieldName(), d.jsonataExpr(), null, null));
+            }
+        }
+        return out;
+    }
+
+    // ── Seed data (defaultValues "$") + the AC-4 self-test given/expect ───────
+
+    private static DefaultValueSpec buildSeedDefaultValue(CellGrid grid, TableBounds bounds,
+            List<ColumnResult> surviving, ObjectMapper mapper, List<TestCase> testsOut, JsonNodeFactory nf) {
+        ArrayNode items = nf.arrayNode();
+        Map<String, JsonNode> expect = new LinkedHashMap<>();
+
+        int rowIndex = 0;
+        for (int row = bounds.firstDataRow(); row <= bounds.lastDataRow(); row++, rowIndex++) {
+            ObjectNode item = nf.objectNode();
+            for (ColumnResult cr : surviving) {
+                if (cr.outcome() instanceof ColumnOutcome.LiteralField) {
+                    item.set(cr.fieldName(), literalJson(nf, grid.valueAt(row, cr.col())));
+                }
+                // formula fields are derived -- not part of the seed, but DO belong in `expect`.
+            }
+            items.add(item);
+            for (ColumnResult cr : surviving) {
+                if (cr.outcome() instanceof ColumnOutcome.PerItemDerivation) {
+                    CellValue.Formula f = (CellValue.Formula) grid.valueAt(row, cr.col());
+                    expect.put("$.items[" + rowIndex + "]." + cr.fieldName(), literalJson(nf, f.computedValue()));
+                }
+            }
+        }
+
+        ObjectNode seedRoot = nf.objectNode();
+        seedRoot.set("items", items);
+        String seedJson;
+        try {
+            seedJson = mapper.writeValueAsString(seedRoot);
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to serialize seed data", e);
+        }
+
+        // The whole seed is embedded as ONE JSONata literal (a plain JSON array/object literal is
+        // also valid JSONata literal syntax). The underlying JSONata-to-Java compiler hits a hard
+        // JVM classfile limit (a single generated string constant caps at 65535 UTF-8 bytes) well
+        // before that — measured empirically against the real engine with a bare string literal,
+        // not assumed: 60KB compiled, 64KB did not. A real multi-hundred-row sheet with non-trivial
+        // text columns crosses this easily (found against an actual downloaded 1000-row dataset).
+        // Splitting the literal into bound sub-expressions does NOT route around it — the total
+        // source text is what the limit is measured against, and chunking only adds boilerplate —
+        // confirmed empirically before settling on this guard instead. So: reject cleanly here,
+        // inside the compile call itself, rather than silently handing back a spec whose defaultValues
+        // can never actually compile (a failure that would otherwise only surface much later, e.g.
+        // when the spec is registered or its self-test is run).
+        if (seedJson.length() > MAX_SEED_JSON_CHARS) {
+            throw new UnsupportedFormulaException(UnsupportedFormulaException.Reason.TOO_MUCH_SEED_DATA,
+                    "The workbook's data (" + items.size() + " rows) is too large to embed as a single "
+                    + "seed in v1 (" + seedJson.length() + " chars, over the " + MAX_SEED_JSON_CHARS
+                    + "-char safe limit) — reduce the number of rows or columns and try again");
+        }
+
+        if (!expect.isEmpty()) {
+            // No `given` mutation: the defaultValues rule above already seeds this exact data at
+            // model creation (TestCaseRunner.runOne calls initialize() before applying `given`), so
+            // re-sending it as a mutation would be redundant -- and mutating path "$" directly isn't
+            // the same operation as the container-creation seed, so it must not be relied on here.
+            testsOut.add(new TestCase(TEST_DESCRIPTION, Map.of(), expect));
+        }
+        return new DefaultValueSpec("$", seedJson, "Seeded from the uploaded workbook's own rows");
+    }
+
+    /** Conservative margin under the ~64KB point where a single generated string constant starts
+     *  failing to compile (measured at 60KB OK / 64KB failing) — leaves room for the "items":[...]
+     *  wrapper and for any non-ASCII cell text, which costs more than one byte per character. */
+    private static final int MAX_SEED_JSON_CHARS = 55_000;
+
+    private static JsonNode literalJson(JsonNodeFactory nf, CellValue v) {
+        return switch (v) {
+            case CellValue.NumberValue n -> nf.numberNode(n.value());
+            case CellValue.BooleanValue b -> nf.booleanNode(b.value());
+            case CellValue.StringValue s -> nf.textNode(s.value());
+            case CellValue.Formula f -> literalJson(nf, f.computedValue());
+            case CellValue.Empty ignored -> nf.nullNode();
+        };
+    }
+
+    // ── VLOOKUP lookup tables → library (§5.2a) ────────────────────────────────
+
+    /**
+     * Assembles every VLOOKUP {@code table_array} the translator found into a single {@code library}
+     * definition: {@code $<name> := [{"c1":...,"c2":...}, ...]} per table, exported by name. A plain
+     * JSON array/object literal is also valid JSONata literal syntax, so each table serializes via
+     * Jackson directly — no separate JSONata-literal renderer needed (string values still need the
+     * usual JSON escaping, which Jackson already does correctly).
+     */
+    private static LibrarySpec buildLibrary(Map<String, List<List<CellValue>>> lookupTables, JsonNodeFactory nf) {
+        if (lookupTables.isEmpty()) return null;
+
+        StringBuilder define = new StringBuilder("( ");
+        List<String> names = new ArrayList<>();
+        for (var entry : lookupTables.entrySet()) {
+            String name = entry.getKey();
+            names.add(name);
+            ArrayNode tableArray = nf.arrayNode();
+            for (List<CellValue> row : entry.getValue()) {
+                ObjectNode rowObj = nf.objectNode();
+                for (int i = 0; i < row.size(); i++) {
+                    rowObj.set("c" + (i + 1), literalJson(nf, row.get(i)));
+                }
+                tableArray.add(rowObj);
+            }
+            define.append('$').append(name).append(" := ").append(tableArray).append("; ");
+        }
+        define.append('[');
+        for (int i = 0; i < names.size(); i++) {
+            if (i > 0) define.append(", ");
+            define.append('"').append(names.get(i)).append('"');
+        }
+        define.append("] )");
+        return LibrarySpec.ofDefinition(define.toString());
+    }
+
+    // ── Whole-column aggregate summary cells (§5.5's second half, scoped down) ─
+
+    /** A detected summary-cell aggregate: the derivation to add, and the summary cell it came from
+     *  (so its own computed value can anchor the self-test's {@code expect} — never re-derived). */
+    private record AggregateResult(DerivationSpec derivation, int summaryRow, int summaryCol) {}
+
+    private static List<AggregateResult> detectSummaryAggregates(CellGrid grid, TableBounds bounds,
+            List<ColumnResult> surviving, ObjectNode schema) {
+        int summaryRow = bounds.lastDataRow() + 1;
+        if (summaryRow >= grid.rowCount()) return List.of();
+
+        List<AggregateResult> out = new ArrayList<>();
+        ObjectNode rootProps = (ObjectNode) schema.get("properties");
+
+        for (ColumnResult cr : surviving) {
+            int col = cr.col();
+            if (!(grid.valueAt(summaryRow, col) instanceof CellValue.Formula f)) continue;
+
+            var parsed = ExcelFormulaParser.parseSafely(f.excelFormula());
+            if (parsed.isEmpty()) continue;
+            if (!(parsed.get() instanceof org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.FuncCall call)) continue;
+            if (!AGGREGATE_FUNCS.contains(call.name()) || call.args().size() != 1) continue;
+            if (!(call.args().get(0) instanceof org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.RangeRef range)) continue;
+            if (range.from().col() != col || range.to().col() != col) continue;
+            if (range.from().row() != bounds.firstDataRow() || range.to().row() != bounds.lastDataRow()) continue;
+
+            String fieldName = call.name().toLowerCase(Locale.ROOT) + capitalize(cr.fieldName());
+            String jsonataFunc = switch (call.name()) {
+                case "SUM" -> "$sum";
+                case "AVERAGE" -> "$average";
+                case "MIN" -> "$min";
+                case "MAX" -> "$max";
+                case "COUNT" -> "$count";
+                default -> throw new IllegalStateException();
+            };
+            rootProps.set(fieldName, JsonNodeFactory.instance.objectNode()
+                    .put("type", "number").put("readOnly", true));
+            // A dotted path into an already-DERIVED field (`items.<derivedField>`) builds no
+            // dependency edge in this engine and silently evaluates to nothing — a documented trap
+            // (see the class javadoc). A plain base/literal field has no such issue. So: aggregating
+            // a literal column reads it directly; aggregating a formula column recomputes that
+            // column's own per-item expression inline inside the aggregate instead of reading the
+            // separately-derived field, exactly the pattern the shipped order-items-price-total
+            // example already uses for its own grand total. The recomputed expression is bound to
+            // $item (not left as a bare name) because a derived expression that itself contains a
+            // nested predicate — VLOOKUP's own `[c1 = ...]` filter, e.g. — rebinds `$` to ITS OWN
+            // element while evaluating that predicate; a bare field name would then try to resolve
+            // against the wrong context and silently return nothing. $item, captured before any
+            // such nesting, stays valid at any depth (measured empirically, not assumed).
+            String aggregateArg = switch (cr.outcome()) {
+                case ColumnOutcome.LiteralField ignored -> "items." + cr.fieldName();
+                case ColumnOutcome.PerItemDerivation d ->
+                        "items.($item := $; " + d.jsonataExpr().replace("$parent.", "$item.") + ")";
+                case ColumnOutcome.Rejected ignored -> throw new IllegalStateException("unreachable: not in `surviving`");
+            };
+            DerivationSpec derivation = new DerivationSpec("$." + fieldName,
+                    jsonataFunc + "(" + aggregateArg + ")", null, null);
+            out.add(new AggregateResult(derivation, summaryRow, col));
+        }
+        return out;
+    }
+
+    /**
+     * {@code SUMPRODUCT(rangeA, rangeB)} — a weighted-sum / dot-product summary cell, the single
+     * most common real-world use of array-formula-style element-wise computation (vision doc's
+     * "array formulas" non-goal, scoped to this one bounded, non-CSE, directly-callable shape rather
+     * than legacy {@code {=...}} CSE array formulas generally — see v1 design doc §17). Unlike
+     * {@link #detectSummaryAggregates}, the two ranges being multiplied need not be the same column
+     * the summary cell itself sits in — {@code rangeA}/{@code rangeB} name <b>any</b> two surviving
+     * columns, each a {@code $}-locked whole-column range over the table's full data span. Restricted
+     * to exactly 2 ranges (Excel's own signature is variadic); translates to
+     * {@code $sum(items.(exprA * exprB))}, exactly the "recompute a derived column inline" pattern
+     * {@link #detectSummaryAggregates} already uses, generalized to two factors instead of one.
+     */
+    private static List<AggregateResult> detectSumproductAggregates(CellGrid grid, TableBounds bounds,
+            List<ColumnResult> surviving, ObjectNode schema) {
+        int summaryRow = bounds.lastDataRow() + 1;
+        if (summaryRow >= grid.rowCount()) return List.of();
+
+        Map<Integer, ColumnResult> byCol = new LinkedHashMap<>();
+        for (ColumnResult cr : surviving) byCol.put(cr.col(), cr);
+
+        List<AggregateResult> out = new ArrayList<>();
+        ObjectNode rootProps = (ObjectNode) schema.get("properties");
+
+        for (int col = bounds.firstCol(); col <= bounds.lastCol(); col++) {
+            if (!(grid.valueAt(summaryRow, col) instanceof CellValue.Formula f)) continue;
+
+            var parsed = ExcelFormulaParser.parseSafely(f.excelFormula());
+            if (parsed.isEmpty()) continue;
+            if (!(parsed.get() instanceof org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.FuncCall call)) continue;
+            if (!"SUMPRODUCT".equals(call.name()) || call.args().size() != 2) continue;
+            if (!(call.args().get(0) instanceof org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.RangeRef rangeA)
+                    || !(call.args().get(1) instanceof org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.RangeRef rangeB)) {
+                continue;
+            }
+            ColumnResult crA = wholeColumnFactor(rangeA, bounds, byCol);
+            ColumnResult crB = wholeColumnFactor(rangeB, bounds, byCol);
+            if (crA == null || crB == null) continue;
+
+            String fieldName = "sumproduct" + capitalize(crA.fieldName()) + capitalize(crB.fieldName());
+            rootProps.set(fieldName, JsonNodeFactory.instance.objectNode()
+                    .put("type", "number").put("readOnly", true));
+            // $item := $ once, then both factors reference it explicitly — see the comment on
+            // detectSummaryAggregates' own PerItemDerivation branch for why a bare name isn't safe
+            // here (a VLOOKUP factor's own nested predicate rebinds $ while it runs).
+            String jsonataExpr = "$sum(items.($item := $; "
+                    + perItemExprFor(crA) + " * " + perItemExprFor(crB) + "))";
+            DerivationSpec derivation = new DerivationSpec("$." + fieldName, jsonataExpr, null, null);
+            out.add(new AggregateResult(derivation, summaryRow, col));
+        }
+        return out;
+    }
+
+    /** {@code range} qualifies as a SUMPRODUCT factor when it is a single-column, {@code $}-locked
+     *  range spanning exactly the table's full data-row span — the same "whole column, full span"
+     *  shape {@link #detectSummaryAggregates} already requires, just not tied to the summary cell's
+     *  own column. Returns {@code null} (meaning "not recognized, skip") for anything else. */
+    private static ColumnResult wholeColumnFactor(org.json_kula.valem.core.spreadsheet.ast.ExcelExpr.RangeRef range,
+            TableBounds bounds, Map<Integer, ColumnResult> byCol) {
+        if (range.from().col() != range.to().col()) return null;
+        if (!range.from().rowAbsolute() || !range.to().rowAbsolute()) return null;
+        if (range.from().row() != bounds.firstDataRow() || range.to().row() != bounds.lastDataRow()) return null;
+        return byCol.get(range.from().col());
+    }
+
+    /** The per-item expression for a surviving column, suitable for splicing inside an
+     *  {@code items.($item := $; ...)} block: a literal column's own field read off {@code $item}
+     *  explicitly, or a derived column's own per-item expression recomputed inline (the
+     *  dotted-path-into-a-derived-field trap, same as {@link #detectSummaryAggregates}) with
+     *  {@code $parent.} rewritten to {@code $item.} rather than stripped to a bare name — a bare
+     *  name would break the moment the derived expression contains its own nested predicate
+     *  (VLOOKUP's {@code [c1 = ...]}, e.g.), which rebinds {@code $} while it runs. */
+    private static String perItemExprFor(ColumnResult cr) {
+        return switch (cr.outcome()) {
+            case ColumnOutcome.LiteralField ignored -> "$item." + cr.fieldName();
+            case ColumnOutcome.PerItemDerivation d -> "(" + d.jsonataExpr().replace("$parent.", "$item.") + ")";
+            case ColumnOutcome.Rejected ignored -> throw new IllegalStateException("unreachable: not in `surviving`");
+        };
+    }
+
+    private static final String TEST_DESCRIPTION =
+            "Compiled formulas reproduce the source workbook's own computed values";
+
+    /**
+     * Adds (or, when per-item expectations already exist, merges into) the self-test's {@code
+     * expect} for every detected whole-column aggregate. A sheet with ONLY literal columns plus a
+     * summary cell has no per-item derivations at all, so {@code tests} can legitimately still be
+     * empty here — that must not mean the aggregate ships unverified; a fresh test case is created
+     * for it instead of silently skipping (this feature's whole premise is exact-equality
+     * verification against the source workbook, vision doc AC-4 — an unverified aggregate would
+     * quietly break that guarantee for exactly the sheets simple enough to have no other formulas).
+     */
+    private static void addAggregateExpectations(CellGrid grid, List<AggregateResult> aggregates,
+            List<TestCase> tests) {
+        if (aggregates.isEmpty()) return;
+        Map<String, JsonNode> given = tests.isEmpty() ? Map.of() : tests.get(0).given();
+        Map<String, JsonNode> expect = tests.isEmpty()
+                ? new LinkedHashMap<>() : new LinkedHashMap<>(tests.get(0).expect());
+
+        for (AggregateResult a : aggregates) {
+            if (grid.valueAt(a.summaryRow(), a.summaryCol()) instanceof CellValue.Formula f) {
+                expect.put(a.derivation().path(), literalJson(JsonNodeFactory.instance, f.computedValue()));
+            }
+        }
+
+        if (tests.isEmpty()) {
+            tests.add(new TestCase(TEST_DESCRIPTION, given, expect));
+        } else {
+            tests.set(0, new TestCase(tests.get(0).description(), given, expect));
+        }
+    }
+
+    private static String capitalize(String s) {
+        return s.isEmpty() ? s : s.substring(0, 1).toUpperCase(Locale.ROOT) + s.substring(1);
+    }
+
+    private static Map<String, JsonNode> toConstantsMap(Map<String, Double> constants, ObjectMapper mapper) {
+        if (constants.isEmpty()) return Map.of();
+        Map<String, JsonNode> out = new LinkedHashMap<>();
+        constants.forEach((k, v) -> out.put(k, mapper.getNodeFactory().numberNode(v)));
+        return out;
+    }
+}

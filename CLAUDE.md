@@ -146,12 +146,12 @@ mvn install
 All commands must be run from `...\Valem` (the repo root).
 Use PowerShell — `&&` is not available in PowerShell 5.1, chain with `;` or separate commands.
 
-## Key dependencies (local snapshots — must be installed first)
+## Key dependencies (released to Maven Central)
 
 - `io.github.vlad-public-code:tracked-json:1.0.0`
-- `io.github.vlad-public-code:jsonata-jvm-compiler:1.0.3`
+- `io.github.vlad-public-code:jsonata-jvm-compiler:1.0.7`
 
-Both must be in the local Maven repo (`~/.m2`) before building.
+Both resolve from Maven Central — no local `mvn install` of their source repos is needed.
 
 ## Tech stack
 
