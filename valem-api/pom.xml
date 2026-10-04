@@ -92,6 +92,8 @@
             <artifactId>jsoup</artifactId>
             <version>1.18.3</version>
         </dependency>
+        <!-- PDFBox/POI (text extraction) now live transitively via valem-core, where the
+             extractor classes moved — see valem-core/pom.xml. -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

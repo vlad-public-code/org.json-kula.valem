@@ -77,6 +77,17 @@ valem:
     allow-insecure-http: false # permit cleartext http egress (independent of allow-private-ips)
     allowed-hosts:             # optional comma-separated egress allowlist (blank = any public host)
     max-response-bytes: 1048576 # max bytes an http effect will fold back (streamed, bounded)
+  # Document-to-spec (docs/design/llm/document-to-spec-v1-design.md): extracting a computable
+  # formula from an uploaded PDF/DOCX. Text-native only in v1 — no OCR.
+  document:
+    max-file-size-bytes: 26214400  # 25 MB, enforced before parsing (DocumentExtractionService)
+    max-pages: 300                 # enforced after extraction
+    max-extracted-chars: 5000000   # ~5M chars, enforced on the extraction RESULT (defense in depth
+                                    # against a decompression-ratio outlier or pathological page)
+    scan:
+      top-k: 6                     # chunks sent to the LLM per scan — bounds cost regardless of document length
+      max-chars-per-chunk: 4000    # cap per chunk (also the DOCX pseudo-page size)
+      max-total-chars: 24000       # hard cap on top-K chunks actually sent to the LLM
   llm:
     provider: anthropic      # anthropic | openai | ollama | openrouter | groq | mistral | gemini | cerebras
     api-key: ${VALEM_LLM_API_KEY:}   # empty = LLM features disabled (not required for ollama)

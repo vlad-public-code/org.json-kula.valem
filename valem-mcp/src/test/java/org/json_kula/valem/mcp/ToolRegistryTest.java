@@ -82,7 +82,7 @@ class ToolRegistryTest {
                 "upload_blob", "download_blob",
                 "evolve_spec", "delete_model", "get_view", "get_library",
                 "get_domain_guidance", "validate_spec", "eval_expression", "test_spec", "dry_run",
-                "convert_spreadsheet");
+                "convert_spreadsheet", "search_document");
     }
 
     // ── library ──────────────────────────────────────────────────────────────────

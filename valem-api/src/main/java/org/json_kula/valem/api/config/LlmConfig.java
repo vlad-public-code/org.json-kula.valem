@@ -17,6 +17,7 @@ import org.json_kula.valem.api.llm.WebSearchTool;
 import org.json_kula.valem.core.llm.DomainGuidanceCatalog;
 import org.json_kula.valem.core.llm.DomainGuidanceTool;
 import org.json_kula.valem.core.llm.JsonataEvalTool;
+import org.json_kula.valem.core.document.DocumentScanner;
 import org.json_kula.valem.core.llm.LlmClient;
 import org.json_kula.valem.core.llm.SpecGenerator;
 import org.json_kula.valem.core.llm.WebTool;
@@ -208,5 +209,21 @@ public class LlmConfig {
         return new SpecGenerator(llmClient, mapper, maxRetries, maxRetriesHard,
                 repairTemperature, generationTemperature, structuredOutput,
                 maxTokens, maxTokensHard, repairTemperatureStep, repairTemperatureMax, webTool);
+    }
+
+    /**
+     * Backs the document-to-spec scan phase (docs/design/llm/document-to-spec-v1-design.md §4.3):
+     * a single, bounded, structured-output LLM call over the top-K lexically ranked chunks of an
+     * uploaded document — cost/latency scale with {@code top-k × max-chars-per-chunk}, never with
+     * document length.
+     */
+    @Bean
+    DocumentScanner documentScanner(
+            LlmClient llmClient,
+            ObjectMapper mapper,
+            @Value("${valem.document.scan.top-k:6}") int topK,
+            @Value("${valem.document.scan.max-chars-per-chunk:4000}") int maxCharsPerChunk,
+            @Value("${valem.document.scan.max-total-chars:24000}") int maxTotalChars) {
+        return new DocumentScanner(llmClient, mapper, topK, maxCharsPerChunk, maxTotalChars);
     }
 }
