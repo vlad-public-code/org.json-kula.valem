@@ -89,13 +89,19 @@ export function streamGenerate(
 /**
  * Runs SpecGenerator.generateEvolution() with streaming progress via SSE.
  * Returns a cancel function; call it to abort.
+ *
+ * `opts.includeView` forwards the endpoint's tri-state: omitted (the default) leaves the server on
+ * "auto", which evolves the view only when the spec ALREADY has one. A caller that wants a view
+ * created where there is none — a model compiled from a spreadsheet, say — must pass `true`
+ * explicitly, because auto resolves to false for a spec whose viewDefinition is null.
  */
 export function streamEvolveAi(
   modelId: string,
   description: string,
   onProgress: (e: LlmProgressEventData) => void,
   onDone: (result: EvolveAiStreamDone) => void,
-  onError: (message: string) => void
+  onError: (message: string) => void,
+  opts?: { includeView?: boolean }
 ): () => void {
   const controller = new AbortController();
   (async () => {
@@ -103,7 +109,10 @@ export function streamEvolveAi(
       method: 'POST',
       signal: controller.signal,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description }),
+      // Omitted rather than sent as null when the caller said nothing, so the server's own "auto"
+      // default is what applies and existing callers are byte-identical on the wire.
+      body: JSON.stringify(
+        opts?.includeView === undefined ? { description } : { description, includeView: opts.includeView }),
     });
     if (!res.ok) {
       const text = await res.text();
