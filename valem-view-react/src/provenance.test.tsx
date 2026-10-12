@@ -60,6 +60,17 @@ describe('in-view provenance overlay', () => {
     expect(screen.queryByTestId('provenance-popover')).toBeNull();
   });
 
+  it('renders a field error without a provenance source (embeds) instead of crashing', () => {
+    // Regression: the error wrapper read `provenance!.highlightedPaths`, so the first constraint
+    // violation in an embed (which has no provenance) threw and React unmounted the whole view.
+    renderComponent(numeric({ bind: '$.days', label: 'Days' }), {
+      state: { days: 370 },
+      fieldErrors: { '$.days': 'days must be at most 366' },
+    });
+    expect(screen.getByLabelText('Days')).toBeInTheDocument();
+    expect(screen.getByText('days must be at most 366')).toBeInTheDocument();
+  });
+
   it('marks a derived leaf as an explainable target; a base input is not', () => {
     renderComponent(numeric(), { state: { total: 120 }, provenance: runtime() });
     expect(screen.getByTestId('provenance-target')).toBeInTheDocument();

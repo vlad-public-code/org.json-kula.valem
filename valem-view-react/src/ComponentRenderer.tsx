@@ -132,7 +132,7 @@ export function ComponentRenderer({ component: c, state }: ComponentRendererProp
   if (!fieldError && !provActive) return inner;
 
   const key         = c.bind ? canonicalPath(c.bind) : null;
-  const highlighted = !!key && provenance!.highlightedPaths.has(key);   // F2: input of the hovered node
+  const highlighted = !!key && !!provenance?.highlightedPaths.has(key);  // F2: input of the hovered node
   const selected    = !!key && provenance?.selectedPath === key;         // F11: cross-highlight selection
   const pulsing     = !!key && !!provenance?.pulsingPaths.has(key);      // F12: live recompute flash
   const showPopover = !!provInfo && provenance?.hoveredLeafId === leafId;
