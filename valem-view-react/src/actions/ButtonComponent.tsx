@@ -1,21 +1,13 @@
-import type { CSSProperties } from 'react';
 import { useViewContext } from '../ViewContext';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { ButtonSpec } from '../types';
 import jsonata from 'jsonata';
-
-const VARIANT_STYLES: Record<string, CSSProperties> = {
-  primary:   { background: '#2563eb', color: '#fff', border: 'none' },
-  secondary: { background: '#f3f4f6', color: '#374151', border: '1px solid #d1d5db' },
-  danger:    { background: '#dc2626', color: '#fff', border: 'none' },
-  ghost:     { background: 'transparent', color: '#2563eb', border: '1px solid #93c5fd' },
-};
+import { buttonStyle } from '../themeColors';
 
 export function ButtonComponent({ component: c, enabled, text }: BaseComponentProps<ButtonSpec>) {
   const { state, onMutate, onNavigate } = useViewContext();
 
   const variant = (c.variant as string) ?? 'primary';
-  const variantStyle = VARIANT_STYLES[variant] ?? VARIANT_STYLES.primary;
 
   async function handleClick() {
     if (!enabled) return;
@@ -43,20 +35,13 @@ export function ButtonComponent({ component: c, enabled, text }: BaseComponentPr
       disabled={!enabled}
       onClick={handleClick}
       style={{
-        padding: '8px 18px',
-        borderRadius: 6,
-        fontSize: 14,
-        fontWeight: 500,
+        ...buttonStyle(variant),
         cursor: enabled ? 'pointer' : 'not-allowed',
         opacity: enabled ? 1 : 0.5,
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 6,
-        transition: 'opacity 0.15s',
-        ...variantStyle,
+        transition: 'opacity 0.15s, background 0.15s',
       }}
     >
-      {c.icon && <span>{c.icon}</span>}
+      {c.icon && <span aria-hidden="true">{c.icon}</span>}
       {c.label ?? text ?? 'Submit'}
     </button>
   );

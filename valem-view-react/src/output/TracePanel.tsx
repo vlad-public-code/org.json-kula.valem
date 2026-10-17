@@ -3,6 +3,7 @@ import { useViewContext } from '../ViewContext';
 import { useJSONataBoolean } from '../hooks/useJSONata';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { TracePanelSpec } from '../types';
+import { accent, fontMono, fontSans, ink, inset, muted, panel, pillStyle, radius, rule, tone } from '../themeColors';
 
 /**
  * The union of what the two endpoints return: `DerivationTrace` from `/explain` and
@@ -63,7 +64,7 @@ export function TracePanel({ component: c, state }: BaseComponentProps<TracePane
   }, [url, isOpen, isAudit, state]);
 
   return (
-    <section data-testid={c.id} title={c.tooltip} style={{ border: '1px solid #e5e7eb', borderRadius: 8 }}>
+    <section data-testid={c.id} title={c.tooltip} style={{ border: `1px solid ${rule()}`, borderRadius: radius.md, background: panel() }}>
       <button
         type="button"
         aria-expanded={isOpen}
@@ -71,20 +72,20 @@ export function TracePanel({ component: c, state }: BaseComponentProps<TracePane
         onClick={() => setOpen(!isOpen)}
         style={{
           display: 'flex', alignItems: 'center', gap: 6, width: '100%',
-          padding: '8px 14px', border: 'none', background: 'transparent',
-          fontSize: 13, fontWeight: 600, color: '#111827', cursor: 'pointer', textAlign: 'left',
+          minHeight: 44, padding: '8px 14px', border: 'none', background: 'transparent',
+          fontFamily: fontSans, fontSize: 14, fontWeight: 650, color: ink(), cursor: 'pointer', textAlign: 'left',
         }}
       >
-        <span style={{ color: '#6b7280' }}>{isOpen ? '▾' : '▸'}</span>
+        <span aria-hidden="true" style={{ color: muted() }}>{isOpen ? '▾' : '▸'}</span>
         {c.label ?? (isAudit ? 'History' : 'Why this value?')}
-        {c.bind && <code style={{ fontSize: 11, color: '#6b7280', fontWeight: 400 }}>{c.bind}</code>}
+        {c.bind && <code style={{ fontFamily: fontMono, fontSize: 12, color: muted(), fontWeight: 400 }}>{c.bind}</code>}
       </button>
 
       {isOpen && (
         <div style={{ padding: '0 14px 12px' }}>
-          {error && <span style={{ fontSize: 12, color: '#b91c1c' }}>Could not load: {error}</span>}
+          {error && <span role="alert" style={{ fontSize: 13, color: tone.dangerText() }}>Could not load: {error}</span>}
           {!error && rows.length === 0 && (
-            <span style={{ fontSize: 12, color: '#6b7280' }}>
+            <span style={{ fontSize: 13, color: muted() }}>
               {isAudit ? 'No recorded changes yet.' : 'No derivation recorded for this path yet.'}
             </span>
           )}
@@ -109,23 +110,23 @@ function ExplainRow({ row }: { row: TraceRow }) {
   const isConstraint = row.constraintPassed != null;
   return (
     <>
-      <code style={{ fontSize: 11, color: '#2563eb' }}>{row.targetPath}</code>
+      <code style={{ fontFamily: fontMono, fontSize: 12, color: accent() }}>{row.targetPath}</code>
       {row.expression && (
-        <code style={{ fontSize: 11, color: '#374151', display: 'block', marginTop: 2 }}>
+        <code style={{ fontFamily: fontMono, fontSize: 12, color: ink(), display: 'block', marginTop: 2 }}>
           {row.expression}
         </code>
       )}
       {row.errorMessage ? (
-        <span style={{ fontSize: 11, color: '#b91c1c' }}>{row.errorMessage}</span>
+        <span style={{ fontSize: 12, color: tone.dangerText() }}>{row.errorMessage}</span>
       ) : (
-        <span style={{ fontSize: 11, color: '#6b7280' }}>
+        <span style={{ fontSize: 12, color: isConstraint && !row.constraintPassed ? tone.dangerText() : muted() }}>
           {isConstraint
             ? (row.constraintPassed ? '✓ held' : '✗ violated')
             : `→ ${row.result != null ? JSON.stringify(row.result) : '—'}`}
         </span>
       )}
       {(row.inputPaths?.length ?? 0) > 0 && (
-        <span style={{ fontSize: 10, color: '#9ca3af' }}>from {row.inputPaths!.join(', ')}</span>
+        <span style={{ fontSize: 12, color: muted() }}>from {row.inputPaths!.join(', ')}</span>
       )}
     </>
   );
@@ -136,15 +137,15 @@ function AuditRow({ row }: { row: TraceRow }) {
   return (
     <>
       <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: '#111827' }}>#{row.sequence}</span>
-        {row.source && <span style={{ fontSize: 10, color: '#6b7280' }}>{row.source}</span>}
-        {row.timestamp && <span style={{ fontSize: 10, color: '#9ca3af' }}>{row.timestamp}</span>}
+        <span style={{ fontSize: 12, fontWeight: 650, color: ink() }}>#{row.sequence}</span>
+        {row.source && <span style={pillStyle('neutral')}>{row.source}</span>}
+        {row.timestamp && <span style={{ fontSize: 12, color: muted(), fontVariantNumeric: 'tabular-nums' }}>{row.timestamp}</span>}
       </div>
       {changed.length > 0 && (
-        <code style={{ fontSize: 11, color: '#2563eb' }}>{changed.join(', ')}</code>
+        <code style={{ fontFamily: fontMono, fontSize: 12, color: accent() }}>{changed.join(', ')}</code>
       )}
       {(row.derivedUpdated?.length ?? 0) > 0 && (
-        <span style={{ fontSize: 10, color: '#6b7280' }}>
+        <span style={{ fontSize: 12, color: muted() }}>
           recomputed {row.derivedUpdated!.length} derived field{row.derivedUpdated!.length === 1 ? '' : 's'}
         </span>
       )}
@@ -176,7 +177,8 @@ const rowStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 1,
-  padding: '6px 8px',
-  background: '#f9fafb',
-  borderRadius: 4,
+  padding: '8px 10px',
+  background: inset(),
+  border: `1px solid ${rule()}`,
+  borderRadius: 6,
 };

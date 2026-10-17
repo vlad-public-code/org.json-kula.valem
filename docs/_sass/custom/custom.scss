@@ -1,0 +1,58 @@
+// Valem brand on the docs: the accent valem.run uses (sandbox, calculators, research), so moving
+// between the docs and the site reads as one product.
+//
+// just-the-docs compiles this file into BOTH its light and dark stylesheets, so the branch below
+// runs once per scheme. It keys on $body-background-color because every just-the-docs version
+// defines it and the dark scheme sets it to a dark grey; that is sturdier than a scheme-name
+// variable that only some versions have.
+//
+// The dark-mode accent is lighter (#8f8bff) because the brand #5b57eb measures about 3.6:1 as text
+// on a dark page, under the 4.5:1 that WCAG AA asks of link text.
+
+$valem-is-dark: lightness($body-background-color) < 50%;
+$valem-accent: if($valem-is-dark, #8f8bff, #5b57eb);
+$valem-accent-strong: if($valem-is-dark, #aeabff, #4b46dd);
+$valem-on-accent: if($valem-is-dark, #0e0e14, #ffffff);
+
+a,
+a:visited {
+  color: $valem-accent;
+}
+
+a:hover {
+  color: $valem-accent-strong;
+}
+
+// Secondary buttons ("Quickstart", "View on GitHub") colour their text with the theme's own link
+// blue, more specifically than `a`, so they need the accent stated here too.
+.btn:not(.btn-primary) {
+  color: $valem-accent;
+}
+
+// The sidebar's current page and the primary call-to-action button.
+.site-nav .nav-list .nav-list-item .nav-list-link.active {
+  color: $valem-accent;
+}
+
+.btn-primary {
+  background-color: $valem-accent;
+  background-image: none;
+  border-color: $valem-accent;
+  box-shadow: none;
+  color: $valem-on-accent;
+
+  &:hover,
+  &:focus {
+    background-color: $valem-accent-strong;
+    background-image: none;
+    color: $valem-on-accent;
+  }
+}
+
+// The brand mark beside the site title, matching the ◆ on valem.run.
+.site-title::before {
+  content: "◆";
+  margin-right: 0.4rem;
+  color: $valem-accent;
+  font-size: 0.85em;
+}

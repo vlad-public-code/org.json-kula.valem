@@ -1,6 +1,7 @@
 import { LayoutContainer } from './LayoutContainer';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { ContainerSpec } from '../types';
+import { ink, panel, radius, rule } from '../themeColors';
 
 /** `card` — a `group` on a titled surface. `label` is the heading. */
 export function CardComponent({ component: c, state }: BaseComponentProps<ContainerSpec>) {
@@ -8,20 +9,21 @@ export function CardComponent({ component: c, state }: BaseComponentProps<Contai
     <section
       data-testid={c.id}
       style={{
-        border: '1px solid #e5e7eb',
-        borderRadius: 8,
-        background: '#fff',
-        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+        border: `1px solid ${rule()}`,
+        borderRadius: radius.md,
+        background: panel(),
+        color: ink(),
+        boxShadow: 'var(--shadow-sm, 0 1px 2px rgba(20, 22, 45, 0.06))',
         overflow: 'hidden',
       }}
     >
       {c.label && (
         <header style={{
-          padding: '10px 16px',
-          borderBottom: '1px solid #f3f4f6',
-          fontSize: 14,
-          fontWeight: 600,
-          color: '#111827',
+          padding: '12px 16px',
+          borderBottom: `1px solid ${rule()}`,
+          fontSize: 15,
+          fontWeight: 650,
+          color: ink(),
         }}>
           {c.label}
         </header>

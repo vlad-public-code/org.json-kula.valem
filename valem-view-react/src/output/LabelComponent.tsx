@@ -5,6 +5,7 @@ import { useFlashOnChange } from '../hooks/useFlashOnChange';
 import { formatValue } from '../format';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { LabelSpec } from '../types';
+import { muted } from '../themeColors';
 
 export function LabelComponent({ component: c, text }: BaseComponentProps<LabelSpec>) {
   const { state } = useViewContext();
@@ -27,7 +28,7 @@ export function LabelComponent({ component: c, text }: BaseComponentProps<LabelS
   return (
     <div data-testid={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {c.label && (resolved != null || bindKey) && (
-        <span style={{ fontSize: 12, color: '#666', fontWeight: 500 }}>{c.label}</span>
+        <span style={{ fontSize: 12, color: muted(), fontWeight: 500 }}>{c.label}</span>
       )}
       <span ref={flashRef} style={{ fontSize: 14, borderRadius: 4 }}>{display}</span>
     </div>

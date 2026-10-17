@@ -5,12 +5,13 @@ import { useFlashOnChange } from '../hooks/useFlashOnChange';
 import { formatValue } from '../format';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { StatTileSpec } from '../types';
+import { fontSans, ink, muted, panel, radius, rule, signal, tone } from '../themeColors';
 
 // Trend colours read from the design tokens, with literal fallbacks for standalone use.
 const TRENDS: Record<string, { glyph: string; color: string }> = {
-  up:   { glyph: '▲', color: 'var(--green, #0e9f6e)' },
-  down: { glyph: '▼', color: 'var(--red, #e5484d)' },
-  flat: { glyph: '▬', color: 'var(--text-muted, #6a6b7c)' },
+  up:   { glyph: '▲', color: tone.successText() },
+  down: { glyph: '▼', color: tone.dangerText() },
+  flat: { glyph: '▬', color: muted() },
 };
 
 /**
@@ -38,8 +39,8 @@ export function StatTile({ component: c }: BaseComponentProps<StatTileSpec>) {
   const trendName = useJSONataLiteral(c.trend, state);
   const trend = trendName ? TRENDS[trendName] : undefined;
 
-  // The tile's resting background is white, so the emerald flash fades back to it with no snap.
-  const flashRef = useFlashOnChange<HTMLDivElement>(value, '#ffffff');
+  // The flash fades back to the tile's own panel colour, whichever theme painted it.
+  const flashRef = useFlashOnChange<HTMLDivElement>(value, panel());
 
   return (
     <div
@@ -51,17 +52,17 @@ export function StatTile({ component: c }: BaseComponentProps<StatTileSpec>) {
         flexDirection: 'column',
         gap: 4,
         padding: '11px 14px',
-        border: '1px solid var(--border, #e7e8f1)',
-        borderLeft: '3px solid var(--signal, #0e9f6e)',
-        borderRadius: 'var(--radius, 10px)',
-        background: 'var(--panel-bg, #fff)',
+        border: `1px solid ${rule()}`,
+        borderLeft: `3px solid ${signal()}`,
+        borderRadius: radius.md,
+        background: panel(),
         minWidth: 140,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         {c.icon && <span aria-hidden style={{ fontSize: 14 }}>{c.icon}</span>}
         {c.label && (
-          <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--text-muted, #6a6b7c)' }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: muted() }}>
             {c.label}
           </span>
         )}
@@ -70,12 +71,14 @@ export function StatTile({ component: c }: BaseComponentProps<StatTileSpec>) {
       <span
         data-testid={`${c.id}-value`}
         style={{
-          fontFamily: 'var(--font-mono, ui-monospace, "SF Mono", "JetBrains Mono", Consolas, monospace)',
+          // The body face with tabular digits. --font-numeric lets a host choose another readout face
+          // (a monospace one, say) without touching code blocks, which keep --font-mono.
+          fontFamily: `var(--font-numeric, ${fontSans})`,
           fontVariantNumeric: 'tabular-nums',
           fontSize: 26,
           fontWeight: 650,
           letterSpacing: '-0.01em',
-          color: 'var(--text, #16161f)',
+          color: ink(),
           lineHeight: 1.1,
           marginTop: 2,
         }}
@@ -88,7 +91,7 @@ export function StatTile({ component: c }: BaseComponentProps<StatTileSpec>) {
           data-testid={`${c.id}-delta`}
           style={{
             display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12,
-            fontVariantNumeric: 'tabular-nums', color: trend?.color ?? 'var(--text-muted, #6a6b7c)',
+            fontVariantNumeric: 'tabular-nums', color: trend?.color ?? muted(),
           }}
         >
           {trend && <span aria-hidden>{trend.glyph}</span>}
@@ -96,7 +99,7 @@ export function StatTile({ component: c }: BaseComponentProps<StatTileSpec>) {
         </span>
       )}
 
-      {caption && <span style={{ fontSize: 11, color: 'var(--text-light, #85869a)' }}>{caption}</span>}
+      {caption && <span style={{ fontSize: 12, color: muted() }}>{caption}</span>}
     </div>
   );
 }

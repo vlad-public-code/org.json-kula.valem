@@ -5,6 +5,7 @@ import { useResolvedOptions } from '../hooks/useResolvedOptions';
 import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { ChoiceInputSpec } from '../types';
+import { accentSoft, controlBox, fontSans, helperText, labelText, radius, requiredMark, rule } from '../themeColors';
 
 /**
  * `autocompleteField` and `comboBox` — a select that filters as you type.
@@ -56,9 +57,9 @@ export function AutocompleteField(
   return (
     <div data-testid={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 4, position: 'relative' }}>
       {c.label && (
-        <label htmlFor={c.id} style={{ fontSize: 13, fontWeight: 500 }}>
+        <label htmlFor={c.id} style={labelText}>
           {c.label}
-          {required && <span style={{ color: 'red', marginLeft: 2 }}>*</span>}
+          {required && <span style={requiredMark} aria-hidden="true">*</span>}
         </label>
       )}
       <input
@@ -79,10 +80,7 @@ export function AutocompleteField(
           if (allowCustom && query !== (selectedLabel ?? String(modelValue ?? ''))) commit(query);
         }, 150)}
         style={{
-          padding: '6px 10px',
-          border: `1px solid ${fieldColors.border}`,
-          borderRadius: 4,
-          fontSize: 14,
+          ...controlBox,
           background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg,
           color: fieldColors.text,
         }}
@@ -97,14 +95,15 @@ export function AutocompleteField(
             right: 0,
             zIndex: 20,
             margin: 0,
-            padding: 0,
             listStyle: 'none',
             maxHeight: 220,
             overflowY: 'auto',
+            marginTop: 4,
+            padding: 4,
             background: fieldColors.bg,
-            border: `1px solid ${fieldColors.border}`,
-            borderRadius: 4,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            border: `1px solid ${rule()}`,
+            borderRadius: radius.sm,
+            boxShadow: 'var(--shadow-lg, 0 12px 32px -12px rgba(20, 22, 45, 0.3))',
           }}
         >
           {matches.map(o => (
@@ -117,9 +116,12 @@ export function AutocompleteField(
                 style={{
                   display: 'block',
                   width: '100%',
+                  minHeight: 36,
                   padding: '6px 10px',
                   border: 'none',
-                  background: o.value === String(modelValue ?? '') ? 'var(--accent-soft, #eff6ff)' : 'transparent',
+                  borderRadius: 6,
+                  background: o.value === String(modelValue ?? '') ? accentSoft() : 'transparent',
+                  fontFamily: fontSans,
                   color: fieldColors.text,
                   fontSize: 14,
                   textAlign: 'left',
@@ -132,7 +134,7 @@ export function AutocompleteField(
           ))}
         </ul>
       )}
-      {c.helperText && <span style={{ fontSize: 11, color: '#666' }}>{c.helperText}</span>}
+      {c.helperText && <span style={helperText}>{c.helperText}</span>}
     </div>
   );
 }

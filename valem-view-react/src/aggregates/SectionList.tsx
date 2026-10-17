@@ -6,6 +6,10 @@ import { ComponentRenderer } from '../ComponentRenderer';
 import type { SectionListSpec } from '../types';
 import { scopeToIndex } from '../navigation';
 import type { BaseComponentProps } from '../ComponentRenderer';
+import { accentRing, accentSoft, buttonStyle, controlEdge, ink, labelText, muted, panel, rule, tone } from '../themeColors';
+
+/** Row-action buttons: the shared shape at 32px, so a list of rows stays compact. */
+const compact = { minHeight: 32, padding: '0 12px', fontSize: 13 } as const;
 
 function itemLabel(item: unknown, idx: number): string {
   if (typeof item !== 'object' || item === null) return String(item);
@@ -16,8 +20,10 @@ function itemLabel(item: unknown, idx: number): string {
   const pairs = Object.entries(obj)
     .filter(([, v]) => v != null && typeof v !== 'object')
     .slice(0, 3)
-    .map(([k, v]) => `${k}: ${v}`)
-    .join(', ');
+    // The values alone ("Ada Lovelace · Host"): field names are the model's vocabulary, not the
+    // reader's, and "person: Ada Lovelace, role: Host" read as debug output.
+    .map(([, v]) => String(v))
+    .join(' · ');
   return pairs || `Item ${idx + 1}`;
 }
 
@@ -73,9 +79,9 @@ export function SectionList({ component: c, state }: BaseComponentProps<SectionL
 
   return (
     <div data-testid={c.id}>
-      {c.label && <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>{c.label}</div>}
+      {c.label && <div style={{ ...labelText, marginBottom: 8 }}>{c.label}</div>}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {items.map((item, idx) => (
           <div key={idx}>
             {/* Row */}
@@ -84,27 +90,21 @@ export function SectionList({ component: c, state }: BaseComponentProps<SectionL
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
-                padding: '8px 12px',
-                border: `1px solid ${editingIndex === idx ? '#93c5fd' : '#e5e7eb'}`,
-                borderRadius: editingIndex === idx ? '6px 6px 0 0' : 6,
-                background: editingIndex === idx ? '#eff6ff' : '#fff',
+                padding: '6px 8px 6px 12px',
+                border: `1px solid ${editingIndex === idx ? accentRing() : rule()}`,
+                borderRadius: editingIndex === idx ? '8px 8px 0 0' : 8,
+                background: editingIndex === idx ? accentSoft() : panel(),
               }}
             >
-              <span style={{ flex: 1, fontSize: 13, color: '#374151' }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 14, color: ink() }}>
                 {itemLabel(item, idx)}
               </span>
               {(hasInlineEditor || c.itemView) && (
                 <button
                   type="button"
+                  aria-expanded={hasInlineEditor ? editingIndex === idx : undefined}
                   onClick={() => handleEdit(idx)}
-                  style={{
-                    fontSize: 12,
-                    padding: '2px 8px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: 4,
-                    cursor: 'pointer',
-                    background: editingIndex === idx ? '#dbeafe' : '#fff',
-                  }}
+                  style={{ ...buttonStyle('secondary'), ...compact }}
                 >
                   {editingIndex === idx ? 'Collapse' : 'Edit'}
                 </button>
@@ -112,16 +112,9 @@ export function SectionList({ component: c, state }: BaseComponentProps<SectionL
               {canRemove && (
                 <button
                   type="button"
+                  aria-label={`${c.removeLabel ?? 'Remove'} ${itemLabel(item, idx)}`}
                   onClick={() => handleRemove(idx)}
-                  style={{
-                    fontSize: 12,
-                    padding: '2px 8px',
-                    border: '1px solid #fca5a5',
-                    borderRadius: 4,
-                    cursor: 'pointer',
-                    color: '#b91c1c',
-                    background: '#fff',
-                  }}
+                  style={{ ...buttonStyle('secondary'), ...compact, color: tone.dangerText() }}
                 >
                   {c.removeLabel ?? 'Remove'}
                 </button>
@@ -132,11 +125,11 @@ export function SectionList({ component: c, state }: BaseComponentProps<SectionL
             {editingIndex === idx && hasInlineEditor && (
               <div
                 style={{
-                  border: '1px solid #93c5fd',
+                  border: `1px solid ${accentRing()}`,
                   borderTop: 'none',
-                  borderRadius: '0 0 6px 6px',
+                  borderRadius: '0 0 8px 8px',
                   padding: '12px 14px',
-                  background: '#f8faff',
+                  background: panel(),
                   display: 'flex',
                   flexDirection: 'column',
                   gap: 10,
@@ -151,7 +144,7 @@ export function SectionList({ component: c, state }: BaseComponentProps<SectionL
         ))}
 
         {items.length === 0 && (
-          <div style={{ fontSize: 13, color: '#9ca3af', padding: '12px 0' }}>No items yet.</div>
+          <div style={{ fontSize: 13, color: muted(), padding: '12px 0' }}>No items yet.</div>
         )}
       </div>
 
@@ -160,14 +153,9 @@ export function SectionList({ component: c, state }: BaseComponentProps<SectionL
           type="button"
           onClick={handleAdd}
           style={{
+            ...buttonStyle('ghost'),
             marginTop: 10,
-            fontSize: 13,
-            padding: '6px 14px',
-            border: '1px dashed #93c5fd',
-            borderRadius: 6,
-            cursor: 'pointer',
-            color: '#2563eb',
-            background: '#eff6ff',
+            border: `1px dashed ${controlEdge()}`,
           }}
         >
           + {c.addLabel ?? 'Add item'}

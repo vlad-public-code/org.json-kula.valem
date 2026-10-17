@@ -3,6 +3,7 @@ import { getByPath } from '../hooks/useDeferredMutate';
 import { useJSONataLiteral } from '../hooks/useJSONata';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { ImageSpec } from '../types';
+import { muted } from '../themeColors';
 
 /**
  * `image` — a literal `src`, a JSONata expression, or the bound value.
@@ -37,7 +38,7 @@ export function ImageComponent({ component: c }: BaseComponentProps<ImageSpec>) 
         }}
       />
       {c.label && (
-        <figcaption style={{ fontSize: 11, color: '#6b7280' }}>{c.label}</figcaption>
+        <figcaption style={{ fontSize: 12, color: muted() }}>{c.label}</figcaption>
       )}
     </figure>
   );

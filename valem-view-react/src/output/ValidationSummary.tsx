@@ -1,11 +1,12 @@
 import { useViewContext } from '../ViewContext';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { ValidationSummarySpec } from '../types';
+import { ink, radius, tone } from '../themeColors';
 
 const VARIANTS: Record<string, { bg: string; fg: string; border: string }> = {
-  danger:  { bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca' },
-  warning: { bg: '#fffbeb', fg: '#92400e', border: '#fde68a' },
-  info:    { bg: '#eff6ff', fg: '#1e40af', border: '#bfdbfe' },
+  danger:  { bg: tone.dangerBg(), fg: tone.dangerText(), border: tone.dangerLine() },
+  warning: { bg: tone.warningBg(), fg: tone.warningText(), border: tone.warningLine() },
+  info:    { bg: tone.infoBg(), fg: ink(), border: tone.infoLine() },
 };
 
 /**
@@ -42,7 +43,7 @@ export function ValidationSummary({ component: c }: BaseComponentProps<Validatio
     // emptyText earns the space.
     if (!c.emptyText) return null;
     return (
-      <div data-testid={c.id} style={{ fontSize: 12, color: '#15803d' }}>
+      <div data-testid={c.id} style={{ fontSize: 13, color: tone.successText() }}>
         {c.emptyText}
       </div>
     );
@@ -53,15 +54,15 @@ export function ValidationSummary({ component: c }: BaseComponentProps<Validatio
       data-testid={c.id}
       role="alert"
       style={{
-        padding: '10px 14px',
-        borderRadius: 6,
+        padding: '12px 14px',
+        borderRadius: radius.md,
         border: `1px solid ${v.border}`,
         background: v.bg,
         color: v.fg,
       }}
     >
-      {c.label && <strong style={{ display: 'block', fontSize: 13, marginBottom: 6 }}>{c.label}</strong>}
-      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, lineHeight: 1.6 }}>
+      {c.label && <strong style={{ display: 'block', fontSize: 14, marginBottom: 6 }}>{c.label}</strong>}
+      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.6 }}>
         {entries.map(([path, message]) => (
           <li key={path} data-testid={`${c.id}-item`}>
             {path.startsWith('#') ? (

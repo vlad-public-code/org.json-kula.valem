@@ -4,6 +4,7 @@ import { useJSONataText } from '../hooks/useJSONata';
 import { formatValue } from '../format';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { KeyValueItemSpec, KeyValueListSpec, ModelState } from '../types';
+import { ink, muted } from '../themeColors';
 
 /**
  * `keyValueList` / `summaryList` — the read-only summary a derivation-heavy model ends on.
@@ -46,8 +47,8 @@ function Row({ item, state, testId }: { item: KeyValueItemSpec; state: ModelStat
 
   return (
     <>
-      <dt style={{ color: '#6b7280' }}>{item.label}</dt>
-      <dd data-testid={testId} style={{ margin: 0, fontWeight: 500, color: '#111827' }}>
+      <dt style={{ color: muted() }}>{item.label}</dt>
+      <dd data-testid={testId} style={{ margin: 0, fontWeight: 500, color: ink() }}>
         {display || '—'}
       </dd>
     </>

@@ -2,6 +2,7 @@ import { useViewContext } from '../ViewContext';
 import { useDeferredMutate } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { SliderSpec } from '../types';
+import { accentFill, helperText, ink, labelText, requiredMark } from '../themeColors';
 
 export function SliderField({ component: c, enabled, readOnly, required }: BaseComponentProps<SliderSpec>) {
   const { state } = useViewContext();
@@ -15,9 +16,9 @@ export function SliderField({ component: c, enabled, readOnly, required }: BaseC
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {c.label && (
-        <label htmlFor={c.id} style={{ fontSize: 13, fontWeight: 500 }}>
+        <label htmlFor={c.id} style={labelText}>
           {c.label}
-          {required && <span style={{ color: 'red', marginLeft: 2 }}>*</span>}
+          {required && <span style={requiredMark} aria-hidden="true">*</span>}
         </label>
       )}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -29,7 +30,7 @@ export function SliderField({ component: c, enabled, readOnly, required }: BaseC
           step={step}
           value={numVal}
           disabled={!enabled || readOnly}
-          style={{ flex: 1, cursor: readOnly ? 'not-allowed' : 'pointer' }}
+          style={{ flex: 1, accentColor: accentFill(), cursor: readOnly ? 'not-allowed' : 'pointer' }}
           onChange={e => {
             if (!readOnly) {
               const n = parseFloat(e.target.value);
@@ -44,11 +45,11 @@ export function SliderField({ component: c, enabled, readOnly, required }: BaseC
           onKeyUp={commit}
           onBlur={handleBlur}
         />
-        <span style={{ fontSize: 13, fontWeight: 500, minWidth: 36, textAlign: 'right' }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: ink(), minWidth: 36, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
           {numVal}
         </span>
       </div>
-      {c.helperText && <span style={{ fontSize: 11, color: '#666' }}>{c.helperText}</span>}
+      {c.helperText && <span style={helperText}>{c.helperText}</span>}
     </div>
   );
 }

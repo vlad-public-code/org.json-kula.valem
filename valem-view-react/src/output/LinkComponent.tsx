@@ -3,6 +3,7 @@ import { getByPath } from '../hooks/useDeferredMutate';
 import { useJSONataLiteral, useJSONataText } from '../hooks/useJSONata';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { LinkSpec } from '../types';
+import { accent } from '../themeColors';
 
 /**
  * `link` — an anchor out of the model.
@@ -35,7 +36,7 @@ export function LinkComponent({ component: c }: BaseComponentProps<LinkSpec>) {
         display: 'inline-flex',
         alignItems: 'center',
         gap: 4,
-        color: '#2563eb',
+        color: accent('#2563eb'),
         fontSize: 14,
         textDecoration: 'underline',
       }}

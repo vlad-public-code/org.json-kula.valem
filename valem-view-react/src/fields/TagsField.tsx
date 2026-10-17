@@ -5,6 +5,7 @@ import { useResolvedOptions } from '../hooks/useResolvedOptions';
 import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { ChoiceInputSpec } from '../types';
+import { accentFill, accentRing, accentSoft, controlBox, helperText, ink, labelText, muted, requiredMark } from '../themeColors';
 
 /**
  * `tagsField` — an array of scalars, edited as chips.
@@ -41,26 +42,27 @@ export function TagsField(
   };
 
   const suggestions = options.filter(o => !tags.includes(o.value));
+  const [focused, setFocused] = useState(false);
 
   return (
     <div data-testid={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {c.label && (
-        <label htmlFor={c.id} style={{ fontSize: 13, fontWeight: 500 }}>
+        <label htmlFor={c.id} style={labelText}>
           {c.label}
-          {required && <span style={{ color: 'red', marginLeft: 2 }}>*</span>}
+          {required && <span style={requiredMark} aria-hidden="true">*</span>}
         </label>
       )}
       <div style={{
+        ...controlBox,
         display: 'flex',
         flexWrap: 'wrap',
         alignItems: 'center',
         gap: 6,
         padding: '4px 6px',
-        border: `1px solid ${fieldColors.border}`,
-        borderRadius: 4,
         background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg,
         color: fieldColors.text,
-        minHeight: 32,
+        // The inner input has no outline of its own, so the box shows focus for it.
+        ...(focused ? { borderColor: accentFill(), boxShadow: `0 0 0 3px ${accentRing()}` } : {}),
       }}>
         {tags.map(tag => (
           <span
@@ -70,11 +72,11 @@ export function TagsField(
               display: 'inline-flex',
               alignItems: 'center',
               gap: 4,
-              padding: '2px 8px',
-              borderRadius: 12,
-              background: '#e0e7ff',
-              color: '#3730a3',
-              fontSize: 12,
+              padding: '2px 4px 2px 10px',
+              borderRadius: 999,
+              background: accentSoft(),
+              color: ink(),
+              fontSize: 13,
             }}
           >
             {tag}
@@ -86,7 +88,8 @@ export function TagsField(
                 onClick={() => write(tags.filter(t => t !== tag))}
                 style={{
                   border: 'none', background: 'transparent', cursor: 'pointer',
-                  fontSize: 13, lineHeight: 1, color: '#4338ca', padding: 0,
+                  fontSize: 15, lineHeight: 1, color: muted(), padding: 0,
+                  width: 22, height: 22, borderRadius: 999,
                 }}
               >
                 ×
@@ -109,7 +112,8 @@ export function TagsField(
             // only way to reach a chip without a pointer.
             else if (e.key === 'Backspace' && !entry && tags.length) write(tags.slice(0, -1));
           }}
-          onBlur={() => add(entry)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => { setFocused(false); add(entry); }}
           style={{
             flex: 1, minWidth: 80, border: 'none', outline: 'none', fontSize: 14,
             background: 'transparent', color: fieldColors.text,
@@ -121,7 +125,7 @@ export function TagsField(
           {suggestions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </datalist>
       )}
-      {c.helperText && <span style={{ fontSize: 11, color: '#666' }}>{c.helperText}</span>}
+      {c.helperText && <span style={helperText}>{c.helperText}</span>}
     </div>
   );
 }

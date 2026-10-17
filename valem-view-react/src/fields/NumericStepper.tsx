@@ -4,6 +4,7 @@ import { getByPath } from '../hooks/useDeferredMutate';
 import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { SliderSpec } from '../types';
+import { controlEdge, fontSans, helperText, ink, inset, labelText, muted, panel, radius, requiredMark, rule } from '../themeColors';
 
 /** `numericStepper` — a bounded number with −/+ controls, for quantities. */
 export function NumericStepper(
@@ -43,12 +44,12 @@ export function NumericStepper(
   return (
     <div data-testid={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {c.label && (
-        <label htmlFor={c.id} style={{ fontSize: 13, fontWeight: 500 }}>
+        <label htmlFor={c.id} style={labelText}>
           {c.label}
-          {required && <span style={{ color: 'red', marginLeft: 2 }}>*</span>}
+          {required && <span style={requiredMark} aria-hidden="true">*</span>}
         </label>
       )}
-      <div style={{ display: 'inline-flex', alignItems: 'stretch', border: '1px solid #d1d5db', borderRadius: 6, overflow: 'hidden', width: 'fit-content' }}>
+      <div style={{ display: 'inline-flex', alignItems: 'stretch', border: `1px solid ${controlEdge()}`, borderRadius: radius.sm, overflow: 'hidden', width: 'fit-content', minHeight: 38 }}>
         <StepButton
           label="−"
           testId={`${c.id}-decrement`}
@@ -70,10 +71,12 @@ export function NumericStepper(
           style={{
             width: 64,
             border: 'none',
-            borderLeft: '1px solid #d1d5db',
-            borderRight: '1px solid #d1d5db',
+            borderLeft: `1px solid ${rule()}`,
+            borderRight: `1px solid ${rule()}`,
             textAlign: 'center',
+            fontFamily: fontSans,
             fontSize: 14,
+            fontVariantNumeric: 'tabular-nums',
             padding: '6px 4px',
             background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg,
             color: fieldColors.text,
@@ -86,7 +89,7 @@ export function NumericStepper(
           onClick={() => commit(value + step)}
         />
       </div>
-      {c.helperText && <span style={{ fontSize: 11, color: '#666' }}>{c.helperText}</span>}
+      {c.helperText && <span style={helperText}>{c.helperText}</span>}
     </div>
   );
 }
@@ -103,11 +106,15 @@ function StepButton(
       disabled={disabled}
       onClick={onClick}
       style={{
+        minWidth: 38,
         padding: '6px 12px',
         border: 'none',
-        background: disabled ? '#f9fafb' : '#fff',
-        color: disabled ? '#d1d5db' : '#374151',
-        fontSize: 16,
+        background: disabled ? inset() : panel(),
+        // A disabled step still has to be legible (WCAG exempts disabled controls, but a reader
+        // needs to see that a minus exists and is unavailable, not that it vanished).
+        color: disabled ? muted() : ink(),
+        opacity: disabled ? 0.55 : 1,
+        fontSize: 18,
         lineHeight: 1,
         cursor: disabled ? 'not-allowed' : 'pointer',
       }}

@@ -3,6 +3,7 @@ import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { SliderSpec } from '../types';
+import { faint, helperText, labelText, requiredMark, tone } from '../themeColors';
 
 /**
  * `ratingField` — a slider drawn as stars.
@@ -32,9 +33,9 @@ export function RatingField(
   return (
     <div data-testid={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {c.label && (
-        <span style={{ fontSize: 13, fontWeight: 500 }}>
+        <span style={labelText}>
           {c.label}
-          {required && <span style={{ color: 'red', marginLeft: 2 }}>*</span>}
+          {required && <span style={requiredMark} aria-hidden="true">*</span>}
         </span>
       )}
       <div
@@ -61,18 +62,20 @@ export function RatingField(
               fontSize: 22,
               lineHeight: 1,
               cursor: interactive ? 'pointer' : 'default',
-              color: v <= shown ? '#f59e0b' : '#d1d5db',
+              // Graphics, so 3:1 (WCAG 1.4.11) rather than text contrast: the status amber for a
+              // chosen star, the decorative grey for an empty one. The button's aria-label names it.
+              color: v <= shown ? tone.warningLine() : faint(),
               transition: 'color 0.1s',
             }}
           >
-            ★
+            <span aria-hidden="true">★</span>
           </button>
         ))}
-        <span style={{ fontSize: 12, color: '#6b7280', marginLeft: 6 }}>
+        <span style={{ ...helperText, marginLeft: 6, fontVariantNumeric: 'tabular-nums' }}>
           {value ? `${value} / ${max}` : ''}
         </span>
       </div>
-      {c.helperText && <span style={{ fontSize: 11, color: '#666' }}>{c.helperText}</span>}
+      {c.helperText && <span style={helperText}>{c.helperText}</span>}
     </div>
   );
 }

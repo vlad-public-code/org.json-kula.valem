@@ -4,6 +4,7 @@ import { getByPath } from '../hooks/useDeferredMutate';
 import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { DependentSelectorSpec } from '../types';
+import { controlBox, helperText, labelText, requiredMark } from '../themeColors';
 
 export function CountryRegionSelector({ component: c, enabled, readOnly, required }: BaseComponentProps<DependentSelectorSpec>) {
   const { state, onMutate } = useViewContext();
@@ -17,19 +18,31 @@ export function CountryRegionSelector({ component: c, enabled, readOnly, require
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {c.label && (
-        <label style={{ fontSize: 13, fontWeight: 500 }}>
+        <label htmlFor={c.id} style={labelText}>
           {c.label}
-          {required && <span style={{ color: 'red', marginLeft: 2 }}>*</span>}
+          {required && <span style={requiredMark} aria-hidden="true">*</span>}
         </label>
       )}
+      {regions.loaded && countryCode && regions.length === 0 ? (
+        // A country with no listed subdivisions gets a text box: an empty dropdown would leave the
+        // field impossible to fill.
+        <input
+          id={c.id}
+          type="text"
+          value={value}
+          placeholder={c.placeholder ?? 'Region'}
+          disabled={!enabled}
+          readOnly={readOnly}
+          style={{ ...controlBox, background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg, color: fieldColors.text }}
+          onChange={e => { if (c.bind && !readOnly) onMutate({ [c.bind]: e.target.value }); }}
+        />
+      ) : (
       <select
+        id={c.id}
         value={value}
         disabled={!enabled || readOnly || !countryCode}
         style={{
-          padding: '6px 10px',
-          border: `1px solid ${fieldColors.border}`,
-          borderRadius: 4,
-          fontSize: 14,
+          ...controlBox,
           background: readOnly || !countryCode ? fieldColors.bgReadOnly : fieldColors.bg,
           color: fieldColors.text,
         }}
@@ -46,6 +59,8 @@ export function CountryRegionSelector({ component: c, enabled, readOnly, require
           </option>
         ))}
       </select>
+      )}
+      {c.helperText && <span style={helperText}>{c.helperText}</span>}
     </div>
   );
 }

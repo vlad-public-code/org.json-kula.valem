@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { ComponentRenderer } from '../ComponentRenderer';
 import type { ComponentSpec, ModelState } from '../types';
+import { accentFill, buttonStyle, fontSans, ink, muted, onAccent, rule, ruleStrong, surface, tone } from '../themeColors';
 
 export interface LayoutContainerProps {
   components: ComponentSpec[];
@@ -38,7 +39,14 @@ export function LayoutContainer({ components, layout = 'vertical', columns = 2, 
 /** The three non-panelled arrangements, also used directly by card/toolbar/fieldSet. */
 export function flowStyle(layout = 'vertical', columns = 2): CSSProperties {
   if (layout === 'grid') {
-    return { display: 'grid', gridTemplateColumns: `repeat(${columns}, 1fr)`, gap: 16 };
+    // At most `columns` columns, and fewer when each would drop under 180px: a three-column fieldset
+    // on a 390px phone was three 100px fields. Pure CSS, because inline styles have no media queries.
+    const gap = 16;
+    return {
+      display: 'grid',
+      gridTemplateColumns: `repeat(auto-fit, minmax(max(180px, calc((100% - ${(columns - 1) * gap}px) / ${columns})), 1fr))`,
+      gap,
+    };
   }
   if (layout === 'horizontal') {
     return { display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: 16, alignItems: 'flex-end' };
@@ -61,7 +69,7 @@ function TabbedPanels({ components, state }: { components: ComponentSpec[]; stat
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div role="tablist" style={{ display: 'flex', gap: 4, borderBottom: '1px solid #e5e7eb' }}>
+      <div role="tablist" style={{ display: 'flex', gap: 4, borderBottom: `1px solid ${rule()}`, overflowX: 'auto' }}>
         {components.map((c, i) => (
           <button
             key={c.id}
@@ -92,14 +100,14 @@ function WizardPanels({ components, state }: { components: ComponentSpec[]; stat
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <ol style={{ display: 'flex', gap: 8, listStyle: 'none', margin: 0, padding: 0 }}>
+      <ol style={{ display: 'flex', flexWrap: 'wrap', gap: 8, listStyle: 'none', margin: 0, padding: 0 }}>
         {components.map((c, i) => (
           <li key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={stepBadgeStyle(i, index)}>{i + 1}</span>
-            <span style={{ fontSize: 13, fontWeight: i === index ? 600 : 400, color: i === index ? '#111827' : '#6b7280' }}>
+            <span style={{ fontSize: 13, fontWeight: i === index ? 650 : 500, color: i === index ? ink() : muted() }}>
               {componentLabel(c)}
             </span>
-            {i < components.length - 1 && <span style={{ width: 24, height: 1, background: '#e5e7eb' }} />}
+            {i < components.length - 1 && <span aria-hidden="true" style={{ width: 24, height: 2, borderRadius: 1, background: i < index ? tone.successLine() : ruleStrong() }} />}
           </li>
         ))}
       </ol>
@@ -134,14 +142,9 @@ function WizardButton(
       data-testid={`wizard-${label.toLowerCase()}`}
       onClick={onClick}
       style={{
-        padding: '6px 16px',
-        borderRadius: 6,
-        fontSize: 14,
+        ...buttonStyle(primary ? 'primary' : 'secondary'),
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.5 : 1,
-        border: primary ? 'none' : '1px solid #d1d5db',
-        background: primary ? '#2563eb' : '#fff',
-        color: primary ? '#fff' : '#374151',
       }}
     >
       {label}
@@ -151,13 +154,16 @@ function WizardButton(
 
 function tabStyle(isActive: boolean): CSSProperties {
   return {
+    minHeight: 40,
     padding: '8px 14px',
     border: 'none',
-    borderBottom: isActive ? '2px solid #2563eb' : '2px solid transparent',
+    borderBottom: isActive ? `2px solid ${accentFill()}` : '2px solid transparent',
     background: 'transparent',
-    color: isActive ? '#2563eb' : '#6b7280',
-    fontWeight: isActive ? 600 : 400,
+    color: isActive ? ink() : muted(),
+    fontFamily: fontSans,
+    fontWeight: isActive ? 650 : 500,
     fontSize: 14,
+    whiteSpace: 'nowrap',
     cursor: 'pointer',
     marginBottom: -1,
   };
@@ -174,7 +180,8 @@ function stepBadgeStyle(i: number, active: number): CSSProperties {
     borderRadius: '50%',
     fontSize: 12,
     fontWeight: 600,
-    background: i === active ? '#2563eb' : done ? '#dcfce7' : '#f3f4f6',
-    color: i === active ? '#fff' : done ? '#15803d' : '#6b7280',
+    background: i === active ? accentFill() : done ? tone.successBg() : surface(),
+    color: i === active ? onAccent : done ? tone.successText() : muted(),
+    border: i === active || done ? '1px solid transparent' : `1px solid ${ruleStrong()}`,
   };
 }

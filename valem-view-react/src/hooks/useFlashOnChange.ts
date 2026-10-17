@@ -24,7 +24,9 @@ import type { RefObject } from 'react';
  *                       (default `'transparent'`; a StatTile with a white card passes `'#ffffff'`).
  */
 
-// Valem's reactive signal — --signal-soft in valem-ui's token system. This package is light-only.
+// Valem's reactive signal — --signal-soft in valem-ui's token system, read at flash time so the dark
+// theme flashes its own dark green instead of a pale one that washed out light text. This literal is
+// the fallback for a host without the token.
 const FLASH_BACKGROUND = '#d6f5e6';
 const FLASH_DURATION_MS = 650;
 
@@ -56,12 +58,19 @@ export function useFlashOnChange<E extends HTMLElement = HTMLElement>(
         : false;
     if (reducedMotion) return;
 
+    // Keyframes get concrete colours: a `var()` inside an animate() keyframe is not resolved the same
+    // way in every browser. The token comes from the cascade; a `var(...)` rest background is
+    // resolved to what the element is actually painted with right now.
+    const styles = getComputedStyle(el);
+    const flash = styles.getPropertyValue('--signal-soft').trim() || FLASH_BACKGROUND;
+    const rest = restBackground.startsWith('var(') ? styles.backgroundColor : restBackground;
+
     // Instant emerald light-up, then an ease-out fade back to the element's own background.
     el.animate(
       [
-        { backgroundColor: FLASH_BACKGROUND },
-        { backgroundColor: FLASH_BACKGROUND, offset: 0.12 },
-        { backgroundColor: restBackground },
+        { backgroundColor: flash },
+        { backgroundColor: flash, offset: 0.12 },
+        { backgroundColor: rest },
       ],
       { duration: FLASH_DURATION_MS, easing: 'ease-out' },
     );

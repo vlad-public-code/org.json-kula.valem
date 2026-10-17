@@ -6,54 +6,42 @@ export interface Region {
   state_code: string;
 }
 
-interface StateEntry {
-  iso2: string;
-  states: Region[];
-}
+/**
+ * The top-level subdivisions of a country, from bundled Unicode CLDR data (data/regions.ts).
+ *
+ * The table is imported lazily, so it is a separate same-origin chunk fetched only by views that
+ * render a countryRegionSelector. It used to come from a GitHub-hosted JSON file, which the CSP
+ * blocked and which has since moved (404), leaving every region selector empty.
+ *
+ * `loaded` distinguishes "still loading" from "this country has no subdivisions", so the field can
+ * offer free text in the second case instead of an empty dropdown.
+ */
+let table: Promise<Record<string, ReadonlyArray<readonly [string, string]>>> | null = null;
+const loadTable = () => (table ??= import('../data/regions').then(m => m.REGIONS));
 
-const cache = new Map<string, Region[]>();
-let allStates: StateEntry[] | null = null;
-let pendingFetch: Promise<StateEntry[]> | null = null;
-
-async function fetchAll(): Promise<StateEntry[]> {
-  if (allStates) return allStates;
-  if (!pendingFetch) {
-    pendingFetch = fetch(
-      'https://raw.githubusercontent.com/dr5hn/countries-states-cities-database/master/states.json',
-    )
-      .then(r => r.json())
-      .then((data: StateEntry[]) => {
-        allStates = data;
-        return data;
-      });
-  }
-  return pendingFetch;
-}
-
-export function useRegions(countryCode: string | undefined): Region[] {
-  const [regions, setRegions] = useState<Region[]>(
-    countryCode ? (cache.get(countryCode) ?? []) : [],
+export function useRegions(countryCode: string | undefined): Region[] & { loaded?: boolean } {
+  const [state, setState] = useState<{ code?: string; regions: Region[]; loaded: boolean }>(
+    { regions: [], loaded: false },
   );
 
   useEffect(() => {
-    if (!countryCode) {
-      setRegions([]);
-      return;
-    }
-    const cached = cache.get(countryCode);
-    if (cached) {
-      setRegions(cached);
-      return;
-    }
-    fetchAll()
-      .then(data => {
-        const entry = data.find(e => e.iso2 === countryCode);
-        const result = entry?.states ?? [];
-        cache.set(countryCode, result);
-        setRegions(result);
+    if (!countryCode) { setState({ regions: [], loaded: true }); return; }
+    let cancelled = false;
+    loadTable()
+      .then(all => {
+        if (cancelled) return;
+        const rows = all[countryCode.toUpperCase()] ?? [];
+        setState({
+          code: countryCode,
+          regions: rows.map(([code, name], i) => ({ id: i, name, state_code: code })),
+          loaded: true,
+        });
       })
-      .catch(() => {});
+      .catch(() => { if (!cancelled) setState({ regions: [], loaded: true }); });
+    return () => { cancelled = true; };
   }, [countryCode]);
 
-  return regions;
+  const out = state.regions as Region[] & { loaded?: boolean };
+  out.loaded = state.loaded && state.code === countryCode;
+  return out;
 }

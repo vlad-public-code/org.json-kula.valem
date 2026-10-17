@@ -27,12 +27,26 @@
 
   /* Ink */
   --text: #16161f;
-  --text-muted: #6a6b7c;
+  /* #5f6072 clears 4.5:1 on every light surface, including --accent-soft (the old #6a6b7c read
+     4.46:1 there). --text-light is for decoration only: at 3.6:1 it is too faint for words. */
+  --text-muted: #5f6072;
   --text-light: #85869a;
 
-  /* Hairlines */
+  /* Hairlines are decoration (WCAG 1.4.11 exempts them). The EDGE of an input is not: it is the
+     only thing that says where the control is, so it gets its own token at 3:1 or better. */
   --border: #e7e8f1;
   --border-strong: #d7d9e6;
+  --border-control: #85869a;
+
+  /* Accent as TEXT (links, active labels). Same as --accent in light; lighter in dark, where the
+     fill colour falls under 4.5:1 as text. */
+  --accent-text: #5b57eb;
+  /* Status colours as TEXT. --green/--red/--orange are fills and fall under 4.5:1 as words. */
+  --success-text: #0a6e4d;
+  --warning-text: #9a5205;
+  --danger-text: #b42328;
+  /* A destructive button's fill. --red is too light for white text (3.9:1); this is 5.6:1. */
+  --danger-fill: #c62a2f;
 
   /* Accent — iris. --blue/--blue-light are kept as aliases so existing inline styles re-hue. */
   --accent: #5b57eb;
@@ -98,6 +112,11 @@
 
   --border: #26262f;
   --border-strong: #34343f;
+  --border-control: #6c6e85;
+  --accent-text: #8f8bff;
+  --success-text: #3ccf91;
+  --warning-text: #f2b05a;
+  --danger-text: #ff8a8e;
 
   --accent-soft: #221f3d;
   --blue-light: #221f3d;
@@ -395,17 +414,21 @@ textarea:focus, input[type="text"]:focus {
 .badge-gray { background: var(--surface-2); color: var(--text-muted); }
 
 /* ── Error / info banners ── */
+/* Banners are messages to a person, so they use the body face; the status TEXT tokens keep the
+   words at 4.5:1 on the soft surfaces (the fill colours read about 3.4:1 there). pre-wrap stays,
+   because some messages carry the server's own line breaks. */
 .banner {
   padding: 10px 14px;
   border-radius: var(--radius);
   font-size: 13px;
+  line-height: 1.5;
   margin-bottom: 12px;
   white-space: pre-wrap;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
 }
-.banner-error { background: var(--red-light); color: var(--red); border: 1px solid rgba(229,72,77,.22); }
-.banner-success { background: var(--green-light); color: var(--green); border: 1px solid rgba(14,159,110,.22); }
-.banner-info { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-ring); }
+.banner-error { background: var(--red-light); color: var(--danger-text); border: 1px solid rgba(229,72,77,.35); border-left: 4px solid var(--red); }
+.banner-success { background: var(--green-light); color: var(--success-text); border: 1px solid rgba(14,159,110,.35); border-left: 4px solid var(--green); }
+.banner-info { background: var(--accent-soft); color: var(--text); border: 1px solid var(--accent-ring); border-left: 4px solid var(--accent); }
 
 /* ── JSON viewer ── */
 .json-viewer { font-family: var(--font-mono); font-size: 12px; line-height: 1.6; }

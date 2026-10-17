@@ -67,6 +67,7 @@ import { SectionItem } from './aggregates/SectionItem';
 import { ButtonComponent } from './actions/ButtonComponent';
 import { MenuComponent } from './actions/MenuComponent';
 import { StepperComponent } from './actions/StepperComponent';
+import { tone } from './themeColors';
 
 export interface ComponentRendererProps {
   component: ComponentSpec;
@@ -177,7 +178,7 @@ export function ComponentRenderer({ component: c, state }: ComponentRendererProp
     >
       {inner}
       {fieldError && (
-        <span style={{ display: 'block', color: '#dc2626', fontSize: 11, marginTop: 2 }}>
+        <span role="alert" style={{ display: 'block', color: tone.dangerText(), fontSize: 12, marginTop: 4 }}>
           {fieldError}
         </span>
       )}
