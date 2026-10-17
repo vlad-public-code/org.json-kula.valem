@@ -46,8 +46,10 @@ jobs:
         working-directory: docs
         env:
           JEKYLL_ENV: production
-        # base_path from configure-pages keeps links correct for a project page.
-        run: bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
+        # The github.io copy is a redirect mirror of valem.run/docs: _config.ghpages.yml points
+        # url/baseurl (hence every canonical and link) at valem.run and turns on the meta refresh.
+        # No --baseurl override any more — it would re-point everything back at github.io.
+        run: bundle exec jekyll build --config _config.yml,_config.ghpages.yml
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

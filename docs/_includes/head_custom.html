@@ -35,6 +35,16 @@ SEO tag's canonical is what consolidates those onto the real page.
 {%- endcomment -%}
 
 {%- comment -%}
+Redirect mirror. Only the GitHub Pages build sets `docs_mirror` (_config.ghpages.yml), and there
+`url`/`baseurl` already point at valem.run/docs, so `absolute_url` names this page's twin on the
+product domain — the same URL jekyll-seo-tag's canonical names. The valem.run build never sets
+the flag, so it cannot redirect to itself.
+{%- endcomment -%}
+{%- if site.docs_mirror %}
+<meta http-equiv="refresh" content="0; url={{ page.url | absolute_url }}" />
+{%- endif %}
+
+{%- comment -%}
 Structured data (JSON-LD). On the home page, describe the project itself as a SoftwareApplication
 so it's eligible for an app/rich result; on every other page emit a TechArticle plus a two-level
 BreadcrumbList (site -> page) to reinforce the hierarchy. `jsonify` does the JSON string escaping,
