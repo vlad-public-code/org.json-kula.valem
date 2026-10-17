@@ -1,0 +1,18 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.vlad-public-code/valem-calculators",
+  "description": "Verified tax calculators for 50+ countries: net salary, car tax, self-employed. With sources.",
+  "status": "active",
+  "repository": {
+    "url": "https://github.com/vlad-public-code/org.json-kula.valem",
+    "source": "github"
+  },
+  "websiteUrl": "https://valem.run/calculators",
+  "version": "1.0.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://valem.run/mcp/calculators"
+    }
+  ]
+}

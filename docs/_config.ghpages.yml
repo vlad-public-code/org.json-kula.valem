@@ -1,0 +1,16 @@
+# Overlay used ONLY by the GitHub Pages build (.github/workflows/pages.yml).
+#
+#   bundle exec jekyll build --config _config.yml,_config.ghpages.yml
+#
+# The docs are served from valem.run/docs (see _config.valem.yml). The github.io project site is a
+# second, older copy of the same 49 pages, and with its own self-canonical it competed with — and,
+# being older, beat — the copy on the product domain. This overlay turns it into a redirect mirror:
+#
+# - `url` + `baseurl` are what jekyll-seo-tag derives the canonical from, so every github.io page
+#   now names its valem.run twin as canonical — one canonical tag, no second one to conflict with
+#   (see the note in _includes/head_custom.html). Internal links and assets resolve there too.
+# - `docs_mirror` makes _includes/head_custom.html add a meta refresh to that same URL. The
+#   valem.run build never sets it, so that build cannot redirect to itself.
+url: https://valem.run
+baseurl: /docs
+docs_mirror: true

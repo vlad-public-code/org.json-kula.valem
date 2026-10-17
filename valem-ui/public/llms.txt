@@ -18,24 +18,33 @@ Use it here (no install), or run it yourself and drive it from an agent over MCP
 ## This sandbox
 
 - [Open the sandbox](https://valem.run/): describe a model in a sentence and interact with it live.
-- [What to do in it](https://vlad-public-code.github.io/org.json-kula.valem/getting-started/sandbox.html): a short tour of the generate → interact loop.
+- [What to do in it](https://valem.run/docs/getting-started/sandbox.html): a short tour of the generate → interact loop.
 
 ## Learn and build
 
-- [Documentation](https://vlad-public-code.github.io/org.json-kula.valem/): the full guide, reference, and deployment docs.
-- [llms.txt (documentation site)](https://vlad-public-code.github.io/org.json-kula.valem/llms.txt): the curated index for assistants — start there for the complete map.
-- [What is Valem?](https://vlad-public-code.github.io/org.json-kula.valem/getting-started/what-is-valem.html): the problem it solves and how the causes-only model closes it.
-- [Copy-paste spec examples](https://vlad-public-code.github.io/org.json-kula.valem/reference/copy-paste-specs.html): minimal, self-contained ModelSpecs with the exact command to create and run each.
-- [Model spec format](https://vlad-public-code.github.io/org.json-kula.valem/reference/model-spec-format.html): the authoritative field-by-field reference.
+- [Documentation](https://valem.run/docs/): the full guide, reference, and deployment docs.
+- [llms.txt (documentation site)](https://valem.run/docs/llms.txt): the curated index for assistants — start there for the complete map.
+- [What is Valem?](https://valem.run/docs/getting-started/what-is-valem.html): the problem it solves and how the causes-only model closes it.
+- [Copy-paste spec examples](https://valem.run/docs/reference/copy-paste-specs.html): minimal, self-contained ModelSpecs with the exact command to create and run each.
+- [Model spec format](https://valem.run/docs/reference/model-spec-format.html): the authoritative field-by-field reference.
 
 ## Connect an AI agent (MCP)
 
-- [Running the MCP server](https://vlad-public-code.github.io/org.json-kula.valem/deployment/mcp-server.html): install/run `valem-mcp`; register it with Claude Code or Claude Desktop; find it in MCP directories.
-- [MCP tools & resources](https://vlad-public-code.github.io/org.json-kula.valem/reference/mcp-tools.html): every tool (`create_model`, `mutate`, `get_state`, `explain`, `validate_spec`, `test_spec`, `dry_run`, …) and its arguments.
-- [Connect your agent](https://vlad-public-code.github.io/org.json-kula.valem/getting-started/connect-your-agent.html): the paired-browser loop — an agent drives a model while you watch it react in this sandbox.
+- [Running the MCP server](https://valem.run/docs/deployment/mcp-server.html): install/run `valem-mcp`; register it with Claude Code or Claude Desktop; find it in MCP directories.
+- [MCP tools & resources](https://valem.run/docs/reference/mcp-tools.html): every tool (`create_model`, `mutate`, `get_state`, `explain`, `validate_spec`, `test_spec`, `dry_run`, …) and its arguments.
+- [Connect your agent](https://valem.run/docs/getting-started/connect-your-agent.html): the paired-browser loop — an agent drives a model while you watch it react in this sandbox.
+
+## For agents: compute an answer
+
+- [Calculators MCP server](https://valem.run/mcp/calculators): stateless, no pairing — `list_calculators` then `calculate`; every result carries its tax year, cited sources and verification claim.
+- [Compute by URL](https://valem.run/calculators/germany/net-salary.json?grossAnnual=48000): any calculator's `.json` URL with its inputs as query parameters returns the computed result; with no parameters it returns the model manifest.
+- [Calculator catalog](https://valem.run/calculators/catalog.json): every calculator id; add `?country=estonia` for each one's inputs.
+- [OpenAPI](https://valem.run/openapi.json): the compute-by-URL and catalog operations, for HTTP tools and GPT actions.
 
 ## Optional
 
-- [Examples gallery](https://vlad-public-code.github.io/org.json-kula.valem/usage-scenarios/examples-gallery.html): ready-to-run ModelSpec documents that double as demos and starting points.
-- [API reference](https://vlad-public-code.github.io/org.json-kula.valem/reference/api-reference.html): REST endpoints, the WebSocket protocol, and request/response shapes.
+- [llms-full.txt](https://valem.run/llms-full.txt): every calculator page and research article as Markdown in one file; each page is also at its URL plus `.md`.
+
+- [Examples gallery](https://valem.run/docs/usage-scenarios/examples-gallery.html): ready-to-run ModelSpec documents that double as demos and starting points.
+- [API reference](https://valem.run/docs/reference/api-reference.html): REST endpoints, the WebSocket protocol, and request/response shapes.
 - [Source on GitHub](https://github.com/vlad-public-code/org.json-kula.valem): Apache-2.0, Java 21.
