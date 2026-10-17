@@ -3,6 +3,7 @@ import { useDeferredMutate } from '../hooks/useDeferredMutate';
 import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { TextAreaSpec } from '../types';
+import { controlBox, helperText, labelText, requiredMark } from '../themeColors';
 
 export function TextAreaField({ component: c, enabled, readOnly, required }: BaseComponentProps<TextAreaSpec>) {
   const { state } = useViewContext();
@@ -11,9 +12,9 @@ export function TextAreaField({ component: c, enabled, readOnly, required }: Bas
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {c.label && (
-        <label htmlFor={c.id} style={{ fontSize: 13, fontWeight: 500 }}>
+        <label htmlFor={c.id} style={labelText}>
           {c.label}
-          {required && <span style={{ color: 'red', marginLeft: 2 }}>*</span>}
+          {required && <span style={requiredMark} aria-hidden="true">*</span>}
         </label>
       )}
       <textarea
@@ -24,10 +25,7 @@ export function TextAreaField({ component: c, enabled, readOnly, required }: Bas
         readOnly={readOnly}
         rows={c.rows ?? 4}
         style={{
-          padding: '6px 10px',
-          border: `1px solid ${fieldColors.border}`,
-          borderRadius: 4,
-          fontSize: 14,
+          ...controlBox,
           resize: 'vertical',
           background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg,
           color: fieldColors.text,
@@ -35,7 +33,7 @@ export function TextAreaField({ component: c, enabled, readOnly, required }: Bas
         onChange={e => { if (!readOnly) schedule(e.target.value, e.target.value); }}
         onBlur={handleBlur}
       />
-      {c.helperText && <span style={{ fontSize: 11, color: '#666' }}>{c.helperText}</span>}
+      {c.helperText && <span style={helperText}>{c.helperText}</span>}
     </div>
   );
 }

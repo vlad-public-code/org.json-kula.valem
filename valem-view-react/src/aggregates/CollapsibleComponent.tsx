@@ -3,6 +3,7 @@ import { LayoutContainer } from './LayoutContainer';
 import { useJSONataBoolean } from '../hooks/useJSONata';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { ContainerSpec } from '../types';
+import { fontSans, ink, muted, panel, radius, rule, surface } from '../themeColors';
 
 /**
  * `collapsible` — one foldable panel — and `accordion`, a stack of them.
@@ -25,26 +26,29 @@ export function CollapsibleComponent({ component: c, state }: BaseComponentProps
     return (
       <div
         data-testid={c.id}
-        style={{ border: '1px solid #e5e7eb', borderRadius: 8, overflow: 'hidden' }}
+        style={{ border: `1px solid ${rule()}`, borderRadius: radius.md, overflow: 'hidden', background: panel() }}
       >
         {c.label && (
           <div style={{
-            padding: '8px 14px',
-            background: '#f9fafb',
-            borderBottom: '1px solid #e5e7eb',
-            fontSize: 13,
-            fontWeight: 600,
+            padding: '10px 14px',
+            background: surface(),
+            borderBottom: `1px solid ${rule()}`,
+            fontSize: 14,
+            fontWeight: 650,
+            color: ink(),
           }}>
             {c.label}
           </div>
         )}
-        <LayoutContainer components={c.components ?? []} layout="vertical" state={state} />
+        <div style={{ padding: '12px 14px' }}>
+          <LayoutContainer components={c.components ?? []} layout="vertical" state={state} />
+        </div>
       </div>
     );
   }
 
   return (
-    <section data-testid={c.id} style={{ border: '1px solid #e5e7eb', borderRadius: 8 }}>
+    <section data-testid={c.id} style={{ border: `1px solid ${rule()}`, borderRadius: radius.md, background: panel() }}>
       <button
         type="button"
         aria-expanded={isOpen}
@@ -55,21 +59,24 @@ export function CollapsibleComponent({ component: c, state }: BaseComponentProps
           alignItems: 'center',
           gap: 8,
           width: '100%',
+          minHeight: 44,
           padding: '10px 14px',
           border: 'none',
           background: 'transparent',
+          fontFamily: fontSans,
           fontSize: 14,
-          fontWeight: 600,
-          color: '#111827',
+          fontWeight: 650,
+          color: ink(),
           cursor: 'pointer',
           textAlign: 'left',
         }}
       >
-        <span style={{
+        <span aria-hidden="true" style={{
           display: 'inline-block',
+          fontSize: 11,
           transform: isOpen ? 'rotate(90deg)' : 'none',
           transition: 'transform 0.15s',
-          color: '#6b7280',
+          color: muted(),
         }}>
           ▶
         </span>

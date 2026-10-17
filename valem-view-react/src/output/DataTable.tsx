@@ -4,6 +4,11 @@ import { getByPath } from '../hooks/useDeferredMutate';
 import { formatValue } from '../format';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { DataTableSpec } from '../types';
+import { buttonStyle, ink, labelText, muted, radius, rule, ruleStrong, surface } from '../themeColors';
+
+/** A column of numbers reads right-aligned, so its digits line up. */
+const isNumeric = (col: { format?: string }) =>
+  col.format === 'currency' || col.format === 'percent' || col.format === 'number' || col.format === 'integer';
 
 export function DataTable({ component: c }: BaseComponentProps<DataTableSpec>) {
   const { state } = useViewContext();
@@ -19,20 +24,27 @@ export function DataTable({ component: c }: BaseComponentProps<DataTableSpec>) {
 
   return (
     <div>
-      {c.label && <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>{c.label}</div>}
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+      <div style={{ overflowX: 'auto', border: `1px solid ${rule()}`, borderRadius: radius.md }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, color: ink() }}>
+          {/* The label is the table's caption, so assistive tech announces it with the table. */}
+          {c.label && (
+            <caption style={{ ...labelText, textAlign: 'left', padding: '10px 12px 6px', captionSide: 'top' }}>
+              {c.label}
+            </caption>
+          )}
           <thead>
             <tr>
               {columns.map(col => (
                 <th
                   key={col.field}
                   style={{
-                    textAlign: 'left',
-                    padding: '6px 10px',
-                    background: '#f9fafb',
-                    borderBottom: '2px solid #e5e7eb',
-                    fontWeight: 600,
+                    textAlign: isNumeric(col) ? 'right' : 'left',
+                    padding: '8px 12px',
+                    background: surface(),
+                    borderBottom: `1px solid ${ruleStrong()}`,
+                    fontSize: 13,
+                    fontWeight: 650,
+                    color: muted(),
                     whiteSpace: 'nowrap',
                     width: col.width ?? undefined,
                   }}
@@ -44,7 +56,7 @@ export function DataTable({ component: c }: BaseComponentProps<DataTableSpec>) {
           </thead>
           <tbody>
             {visible.map((row, i) => (
-              <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
+              <tr key={i} style={{ borderBottom: `1px solid ${rule()}` }}>
                 {columns.map(col => {
                   const cellVal = row[col.field];
                   const display = col.format
@@ -53,7 +65,14 @@ export function DataTable({ component: c }: BaseComponentProps<DataTableSpec>) {
                       ? String(cellVal)
                       : '';
                   return (
-                    <td key={col.field} style={{ padding: '6px 10px' }}>
+                    <td
+                      key={col.field}
+                      style={{
+                        padding: '9px 12px',
+                        textAlign: isNumeric(col) || typeof cellVal === 'number' ? 'right' : 'left',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
                       {display}
                     </td>
                   );
@@ -62,7 +81,7 @@ export function DataTable({ component: c }: BaseComponentProps<DataTableSpec>) {
             ))}
             {visible.length === 0 && (
               <tr>
-                <td colSpan={columns.length} style={{ padding: 16, textAlign: 'center', color: '#9ca3af' }}>
+                <td colSpan={columns.length} style={{ padding: 16, textAlign: 'center', color: muted() }}>
                   No data
                 </td>
               </tr>
@@ -71,14 +90,14 @@ export function DataTable({ component: c }: BaseComponentProps<DataTableSpec>) {
         </table>
       </div>
       {totalPages > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8, fontSize: 12 }}>
-          <button disabled={page === 0} onClick={() => setPage(p => p - 1)} style={{ padding: '2px 8px' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 8, marginTop: 8, fontSize: 13, color: muted() }}>
+          <button type="button" disabled={page === 0} onClick={() => setPage(p => p - 1)} style={{ ...buttonStyle('secondary'), minHeight: 32, padding: '0 12px', fontSize: 13, opacity: page === 0 ? 0.5 : 1 }}>
             ‹ Prev
           </button>
-          <span style={{ lineHeight: '24px' }}>
+          <span style={{ fontVariantNumeric: 'tabular-nums' }}>
             {page + 1} / {totalPages}
           </span>
-          <button disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} style={{ padding: '2px 8px' }}>
+          <button type="button" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)} style={{ ...buttonStyle('secondary'), minHeight: 32, padding: '0 12px', fontSize: 13, opacity: page >= totalPages - 1 ? 0.5 : 1 }}>
             Next ›
           </button>
         </div>

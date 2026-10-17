@@ -4,9 +4,9 @@ import type { ViewDefinition, ModelState, MetaCache, MutationMap, ProvenanceSour
 import { ViewContext } from './ViewContext';
 import { canonicalPath } from './provenance';
 import { hasNavigationAway, scopeToIndex } from './navigation';
-import { fieldColors } from './fields/fieldColors';
 import { LayoutContainer } from './aggregates/LayoutContainer';
 import { useJSONataBoolean, useJSONataText } from './hooks/useJSONata';
+import { buttonStyle } from './themeColors';
 
 export interface ViewRendererProps {
   modelId: string;
@@ -204,18 +204,14 @@ export function ViewRenderer({
 
 // Theme tokens rather than literals: a hardcoded white background under the dark theme puts the
 // label's (inherited, theme-following) color on top of it and the control disappears.
+// A quiet, compact text button: it is navigation chrome, not one of the view's own actions.
 const BACK_STYLE: CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 6,
-  marginBottom: 12,
-  padding: '4px 10px',
-  border: `1px solid ${fieldColors.border}`,
-  borderRadius: 6,
-  background: fieldColors.mutedBg,
-  color: fieldColors.text,
+  ...buttonStyle('ghost'),
+  minHeight: 32,
+  padding: '0 10px 0 6px',
+  marginLeft: -6,
   fontSize: 13,
-  cursor: 'pointer',
+  alignSelf: 'flex-start',
 };
 
 // ── Helpers exported for use in field components ──────────────────────────────

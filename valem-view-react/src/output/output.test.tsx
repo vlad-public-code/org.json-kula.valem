@@ -215,3 +215,23 @@ describe('ImageComponent', () => {
     expect(screen.queryByTestId('img')).not.toBeInTheDocument();
   });
 });
+
+describe('theme tokens', () => {
+  // The literals these replaced rendered dark grey on the dark theme's near-black page, so every
+  // calculator embed's breakdown and notes were unreadable in dark mode. The fallback keeps the old
+  // look for a host without valem-ui's stylesheet.
+  it('colours a keyValueList value with the page ink, with a light-theme fallback', () => {
+    renderComponent(
+      { id: 'kv', type: 'summaryList', label: 'Summary', items: [{ label: 'Total', bind: '$.total' }] } as KeyValueListSpec,
+      { state: { total: 1 } },
+    );
+    expect(screen.getByTestId('kv-row-0').getAttribute('style')).toContain('var(--text, #16161f)');
+  });
+
+  it('colours staticText with the page ink', () => {
+    const { container } = renderComponent(
+      { id: 'st', type: 'staticText', text: "'Note'" } as StaticTextSpec, { state: {} },
+    );
+    expect(container.innerHTML).toContain('var(--text, #16161f)');
+  });
+});

@@ -1,8 +1,9 @@
 import { useViewContext } from '../ViewContext';
 import { useDeferredMutate } from '../hooks/useDeferredMutate';
-import { fieldColors } from './fieldColors';
+import { fieldInput } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { BasicInputSpec } from '../types';
+import { helperText, labelText, requiredMark } from '../themeColors';
 
 export function TextField({ component: c, enabled, readOnly, required, text }: BaseComponentProps<BasicInputSpec>) {
   const { state } = useViewContext();
@@ -11,9 +12,9 @@ export function TextField({ component: c, enabled, readOnly, required, text }: B
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {(c.label || text) && (
-        <label htmlFor={c.id} style={{ fontSize: 13, fontWeight: 500 }}>
+        <label htmlFor={c.id} style={labelText}>
           {c.label ?? text}
-          {required && <span style={{ color: 'red', marginLeft: 2 }}>*</span>}
+          {required && <span style={requiredMark} aria-hidden="true">*</span>}
         </label>
       )}
       <input
@@ -23,19 +24,11 @@ export function TextField({ component: c, enabled, readOnly, required, text }: B
         placeholder={c.placeholder ?? ''}
         disabled={!enabled}
         readOnly={readOnly}
-        style={{
-          padding: '6px 10px',
-          border: `1px solid ${fieldColors.border}`,
-          borderRadius: 4,
-          fontSize: 14,
-          background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg,
-          color: fieldColors.text,
-          cursor: readOnly ? 'default' : undefined,
-        }}
+        style={fieldInput(readOnly)}
         onChange={e => { if (!readOnly) schedule(e.target.value, e.target.value); }}
         onBlur={handleBlur}
       />
-      {c.helperText && <span style={{ fontSize: 11, color: '#666' }}>{c.helperText}</span>}
+      {c.helperText && <span style={helperText}>{c.helperText}</span>}
     </div>
   );
 }

@@ -3,14 +3,18 @@ import { useViewContext } from '../ViewContext';
 import { useJSONataText, useJSONataLiteral } from '../hooks/useJSONata';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { BadgeSpec } from '../types';
+import { accent, ink, muted, radius, rule, surface, tone } from '../themeColors';
 
-const VARIANTS: Record<string, { bg: string; fg: string; border: string; icon: string }> = {
-  info:      { bg: '#eff6ff', fg: '#1e40af', border: '#bfdbfe', icon: 'ℹ' },
-  primary:   { bg: '#eff6ff', fg: '#1e40af', border: '#bfdbfe', icon: 'ℹ' },
-  secondary: { bg: '#f9fafb', fg: '#374151', border: '#e5e7eb', icon: 'ℹ' },
-  success:   { bg: '#f0fdf4', fg: '#15803d', border: '#bbf7d0', icon: '✓' },
-  warning:   { bg: '#fffbeb', fg: '#92400e', border: '#fde68a', icon: '!' },
-  danger:    { bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca', icon: '!' },
+// Theme tokens with the previous literals as fallbacks (see themeColors.ts). Under valem-ui the text
+// is the page ink rather than a dark tint, because a dark-blue or dark-red body on the dark theme's
+// soft surfaces was unreadable; the severity stays in the surface, the border and the icon.
+const VARIANTS: Record<string, { bg: string; fg: string; border: string; mark: string; icon: string }> = {
+  info:      { bg: tone.infoBg(),    fg: ink(), border: tone.infoLine(),    mark: accent(),           icon: 'i' },
+  primary:   { bg: tone.infoBg(),    fg: ink(), border: tone.infoLine(),    mark: accent(),           icon: 'i' },
+  secondary: { bg: surface(),        fg: ink(), border: rule(),             mark: muted(),            icon: 'i' },
+  success:   { bg: tone.successBg(), fg: ink(), border: tone.successLine(), mark: tone.successText(), icon: '✓' },
+  warning:   { bg: tone.warningBg(), fg: ink(), border: tone.warningLine(), mark: tone.warningText(), icon: '!' },
+  danger:    { bg: tone.dangerBg(),  fg: ink(), border: tone.dangerLine(),  mark: tone.dangerText(),  icon: '!' },
 };
 
 /**
@@ -37,17 +41,18 @@ export function Alert({ component: c, text }: BaseComponentProps<BadgeSpec>) {
       style={{
         display: 'flex',
         gap: 10,
-        padding: '10px 14px',
-        borderRadius: 6,
+        padding: '12px 14px',
+        borderRadius: radius.md,
         border: `1px solid ${v.border}`,
+        borderLeft: `4px solid ${v.border}`,
         background: v.bg,
         color: v.fg,
-        fontSize: 13,
+        fontSize: 14,
       }}
     >
-      <span aria-hidden style={iconStyle(v.fg)}>{v.icon}</span>
+      <span aria-hidden style={iconStyle(v.mark)}>{v.icon}</span>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
-        {c.label && <strong style={{ fontSize: 13, fontWeight: 600 }}>{c.label}</strong>}
+        {c.label && <strong style={{ fontSize: 14, fontWeight: 650 }}>{c.label}</strong>}
         {body && <span style={{ lineHeight: 1.45 }}>{body}</span>}
       </div>
     </div>

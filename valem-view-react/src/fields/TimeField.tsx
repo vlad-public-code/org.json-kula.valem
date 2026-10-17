@@ -3,6 +3,7 @@ import { getByPath } from '../hooks/useDeferredMutate';
 import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { BasicInputSpec } from '../types';
+import { controlBox, helperText, labelText, requiredMark } from '../themeColors';
 
 export function TimeField({ component: c, enabled, readOnly, required }: BaseComponentProps<BasicInputSpec>) {
   const { state, onMutate } = useViewContext();
@@ -12,9 +13,9 @@ export function TimeField({ component: c, enabled, readOnly, required }: BaseCom
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {c.label && (
-        <label style={{ fontSize: 13, fontWeight: 500 }}>
+        <label style={labelText}>
           {c.label}
-          {required && <span style={{ color: 'red', marginLeft: 2 }}>*</span>}
+          {required && <span style={requiredMark} aria-hidden="true">*</span>}
         </label>
       )}
       <input
@@ -23,10 +24,7 @@ export function TimeField({ component: c, enabled, readOnly, required }: BaseCom
         disabled={!enabled}
         readOnly={readOnly}
         style={{
-          padding: '6px 10px',
-          border: `1px solid ${fieldColors.border}`,
-          borderRadius: 4,
-          fontSize: 14,
+          ...controlBox,
           background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg,
           color: fieldColors.text,
         }}
@@ -36,7 +34,7 @@ export function TimeField({ component: c, enabled, readOnly, required }: BaseCom
           }
         }}
       />
-      {c.helperText && <span style={{ fontSize: 11, color: '#666' }}>{c.helperText}</span>}
+      {c.helperText && <span style={helperText}>{c.helperText}</span>}
     </div>
   );
 }

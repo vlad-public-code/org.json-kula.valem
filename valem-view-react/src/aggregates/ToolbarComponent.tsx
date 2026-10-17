@@ -1,6 +1,7 @@
 import { ComponentRenderer } from '../ComponentRenderer';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { ContainerSpec } from '../types';
+import { ink } from '../themeColors';
 
 /**
  * `toolbar` and `buttonGroup` — a row of actions.
@@ -21,12 +22,13 @@ export function ToolbarComponent({ component: c, state }: BaseComponentProps<Con
         flexDirection: 'row',
         flexWrap: 'wrap',
         alignItems: 'center',
-        gap: grouped ? 0 : 8,
-        ...(grouped ? { border: '1px solid #d1d5db', borderRadius: 6, overflow: 'hidden' } : {}),
+        // A buttonGroup is a row of related actions; each button keeps its own edge, so the group
+        // needs no frame of its own (a frame around framed buttons drew double borders).
+        gap: 8,
       }}
     >
       {c.label && !grouped && (
-        <span style={{ fontSize: 13, fontWeight: 500, marginRight: 4 }}>{c.label}</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: ink(), marginRight: 4 }}>{c.label}</span>
       )}
       {(c.components ?? []).map(child => (
         <ComponentRenderer key={child.id} component={child} state={state} />

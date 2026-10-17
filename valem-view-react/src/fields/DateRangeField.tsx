@@ -3,6 +3,7 @@ import { getByPath } from '../hooks/useDeferredMutate';
 import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { DateRangeSpec } from '../types';
+import { controlBox, helperText, labelText, muted, requiredMark } from '../themeColors';
 
 /**
  * `dateRangeField` — two coupled dates written to `bindFrom` and `bindTo`.
@@ -37,12 +38,12 @@ export function DateRangeField(
   return (
     <div data-testid={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {c.label && (
-        <span style={{ fontSize: 13, fontWeight: 500 }}>
+        <span style={labelText}>
           {c.label}
-          {required && <span style={{ color: 'red', marginLeft: 2 }}>*</span>}
+          {required && <span style={requiredMark} aria-hidden="true">*</span>}
         </span>
       )}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <End
           id={`${c.id}-from`}
           label={c.fromLabel ?? 'From'}
@@ -53,7 +54,7 @@ export function DateRangeField(
           readOnly={readOnly}
           onChange={v => write(c.bindFrom, v)}
         />
-        <span style={{ color: '#9ca3af' }}>→</span>
+        <span aria-hidden="true" style={{ color: muted(), alignSelf: 'flex-end', paddingBottom: 9 }}>→</span>
         <End
           id={`${c.id}-to`}
           label={c.toLabel ?? 'To'}
@@ -65,7 +66,7 @@ export function DateRangeField(
           onChange={v => write(c.bindTo, v)}
         />
       </div>
-      {c.helperText && <span style={{ fontSize: 11, color: '#666' }}>{c.helperText}</span>}
+      {c.helperText && <span style={helperText}>{c.helperText}</span>}
     </div>
   );
 }
@@ -80,7 +81,7 @@ function End(
 ) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <label htmlFor={id} style={{ fontSize: 11, color: '#6b7280' }}>{label}</label>
+      <label htmlFor={id} style={{ ...helperText, fontWeight: 500 }}>{label}</label>
       <input
         id={id}
         data-testid={id}
@@ -92,10 +93,7 @@ function End(
         readOnly={readOnly}
         onChange={e => onChange(e.target.value)}
         style={{
-          padding: '6px 10px',
-          border: `1px solid ${fieldColors.border}`,
-          borderRadius: 4,
-          fontSize: 14,
+          ...controlBox,
           background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg,
           color: fieldColors.text,
         }}

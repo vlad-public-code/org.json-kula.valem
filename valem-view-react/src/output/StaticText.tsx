@@ -3,6 +3,7 @@ import { useViewContext } from '../ViewContext';
 import { escapeHtml, markdownToHtml } from '../markdown';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { StaticTextSpec } from '../types';
+import { ink } from '../themeColors';
 
 /**
  * `staticText` — a block of text, rendered according to `format`.
@@ -27,7 +28,7 @@ export function StaticText({ component: c }: BaseComponentProps<StaticTextSpec>)
   return (
     <div
       data-testid={c.id}
-      style={{ fontSize: 14, color: '#374151', lineHeight: 1.6 }}
+      style={{ fontSize: 14, color: ink(), lineHeight: 1.6 }}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );

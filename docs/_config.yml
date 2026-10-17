@@ -85,11 +85,17 @@ callouts:
 # asks every page for `dateModified`, including just-the-docs' generated
 # assets/css/just-the-docs-head-nav.css). Re-adding it needs that resolved first.
 
+# The same sections valem.run's own header names, so the docs are not a dead end for a reader who
+# arrived here from a calculator.
 aux_links:
-  "GitHub":
-    - https://github.com/vlad-public-code/org.json-kula.valem
+  "Calculators":
+    - https://valem.run/calculators
+  "Research":
+    - https://valem.run/research
   "Live sandbox":
     - https://valem.run
+  "GitHub":
+    - https://github.com/vlad-public-code/org.json-kula.valem
 aux_links_new_tab: true
 
 footer_content: >-

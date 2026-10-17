@@ -4,6 +4,7 @@ import { getByPath } from '../hooks/useDeferredMutate';
 import { useJSONataBoolean } from '../hooks/useJSONata';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { JsonViewerSpec } from '../types';
+import { codeBg, fontMono, fontSans, ink, muted, radius, rule } from '../themeColors';
 
 /**
  * `jsonViewer` — the bound subtree as formatted JSON.
@@ -34,21 +35,27 @@ export function JsonViewer({ component: c }: BaseComponentProps<JsonViewerSpec>)
           border: 'none',
           background: 'transparent',
           padding: 0,
-          fontSize: 13,
-          fontWeight: 600,
-          color: '#374151',
+          minHeight: 32,
+          fontFamily: fontSans,
+          fontSize: 14,
+          fontWeight: 650,
+          color: ink(),
           cursor: 'pointer',
         }}
       >
-        {isOpen ? '▾' : '▸'} {c.label ?? c.bind ?? 'JSON'}
+        <span aria-hidden="true" style={{ color: muted() }}>{isOpen ? '▾' : '▸'}</span> {c.label ?? c.bind ?? 'JSON'}
       </button>
       {isOpen && (
         <pre style={{
           margin: 0,
+          // The code surface of the active theme, not a fixed navy block that read as an error panel
+          // on a light page.
           padding: 12,
-          background: '#0f172a',
-          color: '#e2e8f0',
-          borderRadius: 6,
+          background: codeBg(),
+          color: ink(),
+          border: `1px solid ${rule()}`,
+          borderRadius: radius.sm,
+          fontFamily: fontMono,
           fontSize: 12,
           lineHeight: 1.5,
           overflowX: 'auto',

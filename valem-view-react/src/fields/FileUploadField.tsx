@@ -3,6 +3,7 @@ import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { FileUploadSpec } from '../types';
+import { accent, accentSoft, controlEdge, helperText, ink, inset, labelText, muted, panel, radius, requiredMark, rule, tone } from '../themeColors';
 
 interface StoredBlobRef {
   $blobId: string;
@@ -64,10 +65,11 @@ function FileRow({
       display: 'flex',
       alignItems: 'center',
       gap: 10,
-      padding: '6px 10px',
-      border: '1px solid #d1d5db',
-      borderRadius: 5,
-      background: '#f9fafb',
+      padding: '8px 10px',
+      border: `1px solid ${rule()}`,
+      borderRadius: radius.sm,
+      background: inset(),
+      color: ink(),
       fontSize: 13,
     }}>
       {showThumb && (
@@ -90,20 +92,25 @@ function FileRow({
         <a
           href={blobDownloadUrl(blobRef.$blobId)}
           download={blobRef.$fileName}
-          style={{ fontWeight: 500, color: '#2563eb', textDecoration: 'none' }}
+          style={{ fontWeight: 500, color: accent(), textDecoration: 'none' }}
           onMouseOver={e => (e.currentTarget.style.textDecoration = 'underline')}
           onMouseOut={e => (e.currentTarget.style.textDecoration = 'none')}
         >
           {blobRef.$fileName ?? blobRef.$blobId}
         </a>
-        <span style={{ color: '#6b7280', marginLeft: 8 }}>
+        <span style={{ color: muted(), marginLeft: 8 }}>
           {blobRef.$mediaType} · {formatBytes(blobRef.$bytes)}
         </span>
       </span>
       {!readOnly && (
         <button
+          type="button"
           onClick={onRemove}
-          style={{ padding: '1px 7px', fontSize: 12, cursor: 'pointer', flexShrink: 0 }}
+          aria-label={`Remove ${blobRef.$fileName ?? 'file'}`}
+          style={{
+            width: 28, height: 28, flexShrink: 0, cursor: 'pointer', fontSize: 13,
+            border: `1px solid ${controlEdge()}`, borderRadius: radius.sm, background: panel(), color: ink(),
+          }}
         >
           ✕
         </button>
@@ -225,9 +232,9 @@ export function FileUploadField({ component: c, enabled, readOnly, required }: B
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {c.label && (
-        <label style={{ fontSize: 13, fontWeight: 500 }}>
+        <label htmlFor={`${c.id}-file`} style={labelText}>
           {c.label}
-          {required && <span style={{ color: 'red', marginLeft: 2 }}>*</span>}
+          {required && <span style={requiredMark} aria-hidden="true">*</span>}
         </label>
       )}
 
@@ -247,35 +254,54 @@ export function FileUploadField({ component: c, enabled, readOnly, required }: B
 
       {/* File picker — shown when more files can be added */}
       {canAddMore && (
+        // The native picker reads "Choose File / No file chosen" in a grey system button that
+        // ignores the theme. The input stays in the DOM (keyboard, screen readers, drag-and-drop
+        // onto it all keep working) and is drawn as a dashed drop area instead.
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input
-            ref={inputRef}
-            type="file"
-            accept={c.accept}
-            multiple={multiple}
-            disabled={uploading}
-            style={{ fontSize: 13 }}
-            onChange={handleFileChange}
-          />
-          {uploading && <span style={{ fontSize: 12, color: '#6b7280' }}>Uploading…</span>}
+          <label
+            style={{
+              position: 'relative', display: 'flex', alignItems: 'center', gap: 10, flex: 1,
+              minHeight: 44, padding: '8px 12px', border: `1px dashed ${controlEdge()}`,
+              borderRadius: radius.sm, background: panel(), color: ink(), fontSize: 14,
+              cursor: uploading ? 'progress' : 'pointer',
+            }}
+          >
+            <span aria-hidden="true" style={{
+              display: 'inline-flex', alignItems: 'center', minHeight: 30, padding: '0 12px',
+              borderRadius: radius.sm, background: accentSoft(), color: ink(), fontWeight: 600, fontSize: 13,
+            }}>
+              {multiple ? 'Choose files' : 'Choose a file'}
+            </span>
+            <span style={{ color: muted(), fontSize: 13 }}>{uploading ? 'Uploading…' : 'or drop it here'}</span>
+            <input
+              ref={inputRef}
+              id={`${c.id}-file`}
+              type="file"
+              accept={c.accept}
+              multiple={multiple}
+              disabled={uploading}
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, cursor: 'inherit' }}
+              onChange={handleFileChange}
+            />
+          </label>
         </div>
       )}
 
       {/* Hints and errors */}
       {countHint && (
-        <span style={{ fontSize: 11, color: '#6b7280' }}>
+        <span style={helperText}>
           {countHint}{maxSize !== Infinity ? `, max ${formatBytes(maxSize)} each` : ''}
           {allowedTypes ? ` · ${allowedTypes}` : ''}
         </span>
       )}
       {countError && (
-        <span style={{ fontSize: 11, color: '#dc2626' }}>{countError}</span>
+        <span role="alert" style={{ ...helperText, color: tone.dangerText() }}>{countError}</span>
       )}
       {errors.map((e, i) => (
-        <span key={i} style={{ fontSize: 11, color: '#dc2626' }}>{e}</span>
+        <span key={i} role="alert" style={{ ...helperText, color: tone.dangerText() }}>{e}</span>
       ))}
       {c.helperText && (
-        <span style={{ fontSize: 11, color: '#666' }}>{c.helperText}</span>
+        <span style={helperText}>{c.helperText}</span>
       )}
     </div>
   );

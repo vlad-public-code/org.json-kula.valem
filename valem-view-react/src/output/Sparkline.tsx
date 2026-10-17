@@ -3,6 +3,8 @@ import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { DataChartSpec } from '../types';
+import { muted } from '../themeColors';
+import { CHART_COLORS } from './DataChart';
 
 /**
  * `sparkline` — a `dataChart` stripped of axes, grid, legend and tooltip so it can sit inline
@@ -19,7 +21,7 @@ export function Sparkline({ component: c }: BaseComponentProps<DataChartSpec>) {
 
   const series = c.chartSeries?.[0];
   const field = series?.field ?? 'value';
-  const color = series?.color ?? '#2563eb';
+  const color = series?.color ?? CHART_COLORS[0];
   const chartType = c.chartType ?? 'line';
 
   if (data.length === 0) return null;
@@ -41,7 +43,7 @@ export function Sparkline({ component: c }: BaseComponentProps<DataChartSpec>) {
 
   return (
     <div data-testid={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {c.label && <span style={{ fontSize: 11, color: '#6b7280' }}>{c.label}</span>}
+      {c.label && <span style={{ fontSize: 12, color: muted() }}>{c.label}</span>}
       <ResponsiveContainer width="100%" height={40}>
         {content}
       </ResponsiveContainer>

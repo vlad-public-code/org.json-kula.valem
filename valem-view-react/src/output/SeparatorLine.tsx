@@ -1,5 +1,6 @@
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { SeparatorLineSpec } from '../types';
+import { rule } from '../themeColors';
 
 /** `separatorLine` — a rule — and `spacer`, the same vertical gap without one. */
 export function SeparatorLine({ component: c }: BaseComponentProps<SeparatorLineSpec>) {
@@ -9,7 +10,7 @@ export function SeparatorLine({ component: c }: BaseComponentProps<SeparatorLine
   return (
     <hr
       data-testid={c.id}
-      style={{ border: 'none', borderTop: '1px solid #e5e7eb', margin: '4px 0' }}
+      style={{ border: 'none', borderTop: `1px solid ${rule()}`, margin: '4px 0' }}
     />
   );
 }

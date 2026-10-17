@@ -4,6 +4,7 @@ import { useDeferredMutate } from '../hooks/useDeferredMutate';
 import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { TextAreaSpec } from '../types';
+import { controlBox, helperText, labelText, radius, requiredMark } from '../themeColors';
 
 const MARKS: { label: string; title: string; wrap: [string, string] }[] = [
   { label: 'B',  title: 'Bold',    wrap: ['**', '**'] },
@@ -46,9 +47,9 @@ export function RichTextField(
   return (
     <div data-testid={c.id} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {c.label && (
-        <label htmlFor={c.id} style={{ fontSize: 13, fontWeight: 500 }}>
+        <label htmlFor={c.id} style={labelText}>
           {c.label}
-          {required && <span style={{ color: 'red', marginLeft: 2 }}>*</span>}
+          {required && <span style={requiredMark} aria-hidden="true">*</span>}
         </label>
       )}
       {toolbar !== 'none' && (
@@ -63,13 +64,14 @@ export function RichTextField(
               disabled={!enabled || readOnly}
               onClick={() => applyMark(m.wrap[0], m.wrap[1])}
               style={{
-                minWidth: 28,
-                padding: '2px 6px',
+                minWidth: 32,
+                minHeight: 30,
+                padding: '2px 8px',
                 border: `1px solid ${fieldColors.border}`,
-                borderRadius: 4,
+                borderRadius: radius.sm,
                 background: fieldColors.bg,
                 color: fieldColors.text,
-                fontSize: 12,
+                fontSize: 13,
                 fontWeight: m.label === 'B' ? 700 : 400,
                 fontStyle: m.label === 'I' ? 'italic' : 'normal',
                 cursor: enabled && !readOnly ? 'pointer' : 'not-allowed',
@@ -91,17 +93,13 @@ export function RichTextField(
         onChange={e => { if (!readOnly) schedule(e.target.value, e.target.value); }}
         onBlur={handleBlur}
         style={{
-          padding: '6px 10px',
-          border: `1px solid ${fieldColors.border}`,
-          borderRadius: 4,
-          fontSize: 14,
-          fontFamily: 'inherit',
+          ...controlBox,
           resize: 'vertical',
           background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg,
           color: fieldColors.text,
         }}
       />
-      {c.helperText && <span style={{ fontSize: 11, color: '#666' }}>{c.helperText}</span>}
+      {c.helperText && <span style={helperText}>{c.helperText}</span>}
     </div>
   );
 }

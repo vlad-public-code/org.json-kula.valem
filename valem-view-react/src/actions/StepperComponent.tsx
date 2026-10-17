@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import { useViewContext } from '../ViewContext';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { MenuSpec } from '../types';
+import { accent, accentFill, faint, fontSans, ink, muted, onAccent, ruleStrong, surface, tone } from '../themeColors';
 
 /**
  * `stepper` and `breadcrumb` — the same `menuItems` as a `menu`, drawn as a numbered progression
@@ -38,8 +39,10 @@ export function StepperComponent({ component: c }: BaseComponentProps<MenuSpec>)
                     border: 'none',
                     background: 'transparent',
                     padding: 0,
+                    minHeight: 32,
+                    fontFamily: fontSans,
                     fontSize: 13,
-                    color: current ? '#111827' : '#2563eb',
+                    color: current ? ink() : accent(),
                     fontWeight: current ? 600 : 400,
                     cursor: current ? 'default' : 'pointer',
                     textDecoration: current ? 'none' : 'underline',
@@ -48,7 +51,7 @@ export function StepperComponent({ component: c }: BaseComponentProps<MenuSpec>)
                   {item.icon && <span aria-hidden style={{ marginRight: 4 }}>{item.icon}</span>}
                   {item.label}
                 </button>
-                {i < items.length - 1 && <span aria-hidden style={{ color: '#9ca3af' }}>/</span>}
+                {i < items.length - 1 && <span aria-hidden style={{ color: faint() }}>/</span>}
               </li>
             );
           })}
@@ -86,20 +89,22 @@ export function StepperComponent({ component: c }: BaseComponentProps<MenuSpec>)
                   border: 'none',
                   background: 'transparent',
                   padding: 0,
+                  minHeight: 32,
                   cursor: 'pointer',
                 }}
               >
                 <span style={badgeStyle(current, done)}>{done ? '✓' : i + 1}</span>
                 <span style={{
+                  fontFamily: fontSans,
                   fontSize: 13,
-                  fontWeight: current ? 600 : 400,
-                  color: current ? '#111827' : '#6b7280',
+                  fontWeight: current ? 650 : 500,
+                  color: current ? ink() : muted(),
                 }}>
                   {item.label}
                 </span>
               </button>
               {!vertical && i < items.length - 1 && (
-                <span aria-hidden style={{ width: 24, height: 1, background: '#e5e7eb' }} />
+                <span aria-hidden style={{ width: 24, height: 2, borderRadius: 1, background: done ? tone.successLine() : ruleStrong() }} />
               )}
             </li>
           );
@@ -119,7 +124,8 @@ function badgeStyle(current: boolean, done: boolean): CSSProperties {
     borderRadius: '50%',
     fontSize: 12,
     fontWeight: 600,
-    background: current ? '#2563eb' : done ? '#dcfce7' : '#f3f4f6',
-    color: current ? '#fff' : done ? '#15803d' : '#6b7280',
+    background: current ? accentFill() : done ? tone.successBg() : surface(),
+    color: current ? onAccent : done ? tone.successText() : muted(),
+    border: current || done ? '1px solid transparent' : `1px solid ${ruleStrong()}`,
   };
 }

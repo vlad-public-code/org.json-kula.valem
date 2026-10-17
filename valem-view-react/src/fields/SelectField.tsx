@@ -4,6 +4,7 @@ import { getByPath } from '../hooks/useDeferredMutate';
 import { fieldColors } from './fieldColors';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { ChoiceInputSpec, OptionSpec } from '../types';
+import { controlBox, helperText, labelText, requiredMark } from '../themeColors';
 
 export function SelectField({ component: c, enabled, readOnly, required }: BaseComponentProps<ChoiceInputSpec>) {
   const { state, onMutate } = useViewContext();
@@ -26,9 +27,9 @@ export function SelectField({ component: c, enabled, readOnly, required }: BaseC
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       {c.label && (
-        <label htmlFor={c.id} style={{ fontSize: 13, fontWeight: 500 }}>
+        <label htmlFor={c.id} style={labelText}>
           {c.label}
-          {required && <span style={{ color: 'red', marginLeft: 2 }}>*</span>}
+          {required && <span style={requiredMark} aria-hidden="true">*</span>}
         </label>
       )}
       <select
@@ -36,10 +37,7 @@ export function SelectField({ component: c, enabled, readOnly, required }: BaseC
         value={value}
         disabled={!enabled || readOnly}
         style={{
-          padding: '6px 10px',
-          border: `1px solid ${fieldColors.border}`,
-          borderRadius: 4,
-          fontSize: 14,
+          ...controlBox,
           background: readOnly ? fieldColors.bgReadOnly : fieldColors.bg,
           color: fieldColors.text,
         }}
@@ -56,7 +54,7 @@ export function SelectField({ component: c, enabled, readOnly, required }: BaseC
           </option>
         ))}
       </select>
-      {c.helperText && <span style={{ fontSize: 11, color: '#666' }}>{c.helperText}</span>}
+      {c.helperText && <span style={helperText}>{c.helperText}</span>}
     </div>
   );
 }

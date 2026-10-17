@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
 import { renderComponent } from '../test/renderComponent';
 import { fieldColors } from './fieldColors';
+import { dialCode, useCountries } from '../hooks/useCountries';
 import type { ChoiceInputSpec, ComponentSpec, SliderSpec } from '../types';
 
 const tags = (over: Partial<ChoiceInputSpec> = {}): ChoiceInputSpec => ({
@@ -246,5 +247,54 @@ describe('Field surfaces stay legible in dark mode', () => {
     const prefix = screen.getByTestId('amt-prefix');
     expect(prefix.style.color).toBe(fieldColors.mutedText);
     expect(prefix.style.background).toBe(fieldColors.mutedBg);
+  });
+});
+
+describe('country data is bundled, not fetched', () => {
+  // These fields used to fetch restcountries.com and a GitHub-hosted states.json at runtime. The
+  // sandbox and embed CSP block both (connect-src 'self'), and both sources have since gone away,
+  // so the selectors rendered empty everywhere.
+  it('lists countries by English name with their calling codes, synchronously', () => {
+    const countries = useCountriesForTest();
+    const pt = countries.find(c => c.cca2 === 'PT')!;
+    expect(pt.name.common).toBe('Portugal');
+    expect(dialCode(pt)).toBe('+351');
+    expect(countries.length).toBeGreaterThan(200);
+    const names = countries.map(c => c.name.common);
+    expect([...names].sort((a, b) => a.localeCompare(b))).toEqual(names);
+  });
+
+  it('has top-level regions for a country', async () => {
+    const { REGIONS } = await import('../data/regions');
+    expect(REGIONS.US.some(([code, name]) => code === 'CA' && name === 'California')).toBe(true);
+    expect(REGIONS.PT.some(([, name]) => name === 'Lisbon')).toBe(true);
+  });
+
+  it('labels its controls', () => {
+    const { container } = renderComponent(
+      { id: 'cty', type: 'countrySelector', label: 'Country', bind: '$.country' } as never,
+      { state: { country: 'PT' } },
+    );
+    const select = container.querySelector('select#cty') as HTMLSelectElement;
+    expect(select).toBeTruthy();
+    expect(container.querySelector('label[for="cty"]')).toBeTruthy();
+    expect(select.value).toBe('PT');
+  });
+});
+
+function useCountriesForTest() {
+  // useCountries reads a module-level cache and no React state, so it is safe to call directly.
+  return useCountries();
+}
+
+describe('phoneNumberField', () => {
+  it('starts on the country the stored number belongs to', () => {
+    const { container } = renderComponent(
+      { id: 'ph', type: 'phoneNumberField', label: 'Phone', bind: '$.phone' } as never,
+      { state: { phone: '+44 20 7946 0958' } },
+    );
+    expect((container.querySelector('select') as HTMLSelectElement).value).toBe('GB');
+    expect((container.querySelector('input#ph') as HTMLInputElement).value).toBe('20 7946 0958');
+    expect(container.querySelector('label[for="ph"]')).toBeTruthy();
   });
 });

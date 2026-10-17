@@ -1,5 +1,6 @@
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { SourceListSpec } from '../types';
+import { accent, muted } from '../themeColors';
 
 /**
  * `sourceList` — the citations block a calculator ends on.
@@ -25,12 +26,12 @@ export function SourceList({ component: c }: BaseComponentProps<SourceListSpec>)
               href={i.url}
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: '#2563eb', textDecoration: 'underline' }}
+              style={{ color: accent('#2563eb'), textDecoration: 'underline' }}
             >
               {i.label ?? i.url}
             </a>
             {i.date && (
-              <span style={{ color: 'var(--text-light, #94a3b8)', marginLeft: 6 }}>
+              <span style={{ color: muted(), marginLeft: 6 }}>
                 · checked {i.date}
               </span>
             )}

@@ -3,14 +3,15 @@ import { useViewContext } from '../ViewContext';
 import { getByPath } from '../hooks/useDeferredMutate';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { EffectStatusSpec, MutationMap } from '../types';
+import { accentFill, buttonStyle, labelText, pillStyle, tone } from '../themeColors';
 
-const STATUSES: Record<string, { label: string; bg: string; fg: string; spin: boolean }> = {
-  pending:   { label: 'Queued',    bg: '#f3f4f6', fg: '#374151', spin: false },
-  in_flight: { label: 'Running',   bg: '#eff6ff', fg: '#1d4ed8', spin: true },
-  applied:   { label: 'Done',      bg: '#f0fdf4', fg: '#15803d', spin: false },
-  failed:    { label: 'Failed',    bg: '#fef2f2', fg: '#b91c1c', spin: false },
-  cancelled: { label: 'Cancelled', bg: '#f9fafb', fg: '#6b7280', spin: false },
-  superseded:{ label: 'Superseded',bg: '#f9fafb', fg: '#6b7280', spin: false },
+const STATUSES: Record<string, { label: string; kind: string; spin: boolean }> = {
+  pending:   { label: 'Queued',     kind: 'neutral', spin: false },
+  in_flight: { label: 'Running',    kind: 'info',    spin: true },
+  applied:   { label: 'Done',       kind: 'success', spin: false },
+  failed:    { label: 'Failed',     kind: 'danger',  spin: false },
+  cancelled: { label: 'Cancelled',  kind: 'neutral', spin: false },
+  superseded:{ label: 'Superseded', kind: 'neutral', spin: false },
 };
 
 /**
@@ -48,23 +49,13 @@ export function EffectStatus({ component: c }: BaseComponentProps<EffectStatusSp
   return (
     <div data-testid={c.id} title={c.tooltip} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        {c.label && <span style={{ fontSize: 13, fontWeight: 500 }}>{c.label}</span>}
+        {c.label && <span style={labelText}>{c.label}</span>}
         <span
           data-testid={`${c.id}-state`}
           role="status"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '2px 10px',
-            borderRadius: 12,
-            fontSize: 12,
-            fontWeight: 600,
-            background: s?.bg ?? '#f3f4f6',
-            color: s?.fg ?? '#6b7280',
-          }}
+          style={pillStyle(s?.kind ?? 'neutral')}
         >
-          {s?.spin && <Spinner color={s.fg} />}
+          {s?.spin && <Spinner color={accentFill()} />}
           {s?.label ?? (status != null ? String(status) : 'Not started')}
         </span>
         {showRetry && (
@@ -72,21 +63,14 @@ export function EffectStatus({ component: c }: BaseComponentProps<EffectStatusSp
             type="button"
             data-testid={`${c.id}-retry`}
             onClick={retry}
-            style={{
-              padding: '2px 10px',
-              borderRadius: 6,
-              border: '1px solid #d1d5db',
-              background: '#fff',
-              fontSize: 12,
-              cursor: 'pointer',
-            }}
+            style={{ ...buttonStyle('secondary'), minHeight: 32, padding: '0 12px', fontSize: 13 }}
           >
             {c.retryLabel ?? 'Retry'}
           </button>
         )}
       </div>
       {failed && error != null && (
-        <span data-testid={`${c.id}-error`} style={{ fontSize: 11, color: '#b91c1c' }}>
+        <span data-testid={`${c.id}-error`} role="alert" style={{ fontSize: 12, color: tone.dangerText() }}>
           {String(error)}
         </span>
       )}

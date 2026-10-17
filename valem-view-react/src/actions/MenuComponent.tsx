@@ -1,6 +1,7 @@
 import { useViewContext } from '../ViewContext';
 import type { BaseComponentProps } from '../ComponentRenderer';
 import type { MenuSpec } from '../types';
+import { accentSoft, fontSans, ink, muted, radius } from '../themeColors';
 
 export function MenuComponent({ component: c }: BaseComponentProps<MenuSpec>) {
   const { onNavigate, activeViewId } = useViewContext();
@@ -9,6 +10,8 @@ export function MenuComponent({ component: c }: BaseComponentProps<MenuSpec>) {
 
   return (
     <nav
+      data-testid={c.id}
+      aria-label="Views"
       style={{
         display: 'flex',
         flexDirection: orientation === 'vertical' ? 'column' : 'row',
@@ -21,21 +24,24 @@ export function MenuComponent({ component: c }: BaseComponentProps<MenuSpec>) {
           <button
             key={i}
             type="button"
+            aria-current={isActive ? 'page' : undefined}
             onClick={() => item.targetView && onNavigate(item.targetView)}
             style={{
-              padding: orientation === 'vertical' ? '8px 16px' : '6px 14px',
-              borderRadius: 6,
+              minHeight: 36,
+              padding: orientation === 'vertical' ? '8px 14px' : '6px 14px',
+              borderRadius: radius.sm,
               border: 'none',
-              background: isActive ? '#2563eb' : 'transparent',
-              color: isActive ? '#fff' : '#374151',
-              fontWeight: isActive ? 600 : 400,
+              background: isActive ? accentSoft() : 'transparent',
+              color: isActive ? ink() : muted(),
+              fontFamily: fontSans,
+              fontWeight: isActive ? 650 : 500,
               fontSize: 14,
               cursor: 'pointer',
               textAlign: orientation === 'vertical' ? 'left' : 'center',
               transition: 'background 0.1s, color 0.1s',
             }}
           >
-            {item.icon && <span style={{ marginRight: 6 }}>{item.icon}</span>}
+            {item.icon && <span aria-hidden="true" style={{ marginRight: 6 }}>{item.icon}</span>}
             {item.label}
           </button>
         );
