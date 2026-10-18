@@ -1,5 +1,6 @@
 import type { ComponentSpec } from './types';
-import { hasChildComponents } from './types';
+import { childComponentLists, hasChildComponents } from './types';
+import type { EditableTableSpec, GridColumnSpec } from './types';
 
 /**
  * View-to-view navigation: binding a component tree to one array element, and spotting a view the
@@ -54,6 +55,21 @@ function scopeOne(component: ComponentSpec, index: number): ComponentSpec {
     out.components = scopeToIndex(component.components, index);
   }
 
+  // An editableTable keeps its children per cell. Inside a list it is scoped like any other subtree;
+  // its own rows then scope the next wildcard in turn.
+  if (component.type === 'editableTable') {
+    const t = component as EditableTableSpec;
+    const col = (g: GridColumnSpec | undefined) =>
+      g && (g.components ? { ...g, components: scopeToIndex(g.components, index) } : g);
+    if (t.rowHeader) out.rowHeader = col(t.rowHeader);
+    if (t.gridColumns) out.gridColumns = t.gridColumns.map(col);
+    if (t.gridRows) {
+      out.gridRows = t.gridRows.map(r => r.cells
+        ? { ...r, cells: Object.fromEntries(Object.entries(r.cells).map(([k, v]) => [k, scopeToIndex(v, index)])) }
+        : r);
+    }
+  }
+
   return out as ComponentSpec;
 }
 
@@ -80,6 +96,6 @@ export function hasNavigationAway(components: ComponentSpec[] | undefined, viewI
     const items = rec.menuItems as Array<{ targetView?: string }> | undefined;
     if (items?.some(i => i.targetView && i.targetView !== viewId)) return true;
 
-    return hasChildComponents(c) && hasNavigationAway(c.components, viewId);
+    return childComponentLists(c).some(kids => hasNavigationAway(kids, viewId));
   });
 }

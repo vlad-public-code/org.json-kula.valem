@@ -39,6 +39,7 @@ public sealed interface EvaluatedComponent permits
         EvaluatedEffectStatus,
         EvaluatedContainer,
         EvaluatedSectionList,
+        EvaluatedEditableTable,
         EvaluatedButton,
         EvaluatedMenu,
         EvaluatedSeparatorLine {

@@ -1,6 +1,11 @@
 package org.json_kula.valem.core.model;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
@@ -36,10 +41,13 @@ public final class ViewComponentTypes {
             "keyValueList", "summaryList", "statTile", "metric", "jsonViewer",
             "explainPanel", "auditTimeline", "validationSummary", "effectStatus");
 
-    /** Containers — hold nested {@code components}. */
+    /**
+     * Containers — hold nested components. All but {@code editableTable} keep them in
+     * {@code components}; the table keeps them per cell (see {@link #childComponentLists}).
+     */
     public static final Set<String> AGGREGATES = Set.of(
             "group", "fieldSet", "card", "toolbar", "buttonGroup", "tabs", "tabItem",
-            "accordion", "collapsible", "sectionList", "sectionItem");
+            "accordion", "collapsible", "sectionList", "sectionItem", "editableTable");
 
     /** Action components. */
     public static final Set<String> ACTIONS = Set.of("button", "menu", "stepper", "breadcrumb");
@@ -51,6 +59,40 @@ public final class ViewComponentTypes {
 
     public static boolean isKnown(String type) {
         return type != null && ALL.contains(type);
+    }
+
+    /**
+     * Every array of child components one raw component JSON node holds: its {@code components},
+     * plus, for an {@code editableTable}, the cell lists under {@code rowHeader.components},
+     * {@code gridColumns[*].components} and {@code gridRows[*].cells.<columnId>}.
+     *
+     * <p>Every tree walk over a raw {@code viewDefinition} (id uniqueness, type checks, bind lint,
+     * navigation lint, the id-addressed splice) goes through here, so a component inside a table cell
+     * is checked exactly like one inside a {@code group}. The returned arrays are the node's own, not
+     * copies, so the splice can edit them in place.
+     */
+    public static List<ArrayNode> childComponentLists(JsonNode component) {
+        if (component == null || !component.isObject()) return List.of();
+        List<ArrayNode> out = new ArrayList<>();
+        addArray(component.get("components"), out);
+        JsonNode rowHeader = component.get("rowHeader");
+        if (rowHeader != null) addArray(rowHeader.get("components"), out);
+        JsonNode columns = component.get("gridColumns");
+        if (columns != null && columns.isArray()) {
+            for (JsonNode col : columns) addArray(col.get("components"), out);
+        }
+        JsonNode rows = component.get("gridRows");
+        if (rows != null && rows.isArray()) {
+            for (JsonNode row : rows) {
+                JsonNode cells = row.get("cells");
+                if (cells != null && cells.isObject()) cells.elements().forEachRemaining(c -> addArray(c, out));
+            }
+        }
+        return out;
+    }
+
+    private static void addArray(JsonNode node, List<ArrayNode> out) {
+        if (node instanceof ArrayNode a) out.add(a);
     }
 
     /** The full vocabulary as a comma-separated list, for embedding in a validation message. */

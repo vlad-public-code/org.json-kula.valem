@@ -450,6 +450,44 @@ export interface SectionListSpec extends ComponentSpecBase {
   onChange?: EventHandler;
 }
 
+/**
+ * One column of an editableTable, or its rowHeader. `components` are drawn in every cell of the
+ * column; a fixed `gridRows` row may override them per cell, keyed by `id`.
+ */
+export interface GridColumnSpec {
+  id?: string;
+  header?: string;
+  width?: string;
+  align?: 'left' | 'center' | 'right';
+  components?: ComponentSpec[];
+}
+
+/** One fixed row of an editableTable: its header and per-column cell components. */
+export interface GridRowSpec {
+  id?: string;
+  header?: string;
+  cells?: Record<string, ComponentSpec[]>;
+}
+
+/**
+ * A grid whose cells hold components, so values are edited where they are read. Rows come from
+ * `bind` (one per array element; cell binds use `[*]`, scoped to the row like an inline
+ * sectionList) or from fixed `gridRows`. Mirrors the Java `EditableTableSpec`.
+ */
+export interface EditableTableSpec extends ComponentSpecBase {
+  type: 'editableTable';
+  label?: string;
+  tooltip?: string;
+  rowHeader?: GridColumnSpec;
+  gridColumns?: GridColumnSpec[];
+  gridRows?: GridRowSpec[];
+  canAdd?: boolean | string;
+  canRemove?: boolean | string;
+  addLabel?: string;
+  removeLabel?: string;
+  emptyText?: string;
+}
+
 export interface ButtonSpec extends ComponentSpecBase {
   type: 'button';
   label?: string;
@@ -505,6 +543,7 @@ export type KnownComponentSpec =
   | EffectStatusSpec
   | ContainerSpec
   | SectionListSpec
+  | EditableTableSpec
   | ButtonSpec
   | MenuSpec;
 
@@ -535,7 +574,7 @@ export const KNOWN_COMPONENT_TYPES = [
   'explainPanel', 'auditTimeline', 'validationSummary', 'effectStatus',
   // containers
   'group', 'fieldSet', 'card', 'toolbar', 'buttonGroup', 'tabs', 'tabItem',
-  'accordion', 'collapsible', 'sectionList', 'sectionItem',
+  'accordion', 'collapsible', 'sectionList', 'sectionItem', 'editableTable',
   // actions
   'button', 'menu', 'stepper', 'breadcrumb',
 ] as const;
@@ -571,6 +610,23 @@ const NESTING_TYPES: ReadonlySet<string> = new Set([
 
 export function hasChildComponents(c: ComponentSpec): c is NestingComponentSpec {
   return NESTING_TYPES.has(c.type);
+}
+
+/**
+ * Every child component list a component holds: `components` for the nesting containers, and for
+ * an editableTable the row-header, column and fixed-row cell lists. Mirrors Java's
+ * `ViewComponentTypes.childComponentLists`; tree walks that must reach a component inside a table
+ * cell go through here rather than `hasChildComponents`.
+ */
+export function childComponentLists(c: ComponentSpec): ComponentSpec[][] {
+  if (hasChildComponents(c)) return c.components ? [c.components] : [];
+  if (c.type !== 'editableTable') return [];
+  const t = c as EditableTableSpec;
+  const out: ComponentSpec[][] = [];
+  if (t.rowHeader?.components) out.push(t.rowHeader.components);
+  for (const col of t.gridColumns ?? []) if (col.components) out.push(col.components);
+  for (const row of t.gridRows ?? []) for (const cell of Object.values(row.cells ?? {})) out.push(cell);
+  return out;
 }
 
 export interface ViewSpec {

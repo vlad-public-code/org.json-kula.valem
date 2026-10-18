@@ -73,6 +73,7 @@ import com.fasterxml.jackson.databind.JsonNode;
                 "group", "fieldSet", "card", "toolbar", "buttonGroup", "tabs", "tabItem",
                 "accordion", "collapsible", "sectionItem"}),
         @JsonSubTypes.Type(value = SectionListSpec.class,       names = "sectionList"),
+        @JsonSubTypes.Type(value = EditableTableSpec.class,     names = "editableTable"),
         @JsonSubTypes.Type(value = ButtonSpec.class,            names = "button"),
         @JsonSubTypes.Type(value = MenuSpec.class,              names = {
                 "menu", "stepper", "breadcrumb"})
@@ -103,6 +104,7 @@ public sealed interface ComponentSpec permits
         EffectStatusSpec,
         ContainerSpec,
         SectionListSpec,
+        EditableTableSpec,
         ButtonSpec,
         MenuSpec,
         UnknownComponentSpec {

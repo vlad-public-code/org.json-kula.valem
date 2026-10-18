@@ -61,6 +61,7 @@ import { ToolbarComponent } from './aggregates/ToolbarComponent';
 import { TabsComponent } from './aggregates/TabsComponent';
 import { CollapsibleComponent } from './aggregates/CollapsibleComponent';
 import { SectionList } from './aggregates/SectionList';
+import { EditableTable } from './aggregates/EditableTable';
 import { SectionItem } from './aggregates/SectionItem';
 
 // Action components
@@ -261,6 +262,7 @@ function renderKnown(c: KnownComponentSpec, rest: CommonProps): ReactElement {
     case 'collapsible':           return <CollapsibleComponent  component={c} {...rest} />;
     case 'sectionList':           return <SectionList           component={c} {...rest} />;
     case 'sectionItem':           return <SectionItem           component={c} {...rest} />;
+    case 'editableTable':         return <EditableTable         component={c} {...rest} />;
     // actions
     case 'button':                return <ButtonComponent       component={c} {...rest} />;
     case 'menu':                  return <MenuComponent         component={c} {...rest} />;

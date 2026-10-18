@@ -405,6 +405,7 @@ class ResourceRegistry {
             | `accordion` / `collapsible` | `label`, `collapsed` (INITIAL state only), `components` |
             | `sectionList` | `bind` (array), `itemView`, `canAdd`, `canRemove` (this is the list) |
             | `sectionItem` | `bind`, `components` |
+            | `editableTable` | `gridColumns` [{id, header, components}], `rowHeader` {header, components}; rows from `bind` (array; cells bind `[*]`) or fixed `gridRows` [{header, cells: {colId: [..]}}]; `canAdd`, `canRemove` |
             | `button` | `label`, `variant`, `icon`, `onClick` |
             | `menu` | `menuItems`, `orientation` |
             | `stepper` / `breadcrumb` | `menuItems` — progress/trail over views, same shape as `menu` |

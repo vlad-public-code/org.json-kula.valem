@@ -1,6 +1,6 @@
 {
   "_name": "Order / Line Items",
-  "_description": "Items array with per-row lineTotal and grand total derived via JSONata.",
+  "_description": "Items array with per-row lineTotal and grand total derived via JSONata, edited inline in an editableTable.",
   "id": "order-items-price-total",
   "version": "1.0.0",
   "schema": {
@@ -52,53 +52,76 @@
         "layout": "vertical",
         "components": [
           {
-            "id": "itemsList",
-            "type": "sectionList",
+            "id": "itemsTable",
+            "type": "editableTable",
             "label": "Order Items",
             "bind": "$.items",
             "canAdd": true,
             "canRemove": true,
             "addLabel": "Add Item",
             "removeLabel": "Remove",
-            "components": [
+            "emptyText": "No items yet. Add one to start the order.",
+            "rowHeader": {
+              "header": "Product",
+              "width": "34%",
+              "components": [
+                {
+                  "id": "itemName",
+                  "type": "textField",
+                  "bind": "$.items[*].name",
+                  "placeholder": "e.g. Apple"
+                }
+              ]
+            },
+            "gridColumns": [
               {
-                "id": "itemName",
-                "type": "textField",
-                "label": "Product Name",
-                "bind": "$.items[*].name",
-                "placeholder": "e.g. Apple"
+                "id": "price",
+                "header": "Unit Price",
+                "width": "22%",
+                "components": [
+                  {
+                    "id": "itemPrice",
+                    "type": "currencyField",
+                    "bind": "$.items[*].price",
+                    "currency": "USD",
+                    "placeholder": "0.00"
+                  }
+                ]
               },
               {
-                "id": "itemPrice",
-                "type": "numericField",
-                "label": "Unit Price",
-                "bind": "$.items[*].price",
-                "placeholder": "0.00"
+                "id": "qty",
+                "header": "Qty",
+                "width": "16%",
+                "components": [
+                  {
+                    "id": "itemQty",
+                    "type": "numericField",
+                    "bind": "$.items[*].qty",
+                    "placeholder": "1"
+                  }
+                ]
               },
               {
-                "id": "itemQty",
-                "type": "numericField",
-                "label": "Quantity",
-                "bind": "$.items[*].qty",
-                "placeholder": "1"
+                "id": "lineTotal",
+                "header": "Line Total",
+                "width": "18%",
+                "align": "right",
+                "components": [
+                  {
+                    "id": "itemLineTotal",
+                    "type": "label",
+                    "bind": "$.items[*].lineTotal",
+                    "format": "currency",
+                    "currency": "USD"
+                  }
+                ]
               }
             ]
           },
-          { "id": "sep1", "type": "separatorLine" },
           {
-            "id": "itemsTable",
-            "type": "dataTable",
-            "label": "Summary",
-            "bind": "$.items",
-            "tableColumns": [
-              { "field": "name",      "header": "Product",    "width": "40%" },
-              { "field": "qty",       "header": "Qty",        "width": "15%" },
-              { "field": "price",     "header": "Unit Price", "format": "currency", "width": "20%" },
-              { "field": "lineTotal", "header": "Line Total", "format": "currency", "width": "25%" }
-            ],
-            "pageSize": 20
+            "id": "sep1",
+            "type": "separatorLine"
           },
-          { "id": "sep2", "type": "separatorLine" },
           {
             "id": "totalRow",
             "type": "group",

@@ -820,6 +820,58 @@ reads as one element. `bind` anchors it to the element (`$.items[*]`), `componen
 }
 ```
 
+#### `editableTable`
+
+A grid whose **cells hold components**, so a value is edited where it is read instead of in a
+separate form. Each column has a header; rows may have a header too.
+
+| Extra field | Description |
+|---|---|
+| `gridColumns` | `[{ id, header, width, align, components }]` — the columns; `components` are drawn in each of the column's cells |
+| `rowHeader` | `{ header, width, components }` — an optional leading column of row headers (`<th scope="row">`); `header` captions it |
+| `bind` | An array path: **one row per element**. Cell binds use the wildcard (`$.items[*].price`), which the renderer narrows to the row's index, exactly like an inline `sectionList` |
+| `gridRows` | Instead of `bind`: fixed rows, `[{ id, header, cells: { <columnId>: [components] } }]`. A column a row gives no cell for falls back to the column's own `components` |
+| `canAdd` / `canRemove` | Row controls for an array-bound table (default `true`); a fixed-row table has neither |
+| `addLabel` / `removeLabel` / `emptyText` | Button and empty-state wording |
+
+A cell may hold any component — an input to edit, a `label` to show a derived value, a `button`.
+Leave a sole input in a cell **without a `label`**: the column header labels it visually, and the
+renderer gives it an accessible name of the form "Unit Price, row 2" (or "Amount, Q1" for a fixed
+row).
+
+```json
+{
+  "id": "itemsTable", "type": "editableTable", "label": "Order Items",
+  "bind": "$.items", "addLabel": "Add Item",
+  "rowHeader": { "header": "Product", "components": [
+    { "id": "itemName", "type": "textField", "bind": "$.items[*].name" } ] },
+  "gridColumns": [
+    { "id": "price", "header": "Unit Price", "components": [
+      { "id": "itemPrice", "type": "currencyField", "bind": "$.items[*].price", "currency": "USD" } ] },
+    { "id": "lineTotal", "header": "Line Total", "align": "right", "components": [
+      { "id": "itemLineTotal", "type": "label", "bind": "$.items[*].lineTotal", "format": "currency", "currency": "USD" } ] }
+  ]
+}
+```
+
+A fixed grid, e.g. one figure per quarter:
+
+```json
+{
+  "id": "quarters", "type": "editableTable",
+  "rowHeader": { "header": "Quarter" },
+  "gridColumns": [ { "id": "amount", "header": "Revenue" } ],
+  "gridRows": [
+    { "id": "q1", "header": "Q1", "cells": { "amount": [ { "id": "q1Rev", "type": "currencyField", "bind": "$.q1" } ] } },
+    { "id": "q2", "header": "Q2", "cells": { "amount": [ { "id": "q2Rev", "type": "currencyField", "bind": "$.q2" } ] } }
+  ]
+}
+```
+
+Cell components are part of the view's component tree: their ids must be unique in the view,
+their types and binds are validated and linted like any other component, and `evolve_spec` can
+replace or remove one by id. To add a column or row, upsert the table itself.
+
 #### `card`
 
 A `group` on a titled surface; `label` is the heading. Accepts the same `layout`, `columns` and
