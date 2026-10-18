@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.json_kula.valem.core.model.ViewComponentTypes;
 
 import java.util.List;
 
@@ -150,6 +151,14 @@ public final class ViewDefinitionSplice {
                 throw new IllegalArgumentException(
                         "SpecEvolution: upsertComponents parentId '" + parentId + "' does not exist in the view");
             }
+            if ("editableTable".equals(parent.path("type").asText())) {
+                // A table holds its children per cell (gridColumns / rowHeader / gridRows), not in
+                // `components`; inserting there would add a list the renderer never draws.
+                throw new IllegalArgumentException(
+                        "SpecEvolution: upsertComponents parentId '" + parentId + "' is an editableTable, "
+                        + "whose children live in its cells — upsert the table itself with the new "
+                        + "gridColumns/rowHeader/gridRows, or replace an existing cell component by its id");
+            }
             target = componentsOf(parent, true);
         }
         if (beforeId != null) {
@@ -171,20 +180,22 @@ public final class ViewDefinitionSplice {
                 components.remove(i);
                 return (ObjectNode) child;
             }
-            ObjectNode found = removeComponent(childComponents(child), id);
-            if (found != null) return found;
+            for (ArrayNode kids : ViewComponentTypes.childComponentLists(child)) {
+                ObjectNode found = removeComponent(kids, id);
+                if (found != null) return found;
+            }
         }
         return null;
     }
 
     /** Finds a component by id anywhere under {@code node}'s component tree (excludes {@code node} itself). */
     private static ObjectNode findComponent(JsonNode node, String id) {
-        ArrayNode components = childComponents(node);
-        if (components == null) return null;
-        for (JsonNode child : components) {
-            if (idEquals(child, id)) return (ObjectNode) child;
-            ObjectNode found = findComponent(child, id);
-            if (found != null) return found;
+        for (ArrayNode components : ViewComponentTypes.childComponentLists(node)) {
+            for (JsonNode child : components) {
+                if (idEquals(child, id)) return (ObjectNode) child;
+                ObjectNode found = findComponent(child, id);
+                if (found != null) return found;
+            }
         }
         return null;
     }
@@ -195,8 +206,10 @@ public final class ViewDefinitionSplice {
         for (int i = 0; i < components.size(); i++) {
             JsonNode child = components.get(i);
             if (idEquals(child, id)) return new Locator(components, i);
-            Locator deeper = locate(childComponents(child), id);
-            if (deeper != null) return deeper;
+            for (ArrayNode kids : ViewComponentTypes.childComponentLists(child)) {
+                Locator deeper = locate(kids, id);
+                if (deeper != null) return deeper;
+            }
         }
         return null;
     }
@@ -208,12 +221,6 @@ public final class ViewDefinitionSplice {
         ArrayNode arr = NF.arrayNode();
         holder.set("components", arr);
         return arr;
-    }
-
-    private static ArrayNode childComponents(JsonNode node) {
-        if (node == null || !node.isObject()) return null;
-        JsonNode c = node.get("components");
-        return c != null && c.isArray() ? (ArrayNode) c : null;
     }
 
     private static boolean idEquals(JsonNode node, String id) {

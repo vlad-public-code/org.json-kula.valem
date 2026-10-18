@@ -3,10 +3,22 @@ import { createModel, deleteModel, fillAndBlur, openModel, switchTab, uid } from
 import * as fs from 'fs';
 import * as path from 'path';
 
+/*
+ * The order example edits its line items inline in an `editableTable`: one row per element of
+ * $.items, the product name as an editable row header, price and qty as input cells, and the
+ * derived lineTotal as a read-only cell. Each cell input is named "<column>, row <n>".
+ */
+
 const specPath = path.join(__dirname, '../../valem-ui/src/examples/order-items-price-total.json');
 const baseSpec = JSON.parse(fs.readFileSync(specPath, 'utf8'));
 
-test.describe('Order Items view', () => {
+async function fillRow(page: import('@playwright/test').Page, row: number, name: string, price: string, qty: string) {
+  await fillAndBlur(page, `Product, row ${row}`, name);
+  await fillAndBlur(page, `Unit Price, row ${row}`, price);
+  await fillAndBlur(page, `Qty, row ${row}`, qty);
+}
+
+test.describe('Order Items view (editableTable)', () => {
   let modelId: string;
 
   test.beforeEach(async ({ request }) => {
@@ -18,102 +30,77 @@ test.describe('Order Items view', () => {
     await deleteModel(request, modelId);
   });
 
-  test('view tab renders with empty items list', async ({ page }) => {
+  test('renders a table with column and row headers, empty to start', async ({ page }) => {
     await openModel(page, modelId);
     await switchTab(page, 'view');
-    await expect(page.getByText('No items yet.')).toBeVisible();
+
+    const table = page.getByRole('table', { name: 'Order Items' });
+    await expect(table).toBeVisible();
+    for (const header of ['Product', 'Unit Price', 'Qty', 'Line Total']) {
+      await expect(table.getByRole('columnheader', { name: header })).toBeVisible();
+    }
+    await expect(page.getByText('No items yet. Add one to start the order.')).toBeVisible();
     await expect(page.getByRole('button', { name: '+ Add Item' })).toBeVisible();
   });
 
-  test('adding an item does NOT trigger constraint violation', async ({ page }) => {
+  test('adding a row gives editable cells and no constraint violation', async ({ page }) => {
     await openModel(page, modelId);
     await switchTab(page, 'view');
 
     await page.getByRole('button', { name: '+ Add Item' }).click();
 
-    // The constraint "Total must be non-negative" must NOT appear
+    await expect(page.getByLabel('Product, row 1')).toBeEditable();
+    await expect(page.getByLabel('Unit Price, row 1')).toBeEditable();
+    await expect(page.getByLabel('Qty, row 1')).toBeEditable();
+    await expect(page.getByRole('rowheader')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Remove row 1' })).toBeVisible();
     await expect(page.getByText('Total must be non-negative')).not.toBeVisible();
-
-    // Adding auto-opens the inline editor (Collapse button visible, not Edit)
-    await expect(page.getByRole('button', { name: 'Collapse' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Remove' })).toBeVisible();
+    await expect(page.getByTestId('totalLabel')).toContainText('0');
   });
 
-  test('grand total stays 0 with an empty item', async ({ page }) => {
+  test('editing a row in place updates its line total and the grand total', async ({ page }) => {
     await openModel(page, modelId);
     await switchTab(page, 'view');
 
     await page.getByRole('button', { name: '+ Add Item' }).click();
-    await expect(page.getByText('Total must be non-negative')).not.toBeVisible();
+    await fillRow(page, 1, 'Apple', '1.5', '4');
 
-    // Grand Total label should show 0 (empty item contributes nothing)
-    const totalEl = page.getByTestId('totalLabel');
-    await expect(totalEl).toContainText('0');
+    await expect(page.getByTestId('itemLineTotal-r0')).toContainText('6');
+    await expect(page.getByTestId('totalLabel')).toContainText('6');
   });
 
-  test('filling in item fields updates line total and grand total', async ({ page }) => {
+  test('two rows: each keeps its own values, the total is their sum', async ({ page }) => {
     await openModel(page, modelId);
     await switchTab(page, 'view');
 
-    // Add Item auto-opens the inline editor
     await page.getByRole('button', { name: '+ Add Item' }).click();
+    await fillRow(page, 1, 'Apple', '1.5', '4');
+    await page.getByRole('button', { name: '+ Add Item' }).click();
+    await fillRow(page, 2, 'Bread', '2.75', '2');
 
-    // Fill Product Name
-    await fillAndBlur(page, 'Product Name', 'Apple');
+    await expect(page.getByTestId('itemLineTotal-r0')).toContainText('6');
+    await expect(page.getByTestId('itemLineTotal-r1')).toContainText('5.5');
+    await expect(page.getByTestId('totalLabel')).toContainText('11.5');
 
-    // Fill Unit Price: 1.5
-    await fillAndBlur(page, 'Unit Price', '1.5');
-
-    // Fill Quantity: 4
-    await fillAndBlur(page, 'Quantity', '4');
-
-    // Grand Total = 1.5 * 4 = 6
-    const totalEl = page.getByTestId('totalLabel');
-    await expect(totalEl).toContainText('6');
-
-    // Summary table should show lineTotal 6
-    await expect(page.getByRole('cell', { name: '6' })).toBeVisible();
+    // Changing row 1's quantity in its cell moves only row 1's line total.
+    await fillAndBlur(page, 'Qty, row 1', '10');
+    await expect(page.getByTestId('itemLineTotal-r0')).toContainText('15');
+    await expect(page.getByTestId('itemLineTotal-r1')).toContainText('5.5');
+    await expect(page.getByTestId('totalLabel')).toContainText('20.5');
+    await expect(page.getByLabel('Product, row 2')).toHaveValue('Bread');
   });
 
-  test('two items: grand total equals sum of line totals', async ({ page }) => {
+  test('removing a row updates the grand total', async ({ page }) => {
     await openModel(page, modelId);
     await switchTab(page, 'view');
 
-    // Add first item: price=1.5, qty=4 → lineTotal=6 (editor auto-opens)
     await page.getByRole('button', { name: '+ Add Item' }).click();
-    await fillAndBlur(page, 'Product Name', 'Apple');
-    await fillAndBlur(page, 'Unit Price', '1.5');
-    await fillAndBlur(page, 'Quantity', '4');
-
-    // Collapse first, add second item: price=2.75, qty=2 → lineTotal=5.5
-    await page.getByRole('button', { name: 'Collapse' }).click();
-    await page.getByRole('button', { name: '+ Add Item' }).click();
-    await fillAndBlur(page, 'Product Name', 'Bread');
-    await fillAndBlur(page, 'Unit Price', '2.75');
-    await fillAndBlur(page, 'Quantity', '2');
-
-    // Grand Total = 6 + 5.5 = 11.5
-    const totalEl = page.getByTestId('totalLabel');
-    await expect(totalEl).toContainText('11.5');
-  });
-
-  test('removing an item updates the grand total', async ({ page }) => {
-    await openModel(page, modelId);
-    await switchTab(page, 'view');
-
-    // Add item: price=10, qty=3 → total=30 (editor auto-opens)
-    await page.getByRole('button', { name: '+ Add Item' }).click();
-    await fillAndBlur(page, 'Product Name', 'Widget');
-    await fillAndBlur(page, 'Unit Price', '10');
-    await fillAndBlur(page, 'Quantity', '3');
+    await fillRow(page, 1, 'Widget', '10', '3');
     await expect(page.getByTestId('totalLabel')).toContainText('30');
 
-    // Remove the item
-    await page.getByRole('button', { name: 'Collapse' }).click();
-    await page.getByRole('button', { name: 'Remove' }).click();
+    await page.getByRole('button', { name: 'Remove row 1' }).click();
 
-    // List is empty again, total is 0
-    await expect(page.getByText('No items yet.')).toBeVisible();
+    await expect(page.getByText('No items yet. Add one to start the order.')).toBeVisible();
     await expect(page.getByTestId('totalLabel')).toContainText('0');
   });
 });

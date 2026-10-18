@@ -231,10 +231,11 @@ public final class ExpressionCache {
      * symbol loading, classpath indexing), so batching a model's expressions up front is markedly
      * faster than compiling them lazily one at a time on first access.
      *
-     * <p>Best-effort by design: if the batch contains a syntactically invalid expression, {@code
-     * compileAll} aborts and nothing is installed — the expressions are then compiled lazily on first
-     * {@link #get}, which surfaces the precise error (e.g. during validation). Warming never throws;
-     * a failure only forgoes the batch speedup. Blank/duplicate/already-cached entries are skipped.
+     * <p>Best-effort by design: a syntactically invalid expression is dropped before the batch (see
+     * {@link #translates}) and compiled lazily on first {@link #get}, which surfaces the precise error
+     * (e.g. during validation); the rest of the batch still compiles. Should javac itself reject the
+     * batch, nothing is installed and every expression falls back to lazy compilation. Warming never
+     * throws; a failure only forgoes the batch speedup. Blank/duplicate/already-cached entries are skipped.
      */
     public void warm(Collection<String> expressions) {
         if (expressions == null || expressions.isEmpty()) return;
@@ -252,7 +253,7 @@ public final class ExpressionCache {
         for (String e : candidates) {
             JsonataExpression shared = SHARED.get(e);
             if (shared != null) cache.putIfAbsent(e, shared);
-            else toCompile.add(e);
+            else if (translates(e)) toCompile.add(e);
         }
         if (toCompile.isEmpty()) return;
         try {
@@ -266,6 +267,22 @@ public final class ExpressionCache {
         } catch (JsonataCompilationException e) {
             // Best-effort: leave the expressions for lazy per-expression compilation via get(),
             // which reports the precise CompilationException at first use.
+        }
+    }
+
+    /**
+     * Whether {@code expr} parses and translates — the cheap, javac-free front half of compilation.
+     * {@code compileAll} aborts the whole batch on one bad element, so {@link #warm} drops those up
+     * front: a warm set can carry strings that are not meant as JSONata at all (a view label such as
+     * {@code "Total: $"} is kept literal when it fails to evaluate), and one of them must not cost
+     * every other expression its batch compile. The dropped string still reports its error lazily.
+     */
+    private boolean translates(String expr) {
+        try {
+            factory.translate(expr);
+            return true;
+        } catch (JsonataCompilationException | RuntimeException e) {
+            return false;
         }
     }
 

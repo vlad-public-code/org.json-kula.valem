@@ -174,6 +174,7 @@ uses on the output side:
 | `EffectStatusSpec` | `effectStatus` | `label`, `effectId`, `errorPath`, `showRetry`, `retryLabel`, `tooltip`, `onRetry` |
 | `ContainerSpec` | `group`, `fieldSet`, `card`, `toolbar`, `buttonGroup`, `tabs`, `tabItem`, `accordion`, `collapsible`, `sectionItem` | `label`, `layout`, `columns`, `legend`, `collapsed`, `components` |
 | `SectionListSpec` | `sectionList` | `label`, `itemView`, `canAdd`, `canRemove`, `addLabel`, `removeLabel`, `layout`, `columns`, `components`, `onChange` |
+| `EditableTableSpec` | `editableTable` | `label`, `rowHeader`, `gridColumns`, `gridRows`, `canAdd`, `canRemove`, `addLabel`, `removeLabel`, `emptyText`, `tooltip` |
 | `ButtonSpec` | `button` | `label`, `enabled`, `variant`, `icon`, `onClick` |
 | `MenuSpec` | `menu`, `stepper`, `breadcrumb` | `orientation`, `menuItems` |
 | `UnknownComponentSpec` | anything else | *(no fixed shape — see below)* |
@@ -287,6 +288,7 @@ record EventHandler(String mutations, String navigate)
 | `accordion` / `collapsible` | `label`, `collapsed`, `components` | `collapsed` is the *initial* state, not a live binding |
 | `sectionList` | `bind`, `components`, `itemView`, `canAdd`, `canRemove`, labels | array add/remove; `components` is the element editor (see below) |
 | `sectionItem` | `bind`, `components` | single element editor (sub-view); evaluates to an `EvaluatedContainer` carrying `bind` |
+| `editableTable` | `bind` or `gridRows`, `rowHeader`, `gridColumns`, `canAdd`, `canRemove` | grid whose cells hold components; array rows scope `[*]` per row like `sectionList` |
 
 **Actions**:
 

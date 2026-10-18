@@ -16,8 +16,11 @@ import org.json_kula.valem.view.model.DataChartSpec;
 import org.json_kula.valem.view.model.DataTableSpec;
 import org.json_kula.valem.view.model.DateRangeSpec;
 import org.json_kula.valem.view.model.DependentSelectorSpec;
+import org.json_kula.valem.view.model.EditableTableSpec;
 import org.json_kula.valem.view.model.EffectStatusSpec;
 import org.json_kula.valem.view.model.FileUploadSpec;
+import org.json_kula.valem.view.model.GridColumnSpec;
+import org.json_kula.valem.view.model.GridRowSpec;
 import org.json_kula.valem.view.model.ImageSpec;
 import org.json_kula.valem.view.model.JsonViewerSpec;
 import org.json_kula.valem.view.model.KeyValueItemSpec;
@@ -240,6 +243,21 @@ public final class ViewEvaluator {
                         sl.addLabel(), sl.removeLabel(), sl.onChange());
             }
 
+            case EditableTableSpec t -> {
+                boolean rowsFromArray = t.bind() != null;
+                boolean canAdd    = rowsFromArray && resolveJsonNodeBoolean(t.canAdd(),    true, mergedDocument, exprCache, bindings);
+                boolean canRemove = rowsFromArray && resolveJsonNodeBoolean(t.canRemove(), true, mergedDocument, exprCache, bindings);
+                yield new EvaluatedEditableTable(t.id(), t.type(), t.label(), t.bind(), value, visible,
+                        evaluateGridColumn(t.rowHeader(), mergedDocument, metaCache, exprCache, bindings),
+                        t.gridColumns() == null ? null : t.gridColumns().stream()
+                                .map(col -> evaluateGridColumn(col, mergedDocument, metaCache, exprCache, bindings))
+                                .toList(),
+                        t.gridRows() == null ? null : t.gridRows().stream()
+                                .map(row -> evaluateGridRow(row, mergedDocument, metaCache, exprCache, bindings))
+                                .toList(),
+                        canAdd, canRemove, t.addLabel(), t.removeLabel(), t.emptyText(), t.tooltip());
+            }
+
             case ButtonSpec b ->
                     new EvaluatedButton(b.id(), b.type(), b.label(), visible, enabled,
                             b.variant(), b.icon(), b.onClick());
@@ -330,6 +348,37 @@ public final class ViewEvaluator {
         return items.stream()
                 .map(i -> new EvaluatedSourceItem(i.label(), i.url(), i.date()))
                 .toList();
+    }
+
+    private static EvaluatedGridColumn evaluateGridColumn(
+            GridColumnSpec col,
+            ObjectNode mergedDocument,
+            Map<String, JsonNode> metaCache,
+            ExpressionCache exprCache,
+            JsonataBindings bindings
+    ) {
+        if (col == null) return null;
+        return new EvaluatedGridColumn(col.id(), col.header(), col.width(), col.align(),
+                evaluateChildren(col.components(), mergedDocument, metaCache, exprCache, bindings));
+    }
+
+    private static EvaluatedGridRow evaluateGridRow(
+            GridRowSpec row,
+            ObjectNode mergedDocument,
+            Map<String, JsonNode> metaCache,
+            ExpressionCache exprCache,
+            JsonataBindings bindings
+    ) {
+        Map<String, List<EvaluatedComponent>> cells = null;
+        if (row.cells() != null) {
+            cells = new java.util.LinkedHashMap<>();
+            for (Map.Entry<String, List<ComponentSpec>> e : row.cells().entrySet()) {
+                List<EvaluatedComponent> evaluated =
+                        evaluateChildren(e.getValue(), mergedDocument, metaCache, exprCache, bindings);
+                cells.put(e.getKey(), evaluated != null ? evaluated : List.of());
+            }
+        }
+        return new EvaluatedGridRow(row.id(), row.header(), cells);
     }
 
     private static List<EvaluatedComponent> evaluateChildren(

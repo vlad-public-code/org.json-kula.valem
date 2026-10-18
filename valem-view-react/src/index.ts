@@ -79,7 +79,10 @@ export type {
   EffectStatusSpec,
   ContainerSpec,
   SectionListSpec,
+  EditableTableSpec,
+  GridColumnSpec,
+  GridRowSpec,
   ButtonSpec,
   MenuSpec,
 } from './types';
-export { KNOWN_COMPONENT_TYPES, isKnownComponent, hasChildComponents } from './types';
+export { KNOWN_COMPONENT_TYPES, isKnownComponent, hasChildComponents, childComponentLists } from './types';

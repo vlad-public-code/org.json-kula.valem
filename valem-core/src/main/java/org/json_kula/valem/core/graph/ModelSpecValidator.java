@@ -315,7 +315,9 @@ public final class ModelSpecValidator {
                 out.add(error("viewDefinition.views." + viewId,
                         "Duplicate component id in view '" + viewId + "': " + id));
             }
-            collectComponentIds(c.get("components"), viewId, ids, out);
+            for (com.fasterxml.jackson.databind.JsonNode kids : ViewComponentTypes.childComponentLists(c)) {
+                collectComponentIds(kids, viewId, ids, out);
+            }
         }
     }
 
@@ -344,7 +346,9 @@ public final class ModelSpecValidator {
                         + (suggestion != null ? " — did you mean '" + suggestion + "'?" : "")
                         + " Allowed types: " + ViewComponentTypes.allAsList()));
             }
-            checkComponentTypes(c.get("components"), viewId, out);
+            for (com.fasterxml.jackson.databind.JsonNode kids : ViewComponentTypes.childComponentLists(c)) {
+                checkComponentTypes(kids, viewId, out);
+            }
         }
     }
 
@@ -357,7 +361,9 @@ public final class ModelSpecValidator {
             if (itemView != null && !viewIds.contains(itemView)) {
                 out.add(error("viewDefinition", "itemView '" + itemView + "' names no view"));
             }
-            checkItemViews(c.get("components"), viewIds, out);
+            for (com.fasterxml.jackson.databind.JsonNode kids : ViewComponentTypes.childComponentLists(c)) {
+                checkItemViews(kids, viewIds, out);
+            }
         }
     }
 
@@ -544,7 +550,11 @@ public final class ModelSpecValidator {
                 itemLinks.add(new ItemViewLink(textField(c, "bind"), itemView, where));
             }
 
-            collectNavigation(c.get("components"), where, reachable, itemLinks);
+            for (com.fasterxml.jackson.databind.JsonNode kids : ViewComponentTypes.childComponentLists(c)) {
+
+                collectNavigation(kids, where, reachable, itemLinks);
+
+            }
         }
     }
 
@@ -563,7 +573,9 @@ public final class ModelSpecValidator {
                     if (targetView != null && !targetView.equals(viewId)) return true;
                 }
             }
-            if (navigatesAway(c.get("components"), viewId)) return true;
+            for (com.fasterxml.jackson.databind.JsonNode kids : ViewComponentTypes.childComponentLists(c)) {
+                if (navigatesAway(kids, viewId)) return true;
+            }
         }
         return false;
     }
@@ -583,7 +595,9 @@ public final class ModelSpecValidator {
                     if (bind != null) out.add(bind);
                 }
             }
-            collectBindPaths(c.get("components"), out);
+            for (com.fasterxml.jackson.databind.JsonNode kids : ViewComponentTypes.childComponentLists(c)) {
+                collectBindPaths(kids, out);
+            }
         }
     }
 
@@ -625,7 +639,9 @@ public final class ModelSpecValidator {
                     lintComponentFields(item, where + ".items[" + idx++ + "]", known, haveKnown, out);
                 }
             }
-            lintComponents(c.get("components"), where, known, haveKnown, out);
+            for (com.fasterxml.jackson.databind.JsonNode kids : ViewComponentTypes.childComponentLists(c)) {
+                lintComponents(kids, where, known, haveKnown, out);
+            }
         }
     }
 

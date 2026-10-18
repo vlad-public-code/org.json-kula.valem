@@ -33,12 +33,14 @@ import org.json_kula.valem.core.state.Snapshot;
 import org.json_kula.valem.view.engine.EvaluatedComponent;
 import org.json_kula.valem.view.engine.EvaluatedView;
 import org.json_kula.valem.view.engine.ViewEvaluator;
+import org.json_kula.valem.view.engine.ViewExpressions;
 import org.json_kula.valem.view.model.ViewDefinition;
 import org.json_kula.valem.view.model.ViewSpec;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -382,7 +384,7 @@ public class ModelService implements ModelOperations, ChangeSubscribable {
         // Compile every expression of this spec in a single javac invocation up front, into the
         // shared cache. Validation, the runtime, and any self-tests below all read that same cache,
         // so each expression compiles exactly once (in this batch) instead of once per pass.
-        expressionCache.warm(SpecExpressions.collect(spec));
+        warmExpressions(spec);
 
         // Skip the spec's embedded self-tests here: they are an authoring/CI concern that adds a
         // whole extra runtime + evaluation pass, not something the end-user create path needs.
@@ -440,7 +442,7 @@ public class ModelService implements ModelOperations, ChangeSubscribable {
      * Bypasses validation and initialState application — intended for startup restoration.
      */
     public void loadModel(ModelSpec spec, Optional<Snapshot> existingSnapshot) {
-        expressionCache.warm(SpecExpressions.collect(spec));
+        warmExpressions(spec);
         CompiledModel model   = ModelSpecCompiler.compile(spec);
         ModelState    state   = new ModelState(model, blobStore);
         existingSnapshot.ifPresent(state::restore);
@@ -734,7 +736,7 @@ public class ModelService implements ModelOperations, ChangeSubscribable {
                 validateViewParses(evolved);
                 // Batch-compile any expressions the evolution introduced; unchanged ones are already
                 // in the shared cache, so this only pays for what actually changed.
-                expressionCache.warm(SpecExpressions.collect(evolved));
+                warmExpressions(evolved);
                 CompiledModel newModel   = ModelSpecCompiler.compile(evolved);
                 ModelState    newState   = rt.stateView().withModel(newModel);
                 // The new runtime uses the shared server-lifetime cache directly, so expressions the
@@ -775,6 +777,19 @@ public class ModelService implements ModelOperations, ChangeSubscribable {
     }
 
     // ── View ──────────────────────────────────────────────────────────────────
+
+    /**
+     * Batch-compiles (one javac invocation) every expression {@code spec} will need: the model's own
+     * plus its view's and its effects' {@code response.set}. Compiling the view's expressions here
+     * rather than lazily on the first {@code GET /view} matters on a single-carrier host: that render
+     * ran ~20 back-to-back javac invocations on a request virtual thread, freezing every other request
+     * (health checks included) for seconds — the tic-tac-toe restart on the hosted sandbox.
+     */
+    private void warmExpressions(ModelSpec spec) {
+        List<String> exprs = new ArrayList<>(SpecExpressions.collect(spec));
+        exprs.addAll(ViewExpressions.collect(spec.viewDefinition()));
+        expressionCache.warm(exprs);
+    }
 
     /**
      * Rejects a spec whose {@code viewDefinition} cannot be parsed into the typed view records,
