@@ -20,9 +20,9 @@ import java.util.List;
  *
  * <p>The result is a best-effort superset for warming, not an authoritative validation list: any
  * expression not collected here simply compiles lazily on first use, so completeness affects only
- * the batch speedup, never correctness. View expressions are intentionally excluded — they are not
- * compiled on the create path (the view is parsed structurally, and its expressions are compiled at
- * render time).
+ * the batch speedup, never correctness. View expressions are not collected here — this module cannot
+ * see the view records — so callers that render views add {@code ViewExpressions.collect} (valem-view)
+ * to the same warm batch.
  */
 public final class SpecExpressions {
 
@@ -36,8 +36,6 @@ public final class SpecExpressions {
         for (ConstraintSpec c : spec.constraints())        add(out, c.expr());
         for (DefaultValueSpec dv : spec.defaultValues())   add(out, dv.expr());
         for (EffectSpec e : spec.effects()) {
-            // The set the validator/runtime compile against the model cache; response.set and
-            // target.read reference the runtime-only $response binding and are compiled elsewhere.
             add(out, e.trigger());
             add(out, e.dedupeKey());
             add(out, e.prompt());
@@ -47,6 +45,12 @@ public final class SpecExpressions {
             add(out, e.body());                                    // target write-link body
             if (e.request() != null) add(out, e.request().body()); // outbound HTTP request body
             if (e.payload() != null) e.payload().values().forEach(v -> add(out, v));
+            // response.set reads the runtime-only $response binding and is evaluated by the effect
+            // shell's own cache, not the model's — but compiled instances live in the process-wide
+            // shared map, so warming them here still saves the shell its javac. Without it a timer's
+            // first fire compiled its (tic-tac-toe: 6 KB) expression one javac at a time, on the
+            // single virtual-thread carrier, while every other request waited.
+            if (e.responseSet() != null) e.responseSet().values().forEach(v -> add(out, v));
         }
         return out;
     }

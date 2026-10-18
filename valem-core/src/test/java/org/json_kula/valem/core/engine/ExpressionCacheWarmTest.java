@@ -45,16 +45,16 @@ class ExpressionCacheWarmTest {
     }
 
     @Test
-    void warm_withInvalidExpression_isBestEffort_andLeavesLazyCompileToReportTheError() {
+    void warm_withInvalidExpression_skipsOnlyThatOne_andLeavesLazyCompileToReportTheError() {
         ExpressionCache cache = new ExpressionCache();
 
-        // The batch aborts on the invalid entry, so warm installs nothing and never throws…
-        cache.warm(List.of("wcwtG + wcwtH", "1 +", "wcwtI * wcwtJ"));
-        assertThat(cache.isCompiled("wcwtG + wcwtH")).isFalse();
-
-        // …a valid expression still compiles lazily on first get…
-        assertThat(cache.get("wcwtG + wcwtH")).isNotNull();
+        // The invalid entry is dropped before the batch, so warm never throws and the valid
+        // neighbours are still batch-compiled (one bad view label must not cost a model its warm-up)…
+        cache.warm(List.of("wcwtG + wcwtH", "1 +", "wcwtI * wcwtJ", "wcwtTotal: $"));
         assertThat(cache.isCompiled("wcwtG + wcwtH")).isTrue();
+        assertThat(cache.isCompiled("wcwtI * wcwtJ")).isTrue();
+        assertThat(cache.isCompiled("1 +")).isFalse();
+        assertThat(cache.isCompiled("wcwtTotal: $")).isFalse();
 
         // …and the invalid one surfaces its compilation error at first use.
         assertThatThrownBy(() -> cache.get("1 +"))

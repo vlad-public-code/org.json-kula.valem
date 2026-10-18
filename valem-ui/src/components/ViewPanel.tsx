@@ -155,22 +155,33 @@ export default function ViewPanel({ modelId, readOnly = false, initialView, onSt
     pulseTimerRef.current = setTimeout(() => setPulsingPaths(new Set()), 650);
   }, []);
 
-  const loadSpec = useCallback(async () => {
-    try {
-      const spec = await api.getSpec(modelId) as {
-        viewDefinition?: ViewDefinition;
-        constraints?: SpecConstraint[];
-      };
-      if (!spec.viewDefinition) {
-        setLoadError('This model has no viewDefinition. Add one to the spec to use this tab.');
-        return;
+  // Whether the spec has metaDerivations — the only source of the backend meta cache. Held as the
+  // latest loadSpec() promise so a loadMeta() fired alongside it waits for the answer.
+  const hasMetaDerivationsRef = useRef<Promise<boolean>>(Promise.resolve(false));
+
+  const loadSpec = useCallback(() => {
+    const loaded = (async () => {
+      try {
+        const spec = await api.getSpec(modelId) as {
+          viewDefinition?: ViewDefinition;
+          constraints?: SpecConstraint[];
+          metaDerivations?: unknown[];
+        };
+        if (!spec.viewDefinition) {
+          setLoadError('This model has no viewDefinition. Add one to the spec to use this tab.');
+          return false;
+        }
+        constraintPathMapRef.current = buildConstraintPathMap(spec.constraints ?? []);
+        setViewDef(spec.viewDefinition);
+        setLoadError(null);
+        return (spec.metaDerivations?.length ?? 0) > 0;
+      } catch (e) {
+        setLoadError(String(e));
+        return false;
       }
-      constraintPathMapRef.current = buildConstraintPathMap(spec.constraints ?? []);
-      setViewDef(spec.viewDefinition);
-      setLoadError(null);
-    } catch (e) {
-      setLoadError(String(e));
-    }
+    })();
+    hasMetaDerivationsRef.current = loaded;
+    return loaded;
   }, [modelId]);
 
   const loadState = useCallback(async () => {
@@ -183,6 +194,14 @@ export default function ViewPanel({ modelId, readOnly = false, initialView, onSt
   }, [modelId]);
 
   const loadMeta = useCallback(async () => {
+    // The meta cache is written only by metaDerivations. Without any, every entry would be its
+    // default, so skip GET /view — it evaluates the whole view server-side, and this runs on load,
+    // after every mutation and on every live update. (A cold tic-tac-toe used to compile ~20
+    // expressions inside that call, freezing the single-carrier hosted sandbox for seconds.)
+    if (!(await hasMetaDerivationsRef.current)) {
+      setMeta(prev => (Object.keys(prev).length ? {} : prev));   // clears what an evolution removed
+      return;
+    }
     try {
       const evaluated: EvaluatedView = await api.getView(modelId);
       const metaMap: Record<string, unknown> = {};

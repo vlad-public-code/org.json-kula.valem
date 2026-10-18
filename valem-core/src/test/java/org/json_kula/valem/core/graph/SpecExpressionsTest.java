@@ -25,14 +25,16 @@ class SpecExpressionsTest {
               "defaultValues": [ { "path": "$", "expr": "{ 'subtotal': 0 }" } ],
               "effects": [
                 { "id": "e1", "executor": "timer", "trigger": "total > 100",
-                  "dedupeKey": "total", "afterMs": "1000" }
+                  "dedupeKey": "total", "afterMs": "1000",
+                  "response": { "set": { "$.status": "'done'" } } }
               ]
             }
             """);
 
         assertThat(SpecExpressions.collect(spec))
                 .contains("subtotal + tax", "locked = true", "total >= 0",
-                          "{ 'subtotal': 0 }", "total > 100", "total", "1000");
+                          "{ 'subtotal': 0 }", "total > 100", "total", "1000",
+                          "'done'");   // response.set: compiled by the effect shell via the shared map
     }
 
     @Test
