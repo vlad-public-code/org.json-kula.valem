@@ -16,15 +16,7 @@ ARG SKIP_FRONTEND=false
 
 WORKDIR /src
 
-# Valem's two JSON foundations are not on Maven Central yet, so they are built into the
-# builder's local repository first. Pinned by clone depth only — both track their main branch.
-RUN apt-get update && apt-get install -y --no-install-recommends git \
- && rm -rf /var/lib/apt/lists/*
-RUN git clone --depth 1 https://github.com/vlad-public-code/org.json-kula.tracked-json.git \
- && mvn -q -B -f org.json-kula.tracked-json/pom.xml install -DskipTests \
- && git clone --depth 1 https://github.com/vlad-public-code/org.json-kula.jsonata-jvm-compiler.git \
- && mvn -q -B -f org.json-kula.jsonata-jvm-compiler/pom.xml install -DskipTests
-
+# Valem's two JSON foundations (tracked-json, jsonata-jvm-compiler) resolve from Maven Central.
 COPY . /src/valem
 WORKDIR /src/valem
 

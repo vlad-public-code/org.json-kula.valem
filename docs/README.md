@@ -11,7 +11,7 @@ description: "GitHub-facing map of the Valem documentation tree."
 Index of the documentation tree, for people and AI agents working in this repository.
 
 This directory is **both** the docs tree and the Jekyll source of the published site —
-**<https://vlad-public-code.github.io/org.json-kula.valem/>**. If you just want to *read* the
+**<https://valem.run/docs/>** (the older github.io copy redirects there). If you just want to *read* the
 docs, the site is the comfortable way (nav, search, rendered diagrams); the files here are the
 source of truth either way. This README is not part of the site navigation — the site's front
 door is [index.md](index.md).

@@ -25,6 +25,7 @@ Use it here (no install), or run it yourself and drive it from an agent over MCP
 - [Documentation](https://valem.run/docs/): the full guide, reference, and deployment docs.
 - [llms.txt (documentation site)](https://valem.run/docs/llms.txt): the curated index for assistants — start there for the complete map.
 - [What is Valem?](https://valem.run/docs/getting-started/what-is-valem.html): the problem it solves and how the causes-only model closes it.
+- [Valem vs alternatives](https://valem.run/docs/getting-started/compared.html): Valem vs letting the LLM compute, a code interpreter, a rules engine, a form library, and a spreadsheet as a backend.
 - [Copy-paste spec examples](https://valem.run/docs/reference/copy-paste-specs.html): minimal, self-contained ModelSpecs with the exact command to create and run each.
 - [Model spec format](https://valem.run/docs/reference/model-spec-format.html): the authoritative field-by-field reference.
 
