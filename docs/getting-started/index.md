@@ -7,7 +7,7 @@ description: "What Valem is, how to try it in the browser, how to run it locally
 
 # Getting started
 
-Five short pages, in the order most people need them.
+Six short pages, in the order most people need them.
 
 | Page | You'll get |
 |---|---|
@@ -16,6 +16,7 @@ Five short pages, in the order most people need them.
 | [Quickstart](quickstart.md) | Valem running on your machine: console, backend API, developer UI. |
 | [Connect your agent (MCP pairing)](connect-your-agent.md) | An AI agent and a browser tab driving **one shared live model**. |
 | [FAQ — and when not to use Valem](faq.md) | How it compares to a rules engine or plain code, and where it's the wrong tool. |
+| [Valem vs alternatives](compared.md) | Valem vs letting the LLM compute, a code interpreter, a rules engine, a form library, and a spreadsheet. |
 
 After this chapter: [Usage scenarios]({% link usage-scenarios/index.md %}) shows where Valem fits in a
 real project, and the [Model guide]({% link model-guide/index.md %}) explains how models are written.

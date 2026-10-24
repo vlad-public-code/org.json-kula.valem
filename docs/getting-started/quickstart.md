@@ -21,7 +21,7 @@ Want to try it without installing anything first? [Use the hosted sandbox](sandb
 > No Java or Maven on this machine? The whole server runs in a container:
 >
 > ```bash
-> docker build -t valem . && docker run --rm -p 8080:8080 valem
+> docker run --rm -p 8080:8080 ghcr.io/vlad-public-code/valem:latest
 > ```
 >
 > See [Running the web API](../deployment/web-api.md#run-with-docker).

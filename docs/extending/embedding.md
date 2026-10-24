@@ -30,17 +30,13 @@ own Spring app, or talk to a running server from Java or TypeScript.
 
 ## Install the artifacts
 
-The artifacts are not yet published to Maven Central — install them into your local Maven repo
-(`~/.m2`) by building each repository once, in this order (the two JSON libraries are dependencies
-of Valem):
+Valem's own artifacts are not yet published to Maven Central, so install them into your local Maven
+repo (`~/.m2`) by building the repository once. Its two JSON foundations,
+[tracked-json](https://github.com/vlad-public-code/org.json-kula.tracked-json) and
+[jsonata-jvm-compiler](https://github.com/vlad-public-code/org.json-kula.jsonata-jvm-compiler), are on
+Maven Central and resolve automatically.
 
 ```bash
-git clone https://github.com/vlad-public-code/org.json-kula.tracked-json.git
-mvn -f org.json-kula.tracked-json install -DskipTests
-
-git clone https://github.com/vlad-public-code/org.json-kula.jsonata-jvm-compiler.git
-mvn -f org.json-kula.jsonata-jvm-compiler install -DskipTests
-
 git clone https://github.com/vlad-public-code/org.json-kula.valem.git
 mvn -f org.json-kula.valem install -DskipTests -Dskip.frontend=true
 ```

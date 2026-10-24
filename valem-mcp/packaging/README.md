@@ -28,7 +28,7 @@ Then, in the agent, **call the `pair_browser` tool**. It returns a verification 
 code; open the link, check the code matches, and click Approve in the sandbox. From then on the agent's
 `create_model` / `mutate` / `get_state` / `explain` calls drive that browser session's models live. The
 pure authoring tools (`validate_spec`, `eval_expression`, `test_spec`, `dry_run`) work before pairing.
-See [Connect your agent](https://vlad-public-code.github.io/org.json-kula.valem/getting-started/connect-your-agent.html).
+See [Connect your agent](https://valem.run/docs/getting-started/connect-your-agent.html).
 
 ## Publish to the registry
 
@@ -51,6 +51,6 @@ and fix any field it rejects rather than trusting this file blindly.
 
 Prefer to run your own server or drive an embedded, in-memory instance? That's the stdio jar path —
 `valem-mcp.jar`, `--url`, `--browser` — documented in
-[Running the MCP server](https://vlad-public-code.github.io/org.json-kula.valem/deployment/mcp-server.html).
+[Running the MCP server](https://valem.run/docs/deployment/mcp-server.html).
 The hosted remote above is the zero-install default; the jar is for self-hosting, offline use, and
 driving a private `valem-web` server.

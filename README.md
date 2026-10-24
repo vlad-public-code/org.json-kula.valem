@@ -1,29 +1,111 @@
 # Valem
 
-Deterministic reactive computation runtime for AI-generated structured data models.
-A spreadsheet-like computation model for JSON-based agent systems.
+**A spreadsheet engine for AI agents.** An LLM describes a domain as a JSON spec (fields, formulas,
+invariants); Valem compiles it into a live model that recomputes every dependent value on each change,
+refuses changes that break a rule, and can explain why any number is what it is.
 
-**▶ [Try the live sandbox](https://valem.run/)** — a zero-setup public demo: describe a
-domain in plain language, watch an LLM generate a ModelSpec, then mutate fields and see derivations,
-constraints, and effects react live.
+[![Live sandbox](https://img.shields.io/badge/try_it-valem.run-0969da)](https://valem.run/)
+[![Docs](https://img.shields.io/badge/docs-valem.run%2Fdocs-0969da)](https://valem.run/docs/)
+[![MCP server](https://img.shields.io/badge/MCP-valem.run%2Fmcp-6e40c9)](https://valem.run/docs/getting-started/connect-your-agent.html)
+[![Release](https://img.shields.io/github/v/release/vlad-public-code/org.json-kula.valem)](https://github.com/vlad-public-code/org.json-kula.valem/releases/latest)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
+## Why
+
+LLMs are good at *describing* a domain and bad at *keeping state consistent* over it. Ask one to
+maintain a quote, an order, or a loan application across twenty turns and the total drifts from its
+line items, a limit checked three messages ago is forgotten, and arithmetic is off by a rounding step.
+
+Valem moves the rules out of the conversation and into a deterministic runtime:
+
+- **Derivations** are JSONata formulas over JSON paths, recomputed in dependency order (only what a
+  change touches).
+- **Constraints** are invariants checked before a change commits: roll it back or flag it.
+- **Effects** (HTTP calls, LLM calls, timers) are emitted as data and run after the commit, so replay
+  never re-fires I/O.
+- **Explain and audit**: every value has a derivation trace, and the audit trail is hash-chained.
+
+The agent writes the spec; Valem validates it, tests it, and keeps it true.
+
+## Try it in 30 seconds
+
+**In the browser, no install.** Open [valem.run](https://valem.run/), describe a model in plain
+words ("a mortgage with overpayments", "an invoice with VAT and discounts"), then type into the live
+form and watch every derived value update.
+
+**From your agent (MCP, hosted, nothing to download):**
+
+```bash
+# Claude Code
+claude mcp add --transport http valem https://valem.run/mcp
+```
+
+Claude Desktop: Settings → Connectors → *Add custom connector* → `https://valem.run/mcp`. Then ask
+the agent to call `pair_browser` and it will build models you see live in a browser tab. The
+authoring tools (`validate_spec`, `eval_expression`, `test_spec`, `dry_run`) work without pairing.
+Guide: [Connect your agent](https://valem.run/docs/getting-started/connect-your-agent.html).
+
+**Self-hosted with Docker:**
+
+```bash
+docker run --rm -p 8080:8080 ghcr.io/vlad-public-code/valem:latest
+# → http://localhost:8080 (management UI, REST + WebSocket API, and /mcp)
+```
+
+## What a spec looks like
+
+```json
+{
+  "id": "order",
+  "version": "1.0.0",
+  "schema": {},
+  "derivations": [
+    { "path": "$.order.items[*].lineTotal", "expr": "$parent.qty * $parent.price" },
+    { "path": "$.order.total", "expr": "$sum(order.items.(qty * price))" }
+  ],
+  "constraints": [
+    { "id": "max-order", "expr": "order.total <= 5000",
+      "message": "Order exceeds the cap", "policy": "rollback" }
+  ]
+}
+```
+
+Write `qty` on any line item and `lineTotal` and `total` recompute; a write that pushes the total
+over 5,000 is rejected before it commits. Full format:
+[ModelSpec reference](https://valem.run/docs/reference/model-spec-format.html).
+
+## Ways to run it
+
+| You want | Use |
+|---|---|
+| An agent that maintains structured state | The [MCP server](https://valem.run/docs/deployment/mcp-server.html), hosted (`valem.run/mcp`) or self-hosted (stdio jar from [Releases](https://github.com/vlad-public-code/org.json-kula.valem/releases)) |
+| A backend shared by many clients | [`valem-web`](https://valem.run/docs/deployment/web-api.html): REST + WebSocket, pluggable storage (filesystem, Postgres, Mongo, Redis, S3) |
+| The engine inside your JVM app | [Embed `valem-core`/`valem-service`](https://valem.run/docs/extending/embedding.html) |
+| Scripting with no server | The [JSON console](https://valem.run/docs/reference/api-reference.html#3-console-json-protocol) (one JSON command per line on stdin) |
+| A live model inside your web page | [Embed a live model](https://valem.run/docs/usage-scenarios/embed-a-live-model.html) |
+
+Clients: [TypeScript and Java SDKs](https://valem.run/docs/extending/client-sdks.html).
 
 ## Documentation
 
-Full docs live under [`docs/`](docs/README.md) — a task-keyed index, also published as a
-[documentation site](https://vlad-public-code.github.io/org.json-kula.valem/) organised in six
-chapters: **Getting started**, **Usage scenarios**, **Model guide**, **Reference**, **Deployment**,
-**Extending**. Canonical references (this README is a quickstart; the detail lives in these docs and
-is deliberately not duplicated here):
+Published at **[valem.run/docs](https://valem.run/docs/)** (source in [`docs/`](docs/README.md)),
+organised in six chapters: **Getting started**, **Usage scenarios**, **Model guide**, **Reference**,
+**Deployment**, **Extending**. Good first reads:
 
-- [What is Valem?](docs/getting-started/what-is-valem.md) — the idea in five minutes
-- [ModelSpec format](docs/reference/model-spec-format.md) — the spec format, single source of truth
-- [API reference](docs/reference/api-reference.md) — REST, WebSocket, and console protocol
-- [Configuration](docs/deployment/configuration.md) — every `valem.*` property
-- [Security model](docs/deployment/security-model.md) — auth, effect egress/SSRF, limits
-- [Architecture](docs/extending/architecture.md) — component map, data flow, design decisions
-- [Third-party libraries](docs/libraries.md) — what Valem builds on (Apache-2.0)
+- [What is Valem?](https://valem.run/docs/getting-started/what-is-valem.html): the idea in five minutes
+- [Valem vs alternatives](https://valem.run/docs/getting-started/compared.html): how it compares to code interpreters, rules engines, form libraries and spreadsheets
+- [FAQ, and when not to use Valem](https://valem.run/docs/getting-started/faq.html)
+- [ModelSpec format](docs/reference/model-spec-format.md): the spec format, single source of truth
+- [API reference](docs/reference/api-reference.md): REST, WebSocket, and console protocol
+- [MCP tools](docs/reference/mcp-tools.md): every tool and resource the MCP server exposes
+- [Configuration](docs/deployment/configuration.md): every `valem.*` property
+- [Security model](docs/deployment/security-model.md): auth, effect egress/SSRF, limits
+- [Architecture](docs/extending/architecture.md): component map, data flow, design decisions
+- For agents: [llms.txt](https://valem.run/docs/llms.txt)
 
-## Prerequisites
+## Building from source
+
+### Prerequisites
 
 - Java 21+
 - Maven 3.9+

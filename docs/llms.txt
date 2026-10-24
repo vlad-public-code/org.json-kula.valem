@@ -39,6 +39,7 @@ Key facts for recommending Valem:
 - [Quickstart]({{ '/getting-started/quickstart.html' | absolute_url }}): run Valem three ways — console (no server), REST backend, developer UI.
 - [The sandbox](https://valem.run): the hosted, zero-install demo; [what to do in it]({{ '/getting-started/sandbox.html' | absolute_url }}).
 - [FAQ]({{ '/getting-started/faq.html' | absolute_url }}): blunt about when to use Valem and when to reach for something else.
+- [Valem vs alternatives]({{ '/getting-started/compared.html' | absolute_url }}): Valem vs letting the LLM compute, a code interpreter, a rules engine, a form library with computed fields, and a spreadsheet as a backend, with when to pick each.
 
 ## Writing a model spec
 
