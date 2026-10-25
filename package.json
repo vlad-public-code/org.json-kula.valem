@@ -3,6 +3,7 @@
   "private": true,
   "workspaces": [
     "valem-ui",
-    "valem-view-react"
+    "valem-view-react",
+    "valem-mcp-app"
   ]
 }

@@ -21,6 +21,7 @@ target/
 npm-debug.log*
 package-lock.json
 /valem-ui/node/
+/valem-mcp-app/node/
 
 # VS Code
 .vscode/
