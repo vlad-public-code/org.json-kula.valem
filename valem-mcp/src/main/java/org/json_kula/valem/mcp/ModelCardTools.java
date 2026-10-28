@@ -13,11 +13,14 @@ import org.json_kula.valem.service.StatelessRunner;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.zip.Deflater;
 
 /**
  * Valem models as interactive cards in a chat app, over the MCP Apps extension
@@ -37,6 +40,11 @@ import java.util.Set;
  * <p>The card itself is the {@code valem-mcp-app} build, packaged on the classpath at
  * {@value #CARD_RESOURCE}. A build without it still serves the tools, with no UI metadata, so a spec
  * can be checked and computed as text.
+ *
+ * <p>A server that also hosts the share page ({@value #SHARE_RESOURCE}) passes its URL to
+ * {@link #call(String, JsonNode, String)}: {@code render_model} then returns a share link that opens
+ * a live copy of the model in any browser, the spec and inputs riding in the link's fragment (see
+ * {@link #shareUrl}), so sharing stays as stateless as the card.
  */
 public final class ModelCardTools {
 
@@ -48,6 +56,12 @@ public final class ModelCardTools {
     public static final String CARD_URI = "ui://valem/model-card.html";
     /** Where the built card sits on the classpath. */
     public static final String CARD_RESOURCE = "/valem-mcp-app/model-card.html";
+    /** Where the built share page sits on the classpath. */
+    public static final String SHARE_RESOURCE = "/valem-mcp-app/share.html";
+    /** The share-link fragment format: version prefix, then base64url of raw-deflated JSON. */
+    public static final String SHARE_FORMAT = "v1.";
+    /** Longer links get cut off by chat apps and mail clients, so none is offered. */
+    public static final int MAX_SHARE_URL = 8 * 1024;
 
     public static final String RENDER_MODEL = "render_model";
     public static final String RECOMPUTE = "valem_recompute";
@@ -85,6 +99,35 @@ public final class ModelCardTools {
         } catch (IOException e) {
             return null;
         }
+    }
+
+    /** The built share page from the classpath, or null when this build has none. */
+    public static String loadSharePage() {
+        try (InputStream in = ModelCardTools.class.getResourceAsStream(SHARE_RESOURCE)) {
+            return in == null ? null : new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /**
+     * A link that opens the model in the share page: {@code base#v1.<payload>}, where the payload is
+     * {@code {"spec":…,"inputs":…}} raw-deflated and base64url-encoded without padding. The fragment
+     * never reaches a server, so the page decodes it and sends the spec to {@code render_model}.
+     */
+    public String shareUrl(String shareBase, JsonNode spec, Map<String, JsonNode> inputs) {
+        ObjectNode payload = mapper.createObjectNode();
+        payload.set("spec", spec);
+        payload.set("inputs", mapper.valueToTree(inputs));
+        byte[] json = payload.toString().getBytes(StandardCharsets.UTF_8);
+        Deflater deflater = new Deflater(Deflater.BEST_COMPRESSION, true);
+        deflater.setInput(json);
+        deflater.finish();
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buf = new byte[8192];
+        while (!deflater.finished()) out.write(buf, 0, deflater.deflate(buf));
+        deflater.end();
+        return shareBase + "#" + SHARE_FORMAT + Base64.getUrlEncoder().withoutPadding().encodeToString(out.toByteArray());
     }
 
     /** True when the card HTML is available to serve. */
@@ -252,11 +295,19 @@ public final class ModelCardTools {
 
     /** Runs one tool, returning an MCP {@code tools/call} result; failures are {@code isError} results. */
     public ObjectNode call(String name, JsonNode arguments) {
+        return call(name, arguments, null);
+    }
+
+    /**
+     * As {@link #call(String, JsonNode)}, on a server that hosts the share page at {@code shareBase}
+     * (an absolute URL; null when it hosts none).
+     */
+    public ObjectNode call(String name, JsonNode arguments, String shareBase) {
         JsonNode args = arguments == null || arguments.isNull() ? mapper.createObjectNode() : arguments;
         try {
             return switch (name) {
                 case SPEC_GUIDE -> text(specGuide(), null, false);
-                case RENDER_MODEL -> render(args);
+                case RENDER_MODEL -> render(args, shareBase);
                 case RECOMPUTE -> recompute(args);
                 default -> text("Unknown tool: '" + name + "'", null, true);
             };
@@ -265,7 +316,7 @@ public final class ModelCardTools {
         }
     }
 
-    private ObjectNode render(JsonNode args) {
+    private ObjectNode render(JsonNode args, String shareBase) {
         JsonNode specJson = args.get("spec");
         if (specJson == null || !specJson.isObject()) {
             throw new IllegalArgumentException("Missing required argument 'spec' (a ModelSpec object).");
@@ -321,12 +372,21 @@ public final class ModelCardTools {
             sb.append("The starting inputs were not applied: ").append(messages(rejected)).append(".\n");
         }
         sb.append("The user may now edit inputs in the card; the card reports changes back to you.");
+        String share = shareBase == null ? null : shareUrl(shareBase, specJson, inputs);
+        if (share != null && share.length() <= MAX_SHARE_URL) {
+            structured.put("shareUrl", share);
+            sb.append("\nShare link (a live copy of this model that anyone can open in a browser; give it "
+                    + "unchanged, it carries the whole model): ").append(share);
+        } else if (share != null) {
+            sb.append("\nThe model is too large for a share link.");
+        }
 
         ObjectNode result = text(sb.toString(), structured, false);
         ObjectNode card = result.putObject("_meta").putObject("valem/card");
         card.set("spec", specJson);
         card.put("specHash", prepared.specHash());
         card.set("inputs", mapper.valueToTree(inputs));
+        if (shareBase != null) card.put("shareBase", shareBase);
         cardState(card, computed);
         return result;
     }
@@ -486,5 +546,9 @@ public final class ModelCardTools {
               for values that must never be accepted; a rollback rejects the user's edit.
             - To revise a model, send the whole revised spec to render_model with the inputs the user last
               had; a new card appears with them carried over.
+            - When render_model returns a share link and the user wants the model outside this chat (an
+              artifact, a page to send someone, a bookmark), give them that link unchanged: it opens a live
+              copy computed by Valem in any browser. A published artifact or document cannot run the model
+              itself, so link to it rather than rebuilding the calculation in code.
             """;
 }

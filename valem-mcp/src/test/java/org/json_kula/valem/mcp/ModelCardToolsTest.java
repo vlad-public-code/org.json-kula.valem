@@ -9,8 +9,12 @@ import org.json_kula.valem.service.ModelService;
 import org.json_kula.valem.service.StatelessRunner;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
+import java.util.zip.Inflater;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -60,6 +64,45 @@ class ModelCardToolsTest {
         assertThat(card.path("spec").path("id").asText()).isEqualTo("cleaning-quote");
         assertThat(card.path("state").path("price").asInt()).isEqualTo(120);
         assertThat(card.path("specHash").asText()).isEqualTo(structured.path("specHash").asText());
+    }
+
+    @Test
+    void render_model_returns_a_share_link_that_carries_the_spec_and_inputs() throws Exception {
+        ObjectNode args = MAPPER.createObjectNode();
+        args.set("spec", MAPPER.readTree(QUOTE));
+        args.putObject("inputs").put("$.rooms", 4);
+
+        JsonNode result = tools.call(ModelCardTools.RENDER_MODEL, args, "https://valem.run/m");
+
+        String url = result.path("structuredContent").path("shareUrl").asText();
+        assertThat(url).startsWith("https://valem.run/m#v1.");
+        assertThat(result.path("content").get(0).path("text").asText()).contains(url);
+        assertThat(result.path("_meta").path("valem/card").path("shareBase").asText()).isEqualTo("https://valem.run/m");
+
+        JsonNode shared = MAPPER.readTree(inflateRaw(Base64.getUrlDecoder().decode(url.substring(url.indexOf("#v1.") + 4))));
+        assertThat(shared.path("spec")).isEqualTo(MAPPER.readTree(QUOTE));
+        assertThat(shared.path("inputs").path("$.rooms").asInt()).isEqualTo(4);
+    }
+
+    @Test
+    void without_a_share_page_there_is_no_link() throws Exception {
+        ObjectNode args = MAPPER.createObjectNode();
+        args.set("spec", MAPPER.readTree(QUOTE));
+
+        JsonNode result = tools.call(ModelCardTools.RENDER_MODEL, args);
+
+        assertThat(result.path("structuredContent").has("shareUrl")).isFalse();
+        assertThat(result.path("_meta").path("valem/card").has("shareBase")).isFalse();
+    }
+
+    private static String inflateRaw(byte[] data) throws Exception {
+        Inflater inflater = new Inflater(true);
+        inflater.setInput(data);
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        byte[] buf = new byte[8192];
+        while (!inflater.finished()) out.write(buf, 0, inflater.inflate(buf));
+        inflater.end();
+        return out.toString(StandardCharsets.UTF_8);
     }
 
     @Test

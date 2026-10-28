@@ -19,6 +19,8 @@ export interface CardPayload {
   state: Record<string, unknown>;
   meta: Record<string, unknown>;
   flags: Issue[];
+  /** Where this server's share page lives; absent when it hosts none. */
+  shareBase?: string;
 }
 
 /** The parts of a ModelSpec the card reads; the rest is passed back to the server untouched. */
@@ -136,4 +138,58 @@ export function setAt(state: Record<string, unknown>, path: string, value: unkno
     return copy;
   };
   return write(state, 0) as Record<string, unknown>;
+}
+
+/** A tool result as the card reads it, from the host bridge or straight from the endpoint. */
+export interface ToolResult {
+  content?: { type: string; text?: string }[];
+  structuredContent?: unknown;
+  _meta?: Record<string, unknown>;
+  isError?: boolean;
+}
+
+/** The share-link fragment format; matches ModelCardTools.SHARE_FORMAT on the server. */
+export const SHARE_FORMAT = 'v1.';
+
+/** What a share link carries. */
+export interface SharedModel {
+  spec: CardSpec;
+  inputs: Inputs;
+}
+
+function toBase64Url(bytes: Uint8Array): string {
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function fromBase64Url(text: string): Uint8Array {
+  const b64 = text.replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
+  return Uint8Array.from(bin, c => c.charCodeAt(0));
+}
+
+async function pipe(bytes: Uint8Array, stream: CompressionStream | DecompressionStream): Promise<Uint8Array> {
+  const out = new Blob([bytes as Uint8Array<ArrayBuffer>]).stream().pipeThrough(stream);
+  return new Uint8Array(await new Response(out).arrayBuffer());
+}
+
+/** `base#v1.<base64url(deflate-raw(JSON))>`, the same encoding the server uses for render_model's link. */
+export async function shareUrl(base: string, model: SharedModel): Promise<string> {
+  const json = new TextEncoder().encode(JSON.stringify({ spec: model.spec, inputs: model.inputs }));
+  return `${base}#${SHARE_FORMAT}${toBase64Url(await pipe(json, new CompressionStream('deflate-raw')))}`;
+}
+
+/** Reads a share-link fragment (with or without its `#`); null when it is not one. */
+export async function readShare(fragment: string): Promise<SharedModel | null> {
+  const body = fragment.replace(/^#/, '');
+  if (!body.startsWith(SHARE_FORMAT)) return null;
+  try {
+    const json = await pipe(fromBase64Url(body.slice(SHARE_FORMAT.length)), new DecompressionStream('deflate-raw'));
+    const parsed = JSON.parse(new TextDecoder().decode(json)) as Partial<SharedModel>;
+    if (!parsed.spec || typeof parsed.spec !== 'object') return null;
+    return { spec: parsed.spec, inputs: parsed.inputs ?? {} };
+  } catch {
+    return null;
+  }
 }
