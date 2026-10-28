@@ -9,12 +9,8 @@ import org.json_kula.valem.service.ModelService;
 import org.json_kula.valem.service.StatelessRunner;
 import org.junit.jupiter.api.Test;
 
-import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
-import java.util.zip.Inflater;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -66,43 +62,61 @@ class ModelCardToolsTest {
         assertThat(card.path("specHash").asText()).isEqualTo(structured.path("specHash").asText());
     }
 
+    private static final ModelCardTools.ShareLinks LINKS = (spec, inputs) -> new ModelCardTools.ShareLinks.Links(
+            "https://valem.run/#share=" + spec.path("id").asText() + "/" + inputs.size(),
+            "https://valem.run/embed.html#e=" + spec.path("id").asText());
+
     @Test
-    void render_model_returns_a_share_link_that_carries_the_spec_and_inputs() throws Exception {
+    void render_model_returns_the_servers_share_and_embed_links() throws Exception {
         ObjectNode args = MAPPER.createObjectNode();
         args.set("spec", MAPPER.readTree(QUOTE));
         args.putObject("inputs").put("$.rooms", 4);
 
-        JsonNode result = tools.call(ModelCardTools.RENDER_MODEL, args, "https://valem.run/m");
+        JsonNode result = tools.call(ModelCardTools.RENDER_MODEL, args, LINKS);
 
-        String url = result.path("structuredContent").path("shareUrl").asText();
-        assertThat(url).startsWith("https://valem.run/m#v1.");
-        assertThat(result.path("content").get(0).path("text").asText()).contains(url);
-        assertThat(result.path("_meta").path("valem/card").path("shareBase").asText()).isEqualTo("https://valem.run/m");
-
-        JsonNode shared = MAPPER.readTree(inflateRaw(Base64.getUrlDecoder().decode(url.substring(url.indexOf("#v1.") + 4))));
-        assertThat(shared.path("spec")).isEqualTo(MAPPER.readTree(QUOTE));
-        assertThat(shared.path("inputs").path("$.rooms").asInt()).isEqualTo(4);
+        JsonNode structured = result.path("structuredContent");
+        assertThat(structured.path("shareUrl").asText()).isEqualTo("https://valem.run/#share=cleaning-quote/1");
+        assertThat(structured.path("embedUrl").asText()).isEqualTo("https://valem.run/embed.html#e=cleaning-quote");
+        assertThat(result.path("content").get(0).path("text").asText())
+                .contains("https://valem.run/#share=cleaning-quote/1").contains("Embed URL");
+        assertThat(result.path("_meta").path("valem/card").path("shareUrl").asText())
+                .isEqualTo("https://valem.run/#share=cleaning-quote/1");
     }
 
     @Test
-    void without_a_share_page_there_is_no_link() throws Exception {
+    void recompute_returns_links_for_the_current_inputs_only_when_the_spec_is_sent() throws Exception {
+        String hash = tools.call(ModelCardTools.RENDER_MODEL, MAPPER.createObjectNode().set("spec", MAPPER.readTree(QUOTE)))
+                .path("structuredContent").path("specHash").asText();
+        ObjectNode args = MAPPER.createObjectNode().put("specHash", hash);
+        args.putObject("inputs").put("$.rooms", 5);
+
+        assertThat(tools.call(ModelCardTools.RECOMPUTE, args, LINKS).path("structuredContent").has("shareUrl")).isFalse();
+
+        args.set("spec", MAPPER.readTree(QUOTE));
+        assertThat(tools.call(ModelCardTools.RECOMPUTE, args, LINKS).path("structuredContent").path("shareUrl").asText())
+                .isEqualTo("https://valem.run/#share=cleaning-quote/1");
+    }
+
+    @Test
+    void a_link_too_long_for_a_chat_is_dropped() throws Exception {
+        ModelCardTools.ShareLinks huge = (spec, inputs) ->
+                new ModelCardTools.ShareLinks.Links("https://x/#" + "a".repeat(ModelCardTools.MAX_LINK_CHARS), null);
+        JsonNode result = tools.call(ModelCardTools.RENDER_MODEL,
+                MAPPER.createObjectNode().set("spec", MAPPER.readTree(QUOTE)), huge);
+
+        assertThat(result.path("structuredContent").has("shareUrl")).isFalse();
+        assertThat(result.path("content").get(0).path("text").asText()).contains("too large for a share link");
+    }
+
+    @Test
+    void without_a_linker_there_is_no_link() throws Exception {
         ObjectNode args = MAPPER.createObjectNode();
         args.set("spec", MAPPER.readTree(QUOTE));
 
         JsonNode result = tools.call(ModelCardTools.RENDER_MODEL, args);
 
         assertThat(result.path("structuredContent").has("shareUrl")).isFalse();
-        assertThat(result.path("_meta").path("valem/card").has("shareBase")).isFalse();
-    }
-
-    private static String inflateRaw(byte[] data) throws Exception {
-        Inflater inflater = new Inflater(true);
-        inflater.setInput(data);
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        byte[] buf = new byte[8192];
-        while (!inflater.finished()) out.write(buf, 0, inflater.inflate(buf));
-        inflater.end();
-        return out.toString(StandardCharsets.UTF_8);
+        assertThat(result.path("_meta").path("valem/card").has("shareUrl")).isFalse();
     }
 
     @Test

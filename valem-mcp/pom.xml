@@ -68,8 +68,7 @@
                             </resources>
                         </configuration>
                     </execution>
-                    <!-- The model card render_model shows in the chat, and the share page that opens a model
-                         from a link: each one self-contained HTML file. -->
+                    <!-- The model card render_model shows in the chat: one self-contained HTML file. -->
                     <execution>
                         <id>copy-model-card</id>
                         <phase>process-resources</phase>
@@ -80,7 +79,7 @@
                             <resources>
                                 <resource>
                                     <directory>${project.basedir}/../valem-mcp-app/dist</directory>
-                                    <includes><include>model-card.html</include><include>share.html</include></includes>
+                                    <includes><include>model-card.html</include></includes>
                                     <filtering>false</filtering>
                                 </resource>
                             </resources>

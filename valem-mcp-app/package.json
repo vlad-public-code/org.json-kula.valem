@@ -2,10 +2,10 @@
   "name": "valem-mcp-app",
   "version": "0.1.0",
   "private": true,
-  "description": "The Valem model card: an MCP App that renders a Valem model inside Claude, ChatGPT and VS Code, and the share page that opens one from a link",
+  "description": "The Valem model card: an MCP App that renders a Valem model inside Claude, ChatGPT and VS Code",
   "type": "module",
   "scripts": {
-    "build": "tsc && vite build && vite build --mode share",
+    "build": "tsc && vite build",
     "typecheck": "tsc",
     "test": "vitest run"
   },

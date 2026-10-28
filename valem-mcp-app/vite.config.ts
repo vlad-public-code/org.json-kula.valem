@@ -3,11 +3,9 @@ import react from '@vitejs/plugin-react';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 import path from 'path';
 
-// One self-contained HTML file per page, every script and style inlined: the card is served as an
-// MCP App resource into a sandboxed iframe with no network, and the share page is served as a single
-// file too. vite-plugin-singlefile takes one input per build, so `--mode share` builds the second page.
-// valem-mcp packages dist/model-card.html and dist/share.html.
-export default defineConfig(({ mode }) => ({
+// One self-contained HTML file: the host serves it as an MCP App resource into a sandboxed iframe
+// with no network, so every script and style has to be inlined. valem-mcp packages dist/model-card.html.
+export default defineConfig({
   plugins: [react(), viteSingleFile()],
   resolve: {
     alias: {
@@ -16,12 +14,12 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     outDir: 'dist',
-    emptyOutDir: mode !== 'share',
+    emptyOutDir: true,
     rollupOptions: {
-      input: path.resolve(__dirname, mode === 'share' ? 'share.html' : 'model-card.html'),
+      input: path.resolve(__dirname, 'model-card.html'),
     },
   },
   test: {
     environment: 'jsdom',
   },
-}));
+});

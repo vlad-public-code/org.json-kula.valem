@@ -6,8 +6,8 @@ import {
   applyHostStyleVariables,
 } from '@modelcontextprotocol/ext-apps/app-with-deps';
 import type { McpUiHostContext } from '@modelcontextprotocol/ext-apps/app-with-deps';
-import { payloadOf, shareUrl, summaryText } from './cardModel';
-import type { CardPayload, Inputs, ToolResult } from './cardModel';
+import { payloadOf, summaryText } from './cardModel';
+import type { CardPayload, Inputs, RecomputeResult, ToolResult } from './cardModel';
 import { CardBody } from './CardBody';
 import { textOf, useCard } from './useCard';
 
@@ -77,11 +77,20 @@ export function Card({ app }: { app: App }) {
   }, [app, load, recompute]);
 
   const committed = card.committed;
+  // The link format is the server's: ask it for one carrying the values on screen now.
   const openInBrowser = useCallback(async () => {
-    if (!committed?.shareBase) return;
-    const url = await shareUrl(committed.shareBase, { spec: committed.spec, inputs: committed.inputs });
+    if (!committed?.shareUrl) return;
+    let url = committed.shareUrl;
+    try {
+      const res = await callTool('valem_recompute',
+        { specHash: committed.specHash, spec: committed.spec, inputs: committed.inputs });
+      const out = res.structuredContent as RecomputeResult | undefined;
+      if (out && 'shareUrl' in out && out.shareUrl) url = out.shareUrl;
+    } catch {
+      /* fall back to the link for the starting values */
+    }
     await app.openLink({ url }).catch(() => { /* the host declined; nothing to undo */ });
-  }, [app, committed]);
+  }, [app, callTool, committed]);
 
   if (status.kind === 'failed' && !committed) {
     return (
@@ -100,7 +109,7 @@ export function Card({ app }: { app: App }) {
       rejection={card.rejection}
       busy={card.busy}
       onMutate={card.onMutate}
-      actions={committed.shareBase && (
+      actions={committed.shareUrl && (
         <button type="button" className="card-action" onClick={() => void openInBrowser()}
                 title="Open a live copy you can share, with the values you have now">
           Open in browser

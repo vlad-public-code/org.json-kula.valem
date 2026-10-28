@@ -87,8 +87,3 @@ html, body { background: var(--panel-bg); color: var(--text); font-family: var(-
 .card-action:hover { background: var(--accent-soft); }
 .card-action:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 1px; }
 
-/* The share page: the same card, centred in a browser tab. */
-.share { max-width: 760px; margin: 0 auto; padding: 24px 16px 40px; }
-.share .card { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--panel-bg); }
-.share-foot { color: var(--text-muted); font-size: 12px; margin-top: 16px; line-height: 1.5; }
-.share-foot a { color: var(--accent-text); }
