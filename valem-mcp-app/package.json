@@ -1,0 +1,28 @@
+{
+  "name": "valem-mcp-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Valem model card: an MCP App that renders a Valem model inside Claude, ChatGPT and VS Code",
+  "type": "module",
+  "scripts": {
+    "build": "tsc && vite build",
+    "typecheck": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/ext-apps": "2.0.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "valem-view-react": "*"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.1",
+    "jsdom": "^25.0.1",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.4",
+    "vite-plugin-singlefile": "^2.3.0",
+    "vitest": "^2.1.9"
+  }
+}

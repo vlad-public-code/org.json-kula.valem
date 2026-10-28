@@ -4,11 +4,13 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.json_kula.valem.cli.CliBootstrap;
 import org.json_kula.valem.service.ChangeSubscribable;
 import org.json_kula.valem.service.ModelOperations;
+import org.json_kula.valem.service.StatelessRunner;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -98,6 +100,10 @@ public class McpServer {
     private final ModelOperations   service;
     private final ToolRegistry      tools;
     private final ResourceRegistry  resources;
+    /** Models shown as interactive cards in chat apps that render MCP Apps. */
+    private final ModelCardTools    cardTools;
+    /** Whether the client can render the card, from its {@code initialize} capabilities. */
+    private volatile boolean        clientSupportsUi = true;
 
     /** Active {@code resources/subscribe} handles keyed by resource uri (§4.2). */
     private final Map<String, AutoCloseable> subscriptions = new ConcurrentHashMap<>();
@@ -135,6 +141,7 @@ public class McpServer {
         this.service   = service;
         this.tools     = new ToolRegistry(service, mapper);
         this.resources = new ResourceRegistry(mapper);
+        this.cardTools = new ModelCardTools(new StatelessRunner(), mapper);
     }
 
     /**
@@ -499,6 +506,7 @@ public class McpServer {
         JsonNode elicitation = params != null ? params.path("capabilities").path("elicitation") : null;
         this.clientSupportsUrlElicitation = elicitation != null && elicitation.isObject()
                 && elicitation.has("url");
+        this.clientSupportsUi = ModelCardTools.clientSupportsUi(params);
 
         ObjectNode result = mapper.createObjectNode();
         result.put("protocolVersion", negotiated);
@@ -537,7 +545,9 @@ public class McpServer {
 
     private ObjectNode toolsListResult() {
         ObjectNode result = mapper.createObjectNode();
-        result.set("tools", tools.listNode());
+        ArrayNode list = tools.listNode().deepCopy();
+        list.addAll(cardTools.toolDefinitions(clientSupportsUi));
+        result.set("tools", list);
         return result;
     }
 
@@ -549,12 +559,18 @@ public class McpServer {
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("tools/call requires a 'name'");
         }
+        if (cardTools.toolNames().contains(name)) {
+            return cardTools.call(name, params.get("arguments"));
+        }
         return tools.call(name, params.get("arguments"));
     }
 
     private ObjectNode resourcesListResult() {
         ObjectNode result = mapper.createObjectNode();
-        result.set("resources", resources.listNode());
+        ArrayNode list = resources.listNode();
+        ObjectNode card = cardTools.resourceDescriptor();
+        if (card != null && clientSupportsUi) list.add(card);
+        result.set("resources", list);
         return result;
     }
 
@@ -598,6 +614,7 @@ public class McpServer {
             }
         }
         ObjectNode contents = resources.read(uri);
+        if (contents == null) contents = cardTools.readResource(uri);
         if (contents == null) {
             return errorResponse(id, RESOURCE_NOT_FOUND, "Resource not found: " + uri);
         }

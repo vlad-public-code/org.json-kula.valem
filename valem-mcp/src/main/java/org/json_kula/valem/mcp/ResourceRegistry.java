@@ -260,7 +260,7 @@ class ResourceRegistry {
 
     // ── Bundled guide bodies (§3.4) ─────────────────────────────────────────────────
 
-    private static final String JSONATA_GOTCHAS = """
+    static final String JSONATA_GOTCHAS = """
             # JSONata gotchas in Valem
 
             Expressions (`expr` / `trigger` / meta `expr`) are JSONata, evaluated against the merged

@@ -14,6 +14,12 @@
     <name>valem-mcp</name>
     <description>Valem MCP server — exposes ModelService over the Model Context Protocol (JSON-RPC 2.0 over stdio) for AI agents</description>
 
+    <properties>
+        <!-- Set -Dskip.frontend=true to build without the model card (valem-mcp-app). render_model then
+             answers in text only and the server lists no UI resource. -->
+        <skip.frontend>false</skip.frontend>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>io.github.vlad-public-code</groupId>
@@ -60,6 +66,54 @@
                                     <includes><include>*.json</include></includes>
                                 </resource>
                             </resources>
+                        </configuration>
+                    </execution>
+                    <!-- The model card render_model shows in the chat: one self-contained HTML file. -->
+                    <execution>
+                        <id>copy-model-card</id>
+                        <phase>process-resources</phase>
+                        <goals><goal>copy-resources</goal></goals>
+                        <configuration>
+                            <skip>${skip.frontend}</skip>
+                            <outputDirectory>${project.build.outputDirectory}/valem-mcp-app</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/../valem-mcp-app/dist</directory>
+                                    <includes><include>model-card.html</include></includes>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- Build the model card (valem-mcp-app). Mirrors valem-web's build of valem-ui. -->
+            <plugin>
+                <groupId>com.github.eirslett</groupId>
+                <artifactId>frontend-maven-plugin</artifactId>
+                <version>1.15.0</version>
+                <configuration>
+                    <workingDirectory>../valem-mcp-app</workingDirectory>
+                    <nodeVersion>v20.11.0</nodeVersion>
+                    <skip>${skip.frontend}</skip>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>install-node-and-npm</id>
+                        <goals><goal>install-node-and-npm</goal></goals>
+                        <phase>generate-resources</phase>
+                    </execution>
+                    <execution>
+                        <id>npm-install</id>
+                        <goals><goal>npm</goal></goals>
+                        <phase>generate-resources</phase>
+                    </execution>
+                    <execution>
+                        <id>npm-build</id>
+                        <goals><goal>npm</goal></goals>
+                        <phase>generate-resources</phase>
+                        <configuration>
+                            <arguments>run build</arguments>
                         </configuration>
                     </execution>
                 </executions>
