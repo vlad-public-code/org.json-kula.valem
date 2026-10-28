@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { mergeInputs, setAt, splitIssues, toCanonical } from './cardModel';
-import type { CardPayload, Inputs, RecomputeResult, ToolResult } from './cardModel';
+import type { CardPayload, EditResult, Inputs, RecomputeResult, ToolResult } from './cardModel';
 
 /** How long the card waits after the last edit before asking the server to recompute. */
 const RECOMPUTE_DEBOUNCE_MS = 250;
 
 const RECOMPUTE_TOOL = 'valem_recompute';
+/** Where a stored model's edits go: a mutate on the server's model. */
+const EDIT_TOOL = 'valem_card_edit';
 
 export interface Rejection {
   fieldErrors: Record<string, string>;
@@ -18,8 +20,9 @@ export function textOf(result: ToolResult): string {
 
 /**
  * The card's state, shared by the chat card and the share page: the last state the server agreed
- * to, the edits still in flight, and the recompute loop. Every number comes from `valem_recompute`;
- * `callTool` is how this shell reaches the server.
+ * to, the edits still in flight, and the recompute loop. Every number comes from the server:
+ * `valem_recompute` for a spec the card holds, `valem_card_edit` for a model the server keeps (the
+ * payload has a `modelId`). `callTool` is how this shell reaches the server.
  */
 export function useCard(
   callTool: (name: string, args: Record<string, unknown>) => Promise<ToolResult>,
@@ -54,9 +57,45 @@ export function useCard(
     commit(p, false);
   }, [commit]);
 
+  /**
+   * A stored model's edits (none: read its current state back, e.g. after a reload from history or
+   * a change the assistant made). The server's answer is the whole state, the spec too if it changed.
+   */
+  const saveEdits = useCallback(async (base: CardPayload, mutations: Inputs) => {
+    const mine = ++sequence.current;
+    setBusy(true);
+    try {
+      const res = await callTool(EDIT_TOOL, { id: base.modelId, specHash: base.specHash, mutations });
+      const out = res.structuredContent as EditResult | undefined;
+      if (mine !== sequence.current) return;
+      if (!out || res.isError) {
+        setRejection({ fieldErrors: {}, formErrors: [textOf(res) || 'The edit could not be saved.'] });
+        setShown(base.state);
+        return;
+      }
+      if ('rejected' in out) {
+        setRejection(splitIssues(out.issues));
+        setShown(base.state);
+        return;
+      }
+      commit({
+        ...base, specHash: out.specHash, spec: out.spec ?? base.spec, graph: out.graph ?? base.graph,
+        inputs: mutations, state: out.state, meta: out.meta, flags: out.flags,
+      }, Object.keys(mutations).length > 0);
+      setRejection(null);
+    } catch (e) {
+      if (mine !== sequence.current) return;
+      setRejection({ fieldErrors: {}, formErrors: [`Saving the edit failed: ${e instanceof Error ? e.message : String(e)}`] });
+      setShown(base.state);
+    } finally {
+      if (mine === sequence.current) setBusy(false);
+    }
+  }, [callTool, commit]);
+
   const recompute = useCallback(async (inputs: Inputs) => {
     const base = committedRef.current;
     if (!base) return;
+    if (base.modelId) return saveEdits(base, inputs);
     const mine = ++sequence.current;
     setBusy(true);
     const call = async (withSpec: boolean) => {
@@ -89,14 +128,15 @@ export function useCard(
     } finally {
       if (mine === sequence.current) setBusy(false);
     }
-  }, [callTool, commit]);
+  }, [callTool, commit, saveEdits]);
 
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
   const onMutate = useCallback(async (mutations: Record<string, unknown>) => {
     const base = committedRef.current;
     if (!base) return;
-    const inputs = mergeInputs(pendingInputs.current ?? base.inputs, mutations);
+    // A stored model already holds the earlier edits, so only the new ones are sent.
+    const inputs = mergeInputs(pendingInputs.current ?? (base.modelId ? {} : base.inputs), mutations);
     pendingInputs.current = inputs;
     setShown(prev => Object.entries(mutations).reduce((s, [k, v]) => setAt(s, toCanonical(k), v), prev));
     window.clearTimeout(timer.current);

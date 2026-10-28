@@ -51,6 +51,15 @@ describe('cardModel', () => {
     expect(text).not.toContain('[*]');
     expect(text).toContain('Flagged rules: Below minimum.');
   });
+
+  it('says a stored model keeps the edits, and points at evolve_spec rather than render_model', () => {
+    const text = summaryText({ id: 'quote', derivations: [{ path: '$.price' }] }, { '$.rooms': 5 },
+      { rooms: 5, price: 150 }, [], 'q1');
+    expect(text).toContain('saved to model q1');
+    expect(text).toContain('$.rooms = 5');
+    expect(text).toContain('evolve_spec');
+    expect(text).not.toContain('render_model');
+  });
 });
 
 describe('viewTabs', () => {

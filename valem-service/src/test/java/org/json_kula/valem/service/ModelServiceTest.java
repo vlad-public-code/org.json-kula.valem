@@ -47,6 +47,27 @@ class ModelServiceTest {
         service = new ModelService(new ModelRegistry(), new InMemoryBlobStore());
     }
 
+    // ── currentFlags ───────────────────────────────────────────────────────────
+
+    @Test
+    void currentFlags_reports_every_failing_flag_rule_not_just_the_last_cycles() throws Exception {
+        service.createModel(spec("""
+                {
+                  "id": "flags", "version": "1.0.0", "schema": {},
+                  "defaultValues": [ {"path": "$", "expr": "{ \\"a\\": 0, \\"b\\": 0 }"} ],
+                  "constraints": [
+                    {"id": "a-positive", "expr": "a > 0", "message": "a must be positive", "policy": "flag"},
+                    {"id": "b-positive", "expr": "b > 0", "message": "b must be positive", "policy": "flag"}
+                  ]
+                }
+                """));
+        // This cycle re-evaluates only the rule on a; the rule on b still fails.
+        service.mutate("flags", Map.of("$.a", NF.numberNode(1)));
+
+        assertThat(service.currentFlags("flags")).extracting(ConstraintEvaluator.Violation::constraintId)
+                .containsExactly("b-positive");
+    }
+
     // ── createModel ────────────────────────────────────────────────────────────
 
     @Test

@@ -2,6 +2,7 @@ package org.json_kula.valem.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.json_kula.valem.core.engine.ConstraintEvaluator;
 import org.json_kula.valem.core.engine.DerivationTrace;
 import org.json_kula.valem.core.graph.SpecEvolution;
 import org.json_kula.valem.core.model.BlobRef;
@@ -75,6 +76,17 @@ public interface ModelOperations {
 
     /** @see ModelService#graph(String) */
     org.json_kula.valem.core.graph.ModelGraph graph(String id);
+
+    /**
+     * Every {@code flag} rule that fails on the model's current state. A mutation result reports only
+     * the rules its own cycle re-evaluated, so a view opened later needs this to show the rest.
+     * A facade that cannot ask (a remote server has no such endpoint) answers an empty list.
+     *
+     * @see ModelService#currentFlags(String)
+     */
+    default List<ConstraintEvaluator.Violation> currentFlags(String id) {
+        return List.of();
+    }
 
     /** @see ModelService#getAudit(String, String, Instant, Instant, int) */
     JsonNode getAudit(String id, String pathPrefix, Instant from, Instant to, int limit);

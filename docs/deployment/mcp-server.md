@@ -204,6 +204,11 @@ open, matching the API's open-by-default development posture (set it in producti
 server (in-memory, one process per client), the HTTP endpoint's models are the server's shared, durable
 models — the point of an in-server endpoint.
 
+Both the stdio server and this endpoint serve the chat model card too: a client that renders
+[MCP Apps](https://modelcontextprotocol.io/extensions/apps) gets `render_model` for a spec it writes
+on the spot and `show_model` for a model the server keeps, whose card edits are saved as mutations.
+See [Build models in Claude or ChatGPT]({% link getting-started/chat-cards.md %}#on-your-own-server).
+
 ## Storage caveat (embedded mode)
 
 In embedded mode all state is in memory for the life of the process — nothing is persisted, and each

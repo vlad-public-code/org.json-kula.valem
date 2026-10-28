@@ -13,8 +13,13 @@ export interface Issue {
   paths: string[];
 }
 
-/** What `render_model` puts under `_meta["valem/card"]`. */
+/** What `render_model` and `show_model` put under `_meta["valem/card"]`. */
 export interface CardPayload {
+  /**
+   * Set for a model the server keeps (`show_model`): edits go to it as mutations through
+   * `valem_card_edit`. Absent for a spec the card holds (`render_model`), recomputed from its inputs.
+   */
+  modelId?: string;
   spec: CardSpec;
   specHash: string;
   inputs: Inputs;
@@ -44,6 +49,11 @@ export type RecomputeResult =
   | { specHash: string; state: Record<string, unknown>; meta: Record<string, unknown>; flags: Issue[]; shareUrl?: string }
   | { specHash: string; rejected: 'constraint' | 'schema'; issues: Issue[] }
   | { error: 'spec_unknown' };
+
+/** `valem_card_edit`'s structured result: as a recompute, plus the spec when it changed on the server. */
+export type EditResult =
+  | { specHash: string; state: Record<string, unknown>; meta: Record<string, unknown>; flags: Issue[]; spec?: CardSpec; graph?: ProvenanceGraph }
+  | { specHash: string; rejected: 'constraint' | 'schema'; issues: Issue[] };
 
 export const CARD_META_KEY = 'valem/card';
 
@@ -107,12 +117,18 @@ const MAX_SUMMARY_OUTPUTS = 20;
  * What the assistant is told after each edit, so "why is VAT 62?" or "add a weekend surcharge" uses
  * the values on screen rather than the ones it first rendered with.
  */
-export function summaryText(spec: CardSpec, inputs: Inputs, state: Record<string, unknown>, flags: Issue[]): string {
+export function summaryText(spec: CardSpec, inputs: Inputs, state: Record<string, unknown>, flags: Issue[],
+                            modelId?: string): string {
   const lines = [`The user edited the Valem card for ${spec.id}${spec.version ? ` ${spec.version}` : ''}.`];
   const entries = Object.entries(inputs);
-  lines.push(entries.length
-    ? `Inputs changed from the defaults: ${entries.map(([k, v]) => `${k} = ${JSON.stringify(v)}`).join(', ')}.`
-    : 'All inputs are at their defaults.');
+  if (modelId) {
+    lines.push(`The edits are saved to model ${modelId}${entries.length
+      ? `; the last ones: ${entries.map(([k, v]) => `${k} = ${JSON.stringify(v)}`).join(', ')}` : ''}.`);
+  } else {
+    lines.push(entries.length
+      ? `Inputs changed from the defaults: ${entries.map(([k, v]) => `${k} = ${JSON.stringify(v)}`).join(', ')}.`
+      : 'All inputs are at their defaults.');
+  }
   const outputs = (spec.derivations ?? []).map(d => d.path).filter(p => !p.includes('[*]'));
   if (outputs.length) {
     lines.push('Current results:');
@@ -120,7 +136,9 @@ export function summaryText(spec: CardSpec, inputs: Inputs, state: Record<string
     if (outputs.length > MAX_SUMMARY_OUTPUTS) lines.push(`- … and ${outputs.length - MAX_SUMMARY_OUTPUTS} more`);
   }
   if (flags.length) lines.push(`Flagged rules: ${flags.map(f => f.message || f.id).join('; ')}.`);
-  lines.push('To change the model, call render_model with the revised spec and these inputs.');
+  lines.push(modelId
+    ? `get_state reads the rest. To change the model itself, use evolve_spec, then show_model again.`
+    : 'To change the model, call render_model with the revised spec and these inputs.');
   return lines.join('\n');
 }
 

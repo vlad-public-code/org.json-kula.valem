@@ -220,7 +220,11 @@ public final class StatelessRunner {
         }
     }
 
-    private static List<Issue> issues(ModelSpec spec, List<ConstraintEvaluator.Violation> violations) {
+    /**
+     * Violations as the card shows them: each with the field paths its rule names (none for a global
+     * rule, and no {@code [*]} patterns, which are not a single field).
+     */
+    public static List<Issue> issues(ModelSpec spec, List<ConstraintEvaluator.Violation> violations) {
         List<Issue> out = new ArrayList<>();
         for (ConstraintEvaluator.Violation v : violations) {
             List<String> paths = List.of();
@@ -258,7 +262,11 @@ public final class StatelessRunner {
         return meta;
     }
 
-    private static void collectMeta(JsonNode components, ObjectNode meta) {
+    /**
+     * Collects {@code <bind>#readOnly|visible|required} from an evaluated view's component tree (the
+     * shape {@code GET /models/{id}/view} serves) into {@code meta}.
+     */
+    public static void collectMeta(JsonNode components, ObjectNode meta) {
         for (JsonNode c : components) {
             String bind = c.path("bind").asText(null);
             if (bind != null) {

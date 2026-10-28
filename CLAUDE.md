@@ -106,7 +106,8 @@ valem/                   ← parent POM (multi-module Maven)
 ├── valem-view-react/    ← open EvaluatedView → React renderer library (workspace member)
 ├── valem-mcp-app/       ← MCP Apps model card (Vite+React → one self-contained HTML, workspace
 │                                member); packaged into valem-mcp as ui://valem/model-card.html for
-│                                render_model / valem_recompute (ModelCardTools + StatelessRunner)
+│                                render_model / valem_recompute (ModelCardTools + StatelessRunner) and
+│                                show_model / valem_card_edit for server-kept models (StoredModelCards)
 │
 └── clients/valem-sdk-ts/ ← isomorphic TypeScript/JS SDK (fetch + reconnecting WebSocket)
 ```
