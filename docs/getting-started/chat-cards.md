@@ -45,6 +45,19 @@ The card appears in the conversation. Edit any input and it recomputes in place;
 a hard rule is put back, with the reason shown. The assistant is told the new values after each edit,
 so you can keep asking questions about them.
 
+- **Why is this number?** Hover a computed value to see its formula, the values it used and the
+  inputs it comes from. Ask the assistant the same question and it calls `explain_value`, so its
+  answer quotes Valem's formula and values instead of a guess.
+- **Several views.** A model with more than one view gets tabs, and where the chat app allows it a
+  *Full screen* button for bigger models.
+
+## Published calculators
+
+For net salary, car tax, self-employed income and similar questions, the assistant can show one of
+the [published calculators]({{ site.sandbox_url }}/calculators/) instead of writing a model:
+`list_calculators` finds it and `show_calculator` puts it in the chat as the same live card, with its
+tax year and cited sources. Ask, for example, *"Show me Germany's net salary for 60,000 a year."*
+
 ## Share or embed it
 
 Each card comes with two links:
@@ -67,7 +80,7 @@ The sandbox runs two MCP servers for two different jobs.
 | Where the model lives | In the chat, as a card | In a session on valem.run, shown in a browser tab |
 | Setup | Add the URL | Add the URL, then pair the agent with a browser tab |
 | State | None kept: each edit is recomputed from the spec the card holds | Kept in the paired session; you and the agent edit the same model |
-| Tools | `render_model`, `valem_spec_guide` | The full model tool set: create, mutate, evolve, explain, … |
+| Tools | `render_model`, `explain_value`, `show_calculator`, `list_calculators`, `valem_spec_guide` | The full model tool set: create, mutate, evolve, explain, … |
 | Best for | Chat users who want a working calculator in the conversation | Developers iterating on a model with an agent |
 
 Both are free to try on the public sandbox and need no Java or download.

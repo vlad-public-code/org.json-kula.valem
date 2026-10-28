@@ -46,6 +46,10 @@ export type {
   ProvenanceSource,
 } from './types';
 export { canonicalPath, formatProvenanceValue } from './provenance';
+export {
+  createGraphProvenance, buildGraphIndexes, valueAtKey, inlineInputPaths, transitiveInputs,
+} from './graphProvenance';
+export type { ProvenanceGraph, ProvenanceGraphNode, ProvenanceGraphEdge, GraphIndexes } from './graphProvenance';
 
 // ComponentSpec union — the per-type variants, for narrowing and custom renderers
 export type {

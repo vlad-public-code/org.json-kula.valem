@@ -4,6 +4,8 @@
  * of the host bridge so it can be tested on its own.
  */
 
+import type { ProvenanceGraph } from 'valem-view-react';
+
 /** One constraint or schema finding, with the field paths it belongs to (empty for a global rule). */
 export interface Issue {
   id: string;
@@ -21,6 +23,8 @@ export interface CardPayload {
   flags: Issue[];
   /** A live copy of the model in a browser, when the server offers one. */
   shareUrl?: string;
+  /** What each computed field reads, for "why this number"; absent from older servers. */
+  graph?: ProvenanceGraph;
 }
 
 /** The parts of a ModelSpec the card reads; the rest is passed back to the server untouched. */
@@ -146,4 +150,34 @@ export interface ToolResult {
   structuredContent?: unknown;
   _meta?: Record<string, unknown>;
   isError?: boolean;
+}
+
+/** A view the card offers as a tab. */
+export interface ViewTab {
+  id: string;
+  label: string;
+}
+
+/**
+ * The views to offer as tabs: every view except those only reached by opening one row of a list
+ * (an `itemView`), which make no sense on their own. A model with one such view gets no tabs.
+ */
+export function viewTabs(viewDefinition: unknown): ViewTab[] {
+  const views = (viewDefinition as { views?: { id?: string; label?: string; components?: unknown[] }[] } | undefined)?.views;
+  if (!Array.isArray(views)) return [];
+  const itemViews = new Set<string>();
+  // Containers nest components under several keys (components, tabs, steps…), so look everywhere.
+  const walk = (node: unknown) => {
+    if (Array.isArray(node)) { node.forEach(walk); return; }
+    if (!node || typeof node !== 'object') return;
+    for (const [k, v] of Object.entries(node)) {
+      if (k === 'itemView' && typeof v === 'string') itemViews.add(v);
+      else walk(v);
+    }
+  };
+  views.forEach(v => walk(v.components));
+  const tabs = views
+    .filter(v => typeof v.id === 'string' && !itemViews.has(v.id))
+    .map(v => ({ id: v.id as string, label: v.label || (v.id as string) }));
+  return tabs.length > 1 ? tabs : [];
 }

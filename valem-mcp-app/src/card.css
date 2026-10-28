@@ -87,3 +87,12 @@ html, body { background: var(--panel-bg); color: var(--text); font-family: var(-
 .card-action:hover { background: var(--accent-soft); }
 .card-action:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: 1px; }
 
+.card-tabs { display: flex; gap: 2px; flex-wrap: wrap; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+.card-tab {
+  font: inherit; font-size: 13px; color: var(--text-muted); background: transparent; border: 0;
+  border-bottom: 2px solid transparent; padding: 6px 10px; margin-bottom: -1px; cursor: pointer;
+}
+.card-tab:hover { color: var(--text); }
+.card-tab-active { color: var(--accent-text); border-bottom-color: var(--accent); font-weight: 600; }
+.card-tab:focus-visible { outline: 2px solid var(--accent-ring); outline-offset: -2px; }
+
