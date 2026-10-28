@@ -113,6 +113,13 @@ specs, one hour idle). All computation runs server-side in the Java engine; the 
 | `render_model` | Args: `spec` (a full ModelSpec with a `viewDefinition`), optional `inputs` (canonical path → value). Validates the spec **and runs its embedded tests** (a failing test is an error), computes it, and returns `structuredContent` `{modelId, version, specHash, inputs, outputs, flags, warnings}` plus the card payload under `_meta["valem/card"]`. An invalid spec returns `isError` with `{valid:false, errors[]}` so the assistant can fix it. Inputs that a rollback rule or the schema rejects fall back to the defaults and are reported as `rejectedInputs`. Limits: 64 KB spec, 200 expressions. |
 | `valem_recompute` | **App-only** (`_meta.ui.visibility: ["app"]`; hidden from the assistant). The card calls it on every edit with `{specHash, inputs}` → `{specHash, state, meta, flags}`, or `{specHash, rejected, issues}` when a rollback rule or the schema rejects the edit. When the cache no longer holds the hash it answers `isError` with `{error:"spec_unknown"}`, and the card repeats the call with `spec` attached. |
 
+**Share links.** A published artifact or document cannot run a model, so a server that can open one
+from a link passes a `ModelCardTools.ShareLinks` to `call(name, args, shareLinks)`. `render_model` then
+adds `shareUrl` (a live copy anyone can open in a browser) and `embedUrl` (for an `<iframe>`) to its
+result and text, and the card gets an *Open in browser* button, which asks `valem_recompute` (with the
+spec attached) for a link carrying the values on screen. The link format is the hosting server's; the
+hosted endpoint uses valem.run's existing share and embed links. Links over 8000 characters are dropped.
+
 The card itself is `ui://valem/model-card.html` (`text/html;profile=mcp-app`), a single
 self-contained HTML file built from `valem-mcp-app` (React + `valem-view-react`) and packaged into the
 `valem-mcp` jar (skip with `-Dskip.frontend=true`). After each recompute it tells the assistant the

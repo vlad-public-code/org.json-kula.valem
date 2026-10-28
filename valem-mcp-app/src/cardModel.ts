@@ -19,6 +19,8 @@ export interface CardPayload {
   state: Record<string, unknown>;
   meta: Record<string, unknown>;
   flags: Issue[];
+  /** A live copy of the model in a browser, when the server offers one. */
+  shareUrl?: string;
 }
 
 /** The parts of a ModelSpec the card reads; the rest is passed back to the server untouched. */
@@ -35,7 +37,7 @@ export type Inputs = Record<string, unknown>;
 
 /** `valem_recompute`'s structured result. */
 export type RecomputeResult =
-  | { specHash: string; state: Record<string, unknown>; meta: Record<string, unknown>; flags: Issue[] }
+  | { specHash: string; state: Record<string, unknown>; meta: Record<string, unknown>; flags: Issue[]; shareUrl?: string }
   | { specHash: string; rejected: 'constraint' | 'schema'; issues: Issue[] }
   | { error: 'spec_unknown' };
 
@@ -136,4 +138,12 @@ export function setAt(state: Record<string, unknown>, path: string, value: unkno
     return copy;
   };
   return write(state, 0) as Record<string, unknown>;
+}
+
+/** A tool result as the card reads it, from the host bridge or straight from the endpoint. */
+export interface ToolResult {
+  content?: { type: string; text?: string }[];
+  structuredContent?: unknown;
+  _meta?: Record<string, unknown>;
+  isError?: boolean;
 }

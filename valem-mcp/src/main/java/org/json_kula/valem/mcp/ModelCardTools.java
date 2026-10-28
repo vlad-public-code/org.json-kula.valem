@@ -37,6 +37,11 @@ import java.util.Set;
  * <p>The card itself is the {@code valem-mcp-app} build, packaged on the classpath at
  * {@value #CARD_RESOURCE}. A build without it still serves the tools, with no UI metadata, so a spec
  * can be checked and computed as text.
+ *
+ * <p>A server that can open a model from a link passes {@link ShareLinks} to
+ * {@link #call(String, JsonNode, ShareLinks)}: {@code render_model} and {@code valem_recompute} then
+ * return links to a live copy of the model with the current inputs, which the assistant can hand out
+ * (a published artifact cannot run the model itself) and the card's "Open in browser" button follows.
  */
 public final class ModelCardTools {
 
@@ -48,6 +53,25 @@ public final class ModelCardTools {
     public static final String CARD_URI = "ui://valem/model-card.html";
     /** Where the built card sits on the classpath. */
     public static final String CARD_RESOURCE = "/valem-mcp-app/model-card.html";
+    /** Longer links get cut off by chat apps and mail clients, so none is offered. */
+    public static final int MAX_LINK_CHARS = 8000;
+
+    /**
+     * Links that open a live copy of a model outside the chat, supplied by the server that hosts such
+     * a page; the format of the link is that server's business.
+     */
+    @FunctionalInterface
+    public interface ShareLinks {
+        /**
+         * Links for this model with these inputs; either may be null.
+         *
+         * @param shareUrl a page anyone can open in a browser
+         * @param embedUrl a URL for an {@code <iframe>} on another web page
+         */
+        record Links(String shareUrl, String embedUrl) {}
+
+        Links links(JsonNode spec, Map<String, JsonNode> inputs);
+    }
 
     public static final String RENDER_MODEL = "render_model";
     public static final String RECOMPUTE = "valem_recompute";
@@ -252,12 +276,17 @@ public final class ModelCardTools {
 
     /** Runs one tool, returning an MCP {@code tools/call} result; failures are {@code isError} results. */
     public ObjectNode call(String name, JsonNode arguments) {
+        return call(name, arguments, null);
+    }
+
+    /** As {@link #call(String, JsonNode)}, on a server that can open a model from a link (null: none). */
+    public ObjectNode call(String name, JsonNode arguments, ShareLinks shareLinks) {
         JsonNode args = arguments == null || arguments.isNull() ? mapper.createObjectNode() : arguments;
         try {
             return switch (name) {
                 case SPEC_GUIDE -> text(specGuide(), null, false);
-                case RENDER_MODEL -> render(args);
-                case RECOMPUTE -> recompute(args);
+                case RENDER_MODEL -> render(args, shareLinks);
+                case RECOMPUTE -> recompute(args, shareLinks);
                 default -> text("Unknown tool: '" + name + "'", null, true);
             };
         } catch (IllegalArgumentException e) {
@@ -265,7 +294,7 @@ public final class ModelCardTools {
         }
     }
 
-    private ObjectNode render(JsonNode args) {
+    private ObjectNode render(JsonNode args, ShareLinks shareLinks) {
         JsonNode specJson = args.get("spec");
         if (specJson == null || !specJson.isObject()) {
             throw new IllegalArgumentException("Missing required argument 'spec' (a ModelSpec object).");
@@ -321,17 +350,32 @@ public final class ModelCardTools {
             sb.append("The starting inputs were not applied: ").append(messages(rejected)).append(".\n");
         }
         sb.append("The user may now edit inputs in the card; the card reports changes back to you.");
+        ShareLinks.Links links = links(shareLinks, specJson, inputs);
+        if (links != null) {
+            putLinks(structured, links);
+            if (links.shareUrl() != null) {
+                sb.append("\nShare link (a live copy of this model anyone can open in a browser; give it "
+                        + "unchanged, it carries the whole model): ").append(links.shareUrl());
+            }
+            if (links.embedUrl() != null) {
+                sb.append("\nEmbed URL (for an <iframe> on a web page): ").append(links.embedUrl());
+            }
+            if (links.shareUrl() == null && links.embedUrl() == null) {
+                sb.append("\nThe model is too large for a share link.");
+            }
+        }
 
         ObjectNode result = text(sb.toString(), structured, false);
         ObjectNode card = result.putObject("_meta").putObject("valem/card");
         card.set("spec", specJson);
         card.put("specHash", prepared.specHash());
         card.set("inputs", mapper.valueToTree(inputs));
+        if (links != null && links.shareUrl() != null) card.put("shareUrl", links.shareUrl());
         cardState(card, computed);
         return result;
     }
 
-    private ObjectNode recompute(JsonNode args) {
+    private ObjectNode recompute(JsonNode args, ShareLinks shareLinks) {
         String hash = args.path("specHash").asText(null);
         if (hash == null) throw new IllegalArgumentException("Missing required argument 'specHash'.");
         JsonNode specJson = args.get("spec");
@@ -358,6 +402,10 @@ public final class ModelCardTools {
         }
         StatelessRunner.Computed computed = (StatelessRunner.Computed) outcome;
         cardState(structured, computed);
+        // Links need the spec itself, so they come only with a call that sends it (the card's
+        // "Open in browser" does); an ordinary edit sends just the hash.
+        ShareLinks.Links links = specJson != null && specJson.isObject() ? links(shareLinks, specJson, inputs) : null;
+        if (links != null) putLinks(structured, links);
         return text("Recomputed.", structured, false);
     }
 
@@ -379,6 +427,23 @@ public final class ModelCardTools {
         }
         s.set("flags", issuesNode(computed.flags()));
         return s;
+    }
+
+    /** The links for this model, with any too long for a chat or mail client dropped; null without a linker. */
+    private static ShareLinks.Links links(ShareLinks shareLinks, JsonNode spec, Map<String, JsonNode> inputs) {
+        if (shareLinks == null || spec == null) return null;
+        ShareLinks.Links l = shareLinks.links(spec, inputs);
+        if (l == null) return null;
+        return new ShareLinks.Links(fits(l.shareUrl()), fits(l.embedUrl()));
+    }
+
+    private static String fits(String url) {
+        return url != null && url.length() <= MAX_LINK_CHARS ? url : null;
+    }
+
+    private static void putLinks(ObjectNode target, ShareLinks.Links links) {
+        if (links.shareUrl() != null) target.put("shareUrl", links.shareUrl());
+        if (links.embedUrl() != null) target.put("embedUrl", links.embedUrl());
     }
 
     /** The full state the card renders from. */
@@ -486,5 +551,10 @@ public final class ModelCardTools {
               for values that must never be accepted; a rollback rejects the user's edit.
             - To revise a model, send the whole revised spec to render_model with the inputs the user last
               had; a new card appears with them carried over.
+            - When render_model returns a share link and the user wants the model outside this chat (an
+              artifact, a page to send someone, a bookmark), give them that link unchanged: it opens a live
+              copy computed by Valem in any browser. For a web page, put the embed URL in an <iframe>. A
+              published artifact or document cannot run the model itself, so link to it rather than
+              rebuilding the calculation in code.
             """;
 }

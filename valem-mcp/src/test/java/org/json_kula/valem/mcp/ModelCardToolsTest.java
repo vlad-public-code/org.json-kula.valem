@@ -62,6 +62,63 @@ class ModelCardToolsTest {
         assertThat(card.path("specHash").asText()).isEqualTo(structured.path("specHash").asText());
     }
 
+    private static final ModelCardTools.ShareLinks LINKS = (spec, inputs) -> new ModelCardTools.ShareLinks.Links(
+            "https://valem.run/#share=" + spec.path("id").asText() + "/" + inputs.size(),
+            "https://valem.run/embed.html#e=" + spec.path("id").asText());
+
+    @Test
+    void render_model_returns_the_servers_share_and_embed_links() throws Exception {
+        ObjectNode args = MAPPER.createObjectNode();
+        args.set("spec", MAPPER.readTree(QUOTE));
+        args.putObject("inputs").put("$.rooms", 4);
+
+        JsonNode result = tools.call(ModelCardTools.RENDER_MODEL, args, LINKS);
+
+        JsonNode structured = result.path("structuredContent");
+        assertThat(structured.path("shareUrl").asText()).isEqualTo("https://valem.run/#share=cleaning-quote/1");
+        assertThat(structured.path("embedUrl").asText()).isEqualTo("https://valem.run/embed.html#e=cleaning-quote");
+        assertThat(result.path("content").get(0).path("text").asText())
+                .contains("https://valem.run/#share=cleaning-quote/1").contains("Embed URL");
+        assertThat(result.path("_meta").path("valem/card").path("shareUrl").asText())
+                .isEqualTo("https://valem.run/#share=cleaning-quote/1");
+    }
+
+    @Test
+    void recompute_returns_links_for_the_current_inputs_only_when_the_spec_is_sent() throws Exception {
+        String hash = tools.call(ModelCardTools.RENDER_MODEL, MAPPER.createObjectNode().set("spec", MAPPER.readTree(QUOTE)))
+                .path("structuredContent").path("specHash").asText();
+        ObjectNode args = MAPPER.createObjectNode().put("specHash", hash);
+        args.putObject("inputs").put("$.rooms", 5);
+
+        assertThat(tools.call(ModelCardTools.RECOMPUTE, args, LINKS).path("structuredContent").has("shareUrl")).isFalse();
+
+        args.set("spec", MAPPER.readTree(QUOTE));
+        assertThat(tools.call(ModelCardTools.RECOMPUTE, args, LINKS).path("structuredContent").path("shareUrl").asText())
+                .isEqualTo("https://valem.run/#share=cleaning-quote/1");
+    }
+
+    @Test
+    void a_link_too_long_for_a_chat_is_dropped() throws Exception {
+        ModelCardTools.ShareLinks huge = (spec, inputs) ->
+                new ModelCardTools.ShareLinks.Links("https://x/#" + "a".repeat(ModelCardTools.MAX_LINK_CHARS), null);
+        JsonNode result = tools.call(ModelCardTools.RENDER_MODEL,
+                MAPPER.createObjectNode().set("spec", MAPPER.readTree(QUOTE)), huge);
+
+        assertThat(result.path("structuredContent").has("shareUrl")).isFalse();
+        assertThat(result.path("content").get(0).path("text").asText()).contains("too large for a share link");
+    }
+
+    @Test
+    void without_a_linker_there_is_no_link() throws Exception {
+        ObjectNode args = MAPPER.createObjectNode();
+        args.set("spec", MAPPER.readTree(QUOTE));
+
+        JsonNode result = tools.call(ModelCardTools.RENDER_MODEL, args);
+
+        assertThat(result.path("structuredContent").has("shareUrl")).isFalse();
+        assertThat(result.path("_meta").path("valem/card").has("shareUrl")).isFalse();
+    }
+
     @Test
     void render_model_returns_fixable_errors_when_a_self_test_fails() throws Exception {
         ObjectNode spec = (ObjectNode) MAPPER.readTree(QUOTE);
