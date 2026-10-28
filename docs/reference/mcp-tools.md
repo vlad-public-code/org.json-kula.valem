@@ -100,12 +100,18 @@ core even in remote mode.
 
 ## Model cards (MCP Apps)
 
-These four tools let a chat assistant hand the user a Valem model as an interactive card inside the
+These tools let a chat assistant hand the user a Valem model as an interactive card inside the
 chat (Claude, ChatGPT, VS Code — any host that supports the
 [MCP Apps](https://modelcontextprotocol.io/extensions/apps) extension, `io.modelcontextprotocol/ui`).
-They are **stateless**: nothing is registered, the spec travels with the card, and the server keeps
-compiled specs only in a short-lived cache keyed by the spec's SHA-256 hash (`StatelessRunner`; 200
-specs, one hour idle). All computation runs server-side in the Java engine; the card only renders.
+All computation runs server-side in the Java engine; the card only renders. There are two ways in:
+
+- **A spec the card holds** (`render_model`, below). Stateless: nothing is registered, the spec travels
+  with the card, and the server keeps compiled specs only in a short-lived cache keyed by the spec's
+  SHA-256 hash (`StatelessRunner`; 200 specs, one hour idle). This is all the hosted
+  `valem.run/mcp/app` endpoint offers.
+- **A model the server keeps** (`show_model`, further down). The stdio server and `valem-web`'s `/mcp`
+  also offer it: the card shows a model made with `create_model`, and the user's edits are mutations on
+  that model.
 
 | Tool | Purpose |
 |---|---|
@@ -113,6 +119,18 @@ specs, one hour idle). All computation runs server-side in the Java engine; the 
 | `render_model` | Args: `spec` (a full ModelSpec with a `viewDefinition`), optional `inputs` (canonical path → value). Validates the spec **and runs its embedded tests** (a failing test is an error), computes it, and returns `structuredContent` `{modelId, version, specHash, inputs, outputs, flags, warnings}` plus the card payload under `_meta["valem/card"]`. An invalid spec returns `isError` with `{valid:false, errors[]}` so the assistant can fix it. Inputs that a rollback rule or the schema rejects fall back to the defaults and are reported as `rejectedInputs`. Limits: 64 KB spec, 200 expressions. |
 | `explain_value` | Args: `path` (canonical, e.g. `$.total` or `$.items[0].lineTotal`), `specHash`, optional `inputs`, and `spec` when the server answers `spec_unknown`. Returns how Valem computed that value for those inputs: `structuredContent` `{path, kind, label, value, expression, inputs[], baseInputs[]}` (`inputs` = the values the expression read, `baseInputs` = the editable inputs it ultimately comes from, present when some direct input is itself computed) and a one-line text the assistant can quote. A row of a list is explained through its `[*]` rule with that row's values. An input the user sets is reported as such; an unknown path lists the model's fields. |
 | `valem_recompute` | **App-only** (`_meta.ui.visibility: ["app"]`; hidden from the assistant). The card calls it on every edit with `{specHash, inputs}` → `{specHash, state, meta, flags}`, or `{specHash, rejected, issues}` when a rollback rule or the schema rejects the edit. When the cache no longer holds the hash it answers `isError` with `{error:"spec_unknown"}`, and the card repeats the call with `spec` attached. |
+
+For a model the server keeps (the stdio server, `valem-web`'s `/mcp`, a paired sandbox session), two
+more tools are listed, only to a client that shows the card:
+
+| Tool | Purpose |
+|---|---|
+| `show_model` | Args: `id`. Shows that model as the same card, with its current state, the `flag` rules failing now, and its graph. `structuredContent` `{modelId, version, outputs, flags}`; the card payload carries `modelId`. A model without a `viewDefinition` is an error that says to add one with `evolve_spec`. |
+| `valem_card_edit` | **App-only.** The card calls it with `{id, specHash, mutations}`: the mutations go through `mutate` (so `get_state`, `explain` and the audit trail see them) → `{specHash, state, meta, flags}`, plus `spec` and `graph` when the model's spec no longer matches `specHash` (someone ran `evolve_spec`), or `{specHash, rejected, issues}` when a rollback rule or the schema rejects the edit, leaving the model unchanged. With no mutations it just reads the model back; the card does that when it opens, so a card reopened from the chat's history shows the model as it is now, not as it was. |
+
+Edits in a stored model's card are not inputs layered on defaults, as in `render_model`: each one is
+saved to the model at once, and changes made elsewhere (the assistant's own `mutate`, another client
+on the same server) show the next time the card saves or reopens.
 
 **Share links.** A published artifact or document cannot run a model, so a server that can open one
 from a link passes a `ModelCardTools.ShareLinks` to `call(name, args, shareLinks)`. `render_model` then

@@ -71,6 +71,23 @@ The card's **Open in browser** button opens the share link with the values on sc
 whole model rides in the link, so nothing has to be saved anywhere for it to work. A very large model
 can be too long for a link; then there is none.
 
+## On your own server
+
+The card is part of the open `valem-mcp` server, so it isn't tied to valem.run:
+
+- **The stdio jar** (see [Running the MCP server]({% link deployment/mcp-server.md %})) serves the card
+  to any local MCP client that renders MCP Apps, such as VS Code.
+- **`valem-web`'s `/mcp` endpoint** serves it over HTTP. To use it from the Claude or ChatGPT apps,
+  the server must be reachable from the internet over HTTPS, and the chat apps' connector settings
+  can't send an API key: put the endpoint behind a gateway that handles sign-in, or leave
+  `valem.api.key` unset only on a server whose models aren't private.
+
+Both offer `render_model` as above, plus **`show_model`** for the models the server keeps. Ask
+*"show me the quote model"* and the assistant puts it in the chat as a card; every edit you make there
+is saved to that model, so the assistant reads your values back with `get_state`, and the next time
+the card opens it shows the model as it is then. Neither runs the hosted extras (share links and the
+published calculators).
+
 ## `/mcp/app` or `/mcp`?
 
 The sandbox runs two MCP servers for two different jobs.
@@ -80,7 +97,7 @@ The sandbox runs two MCP servers for two different jobs.
 | Where the model lives | In the chat, as a card | In a session on valem.run, shown in a browser tab |
 | Setup | Add the URL | Add the URL, then pair the agent with a browser tab |
 | State | None kept: each edit is recomputed from the spec the card holds | Kept in the paired session; you and the agent edit the same model |
-| Tools | `render_model`, `explain_value`, `show_calculator`, `list_calculators`, `valem_spec_guide` | The full model tool set: create, mutate, evolve, explain, … |
+| Tools | `render_model`, `explain_value`, `show_calculator`, `list_calculators`, `valem_spec_guide` | The full model tool set: create, mutate, evolve, explain, …, plus `render_model` and `show_model` for cards |
 | Best for | Chat users who want a working calculator in the conversation | Developers iterating on a model with an agent |
 
 Both are free to try on the public sandbox and need no Java or download.

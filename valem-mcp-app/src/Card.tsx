@@ -33,7 +33,8 @@ function applyHostContext(ctx: Partial<McpUiHostContext> | undefined) {
 /**
  * The Valem model card inside a chat. `render_model` hands it a spec and the state the server
  * computed; every edit goes back through the host as `valem_recompute`, and the assistant is told the
- * new values. Nothing is computed here.
+ * new values. `show_model` hands it a model the server keeps, and edits are saved to it instead.
+ * Nothing is computed here.
  */
 export function Card({ app }: { app: App }) {
   const [status, setStatus] = useState<Status>({ kind: 'waiting' });
@@ -52,10 +53,10 @@ export function Card({ app }: { app: App }) {
     [app],
   );
   const onCommit = useCallback((p: CardPayload, byEdit: boolean) => {
-    openai()?.setWidgetState?.({ specHash: p.specHash, inputs: p.inputs });
+    if (!p.modelId) openai()?.setWidgetState?.({ specHash: p.specHash, inputs: p.inputs });
     if (!byEdit) return;
     void app.updateModelContext({
-      content: [{ type: 'text', text: summaryText(p.spec, p.inputs, p.state, p.flags) }],
+      content: [{ type: 'text', text: summaryText(p.spec, p.inputs, p.state, p.flags, p.modelId) }],
     }).catch(() => { /* a host without model context still shows the card */ });
   }, [app]);
   const card = useCard(callTool, onCommit);
@@ -74,6 +75,9 @@ export function Card({ app }: { app: App }) {
       setStatus({ kind: 'ready' });
       const vd = p.spec.viewDefinition as { defaultView?: string; views?: { id: string }[] } | undefined;
       setViewId(vd?.defaultView ?? vd?.views?.[0]?.id);
+      // A stored model may have changed since this result was made (a reload from history, the
+      // assistant's own mutate): show it as it is now.
+      if (p.modelId) { void recompute({}); return; }
       // A ChatGPT reload of a card the user had edited: bring their edits back.
       const saved = openai()?.widgetState;
       if (saved?.specHash === p.specHash && saved.inputs && JSON.stringify(saved.inputs) !== JSON.stringify(p.inputs)) {
@@ -87,6 +91,12 @@ export function Card({ app }: { app: App }) {
   }, [app, load, recompute, trackDisplay]);
 
   const committed = card.committed;
+  // An evolved stored model may have dropped the view on screen.
+  useEffect(() => {
+    const vd = committed?.spec.viewDefinition as { defaultView?: string; views?: { id: string }[] } | undefined;
+    if (!vd?.views || !viewId || vd.views.some(v => v.id === viewId)) return;
+    setViewId(vd.defaultView ?? vd.views[0]?.id);
+  }, [committed?.spec, viewId]);
   // The link format is the server's: ask it for one carrying the values on screen now.
   const openInBrowser = useCallback(async () => {
     if (!committed?.shareUrl) return;

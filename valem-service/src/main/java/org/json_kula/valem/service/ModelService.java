@@ -605,6 +605,30 @@ public class ModelService implements ModelOperations, ChangeSubscribable {
     }
 
     /**
+     * Every {@code flag} rule that fails on the current state, evaluated against the merged document.
+     * Read-only: no state changes and nothing is traced.
+     *
+     * @throws ModelNotFoundException if the model does not exist
+     */
+    @Override
+    public List<ConstraintEvaluator.Violation> currentFlags(String id) {
+        ModelRuntime rt = requireRuntime(id);
+        synchronized (rt) {
+            CompiledModel model = rt.model();
+            if (model.constraints().isEmpty()) return List.of();
+            java.util.Set<String> all = new java.util.LinkedHashSet<>();
+            model.constraints().forEach(c -> all.add("$constraint:" + c.id()));
+            try {
+                return new ConstraintEvaluator(rt.expressionCache())
+                        .evaluate(model, rt.stateView(), all, null, rt.stateView().mergedDocument());
+            } catch (ConstraintEvaluator.ConstraintViolationException e) {
+                // A committed state cannot break a rollback rule; report it rather than hide it if it does.
+                return e.violations();
+            }
+        }
+    }
+
+    /**
      * Structural dependency-graph projection for the "Why is this number?" surface — a read-only
      * lens over the compiled model (nodes, edges, levels, per-node expressions). Pure function of the
      * spec; recomputed on demand.

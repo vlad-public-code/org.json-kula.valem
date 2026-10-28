@@ -313,6 +313,11 @@ final class SandboxSessionModelOperations implements ModelOperations, BrowserPai
     }
 
     @Override
+    public List<org.json_kula.valem.core.engine.ConstraintEvaluator.Violation> currentFlags(String id) {
+        return requireDelegate().currentFlags(toServer(id));
+    }
+
+    @Override
     public JsonNode getAudit(String id, String pathPrefix, Instant from, Instant to, int limit) {
         JsonNode audit = requireDelegate().getAudit(toServer(id), pathPrefix, from, to, limit);
         // Translate each record's namespaced modelId back to the plain id the agent used.

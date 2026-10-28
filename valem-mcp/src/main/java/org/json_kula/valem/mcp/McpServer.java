@@ -102,6 +102,8 @@ public class McpServer {
     private final ResourceRegistry  resources;
     /** Models shown as interactive cards in chat apps that render MCP Apps. */
     private final ModelCardTools    cardTools;
+    /** The same card for the models this server keeps, edited with mutate. */
+    private final StoredModelCards  storedCards;
     /** Whether the client can render the card, from its {@code initialize} capabilities. */
     private volatile boolean        clientSupportsUi = true;
 
@@ -142,6 +144,7 @@ public class McpServer {
         this.tools     = new ToolRegistry(service, mapper);
         this.resources = new ResourceRegistry(mapper);
         this.cardTools = new ModelCardTools(new StatelessRunner(), mapper);
+        this.storedCards = new StoredModelCards(service, cardTools, mapper);
     }
 
     /**
@@ -527,6 +530,11 @@ public class McpServer {
                 + "+ effects), then mutate base fields — derived fields recompute automatically and "
                 + "constraints are enforced. Read merged state with get_state, trace any value with explain, "
                 + "and change the model in place with evolve_spec. State is in-memory for this session.";
+        if (clientSupportsUi && cardTools.hasCard()) {
+            instructions +=
+                " This client can show models as interactive cards: show_model puts a model the user "
+                + "should see or try into the chat, and the user's edits in it are mutations on that model.";
+        }
         if (tools.toolNames().contains("pair_browser")) {
             instructions +=
                 " This server is in remote_with_browser mode: call pair_browser first to get a "
@@ -547,6 +555,7 @@ public class McpServer {
         ObjectNode result = mapper.createObjectNode();
         ArrayNode list = tools.listNode().deepCopy();
         list.addAll(cardTools.toolDefinitions(clientSupportsUi));
+        list.addAll(storedCards.toolDefinitions(clientSupportsUi));
         result.set("tools", list);
         return result;
     }
@@ -561,6 +570,9 @@ public class McpServer {
         }
         if (cardTools.toolNames().contains(name)) {
             return cardTools.call(name, params.get("arguments"));
+        }
+        if (storedCards.toolNames().contains(name)) {
+            return storedCards.call(name, params.get("arguments"));
         }
         return tools.call(name, params.get("arguments"));
     }
