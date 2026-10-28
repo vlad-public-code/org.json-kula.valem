@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.json_kula.valem.core.graph.GraphProjection;
+import org.json_kula.valem.core.graph.ModelGraph;
 import org.json_kula.valem.core.graph.ModelSpecValidator;
 import org.json_kula.valem.core.llm.SpecGenerationPrompt;
 import org.json_kula.valem.core.model.DerivationSpec;
@@ -14,10 +16,16 @@ import org.json_kula.valem.service.StatelessRunner;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Valem models as interactive cards in a chat app, over the MCP Apps extension
@@ -76,6 +84,7 @@ public final class ModelCardTools {
     public static final String RENDER_MODEL = "render_model";
     public static final String RECOMPUTE = "valem_recompute";
     public static final String SPEC_GUIDE = "valem_spec_guide";
+    public static final String EXPLAIN = "explain_value";
 
     /** How many output values the text answer lists before it stops. */
     private static final int MAX_LISTED_OUTPUTS = 20;
@@ -135,7 +144,7 @@ public final class ModelCardTools {
 
     /** The names {@link #call} answers. */
     public Set<String> toolNames() {
-        return Set.of(RENDER_MODEL, RECOMPUTE, SPEC_GUIDE);
+        return Set.of(RENDER_MODEL, RECOMPUTE, SPEC_GUIDE, EXPLAIN);
     }
 
     // ── tools/list ───────────────────────────────────────────────────────────────
@@ -183,6 +192,28 @@ public final class ModelCardTools {
         render.set("annotations", annotations());
         if (ui) render.set("_meta", toolUiMeta(false));
 
+        ObjectNode explain = tools.addObject();
+        explain.put("name", EXPLAIN);
+        explain.put("title", "Explain a Valem value");
+        explain.put("description", "Explain how a value in a Valem card was computed: the formula, the "
+                + "values it read and the inputs it ultimately comes from, as Valem's engine has them for "
+                + "the given inputs. Use it when the user asks why a number is what it is. Pass the specHash "
+                + "and current inputs from the latest " + RENDER_MODEL + " result or card update.");
+        ObjectNode es = explain.putObject("inputSchema");
+        es.put("type", "object");
+        ObjectNode ep = es.putObject("properties");
+        ep.putObject("specHash").put("type", "string")
+                .put("description", "The specHash from the " + RENDER_MODEL + " result.");
+        ep.putObject("path").put("type", "string")
+                .put("description", "The field to explain, as a canonical path, e.g. \"$.total\" or "
+                        + "\"$.items[0].lineTotal\".");
+        ep.putObject("inputs").put("type", "object").put("additionalProperties", true)
+                .put("description", "The card's current inputs keyed by canonical path; omit for the defaults.");
+        ep.putObject("spec").put("type", "object")
+                .put("description", "The spec, only needed when the server answers spec_unknown.");
+        es.putArray("required").add("path");
+        explain.set("annotations", annotations());
+
         if (ui) {
             ObjectNode recompute = tools.addObject();
             recompute.put("name", RECOMPUTE);
@@ -200,6 +231,14 @@ public final class ModelCardTools {
             recompute.set("_meta", toolUiMeta(true));
         }
         return tools;
+    }
+
+    /**
+     * The {@code _meta} that links a tool to the card, for a server that adds tools of its own whose
+     * results the card shows (a result built by {@link #call} for {@code render_model}).
+     */
+    public ObjectNode cardToolMeta() {
+        return toolUiMeta(false);
     }
 
     private ObjectNode annotations() {
@@ -287,6 +326,7 @@ public final class ModelCardTools {
                 case SPEC_GUIDE -> text(specGuide(), null, false);
                 case RENDER_MODEL -> render(args, shareLinks);
                 case RECOMPUTE -> recompute(args, shareLinks);
+                case EXPLAIN -> explain(args);
                 default -> text("Unknown tool: '" + name + "'", null, true);
             };
         } catch (IllegalArgumentException e) {
@@ -372,6 +412,7 @@ public final class ModelCardTools {
         card.set("inputs", mapper.valueToTree(inputs));
         if (links != null && links.shareUrl() != null) card.put("shareUrl", links.shareUrl());
         cardState(card, computed);
+        runner.graph(prepared.specHash()).ifPresent(g -> card.set("graph", graphNode(g)));
         return result;
     }
 
@@ -409,7 +450,167 @@ public final class ModelCardTools {
         return text("Recomputed.", structured, false);
     }
 
+    private ObjectNode explain(JsonNode args) {
+        String path = args.path("path").asText("").trim();
+        if (path.isEmpty()) {
+            throw new IllegalArgumentException("Missing required argument 'path', e.g. \"$.total\".");
+        }
+        String hash = args.path("specHash").asText(null);
+        JsonNode specJson = args.get("spec");
+        if (specJson != null && specJson.isObject() && (hash == null || !runner.isCached(hash))) {
+            checkLimits(specJson);
+            StatelessRunner.Prepared prepared = runner.prepare(specJson);
+            if (!prepared.ok()) {
+                throw new IllegalArgumentException("The spec is not valid; call " + RENDER_MODEL + " to see why.");
+            }
+            hash = prepared.specHash();
+        }
+        if (hash == null) {
+            throw new IllegalArgumentException("Missing required argument 'specHash' (from the "
+                    + RENDER_MODEL + " result).");
+        }
+        Map<String, JsonNode> inputs = inputs(args.get("inputs"));
+        StatelessRunner.Outcome outcome;
+        ModelGraph graph;
+        try {
+            outcome = runner.run(hash, inputs);
+            graph = runner.graph(hash).orElseThrow(() -> new StatelessRunner.SpecUnknownException(""));
+        } catch (StatelessRunner.SpecUnknownException e) {
+            ObjectNode structured = mapper.createObjectNode().put("error", "spec_unknown");
+            return text("spec_unknown: call again with the spec as well as the specHash.", structured, true);
+        }
+        if (outcome instanceof StatelessRunner.Rejected r) {
+            throw new IllegalArgumentException("Those inputs are not accepted: " + messages(r.issues()) + ".");
+        }
+        JsonNode state = ((StatelessRunner.Computed) outcome).state();
+
+        Map<String, ModelGraph.Node> byKey = new LinkedHashMap<>();
+        graph.nodes().forEach(n -> byKey.put(n.key(), n));
+        Map<String, List<String>> deps = new LinkedHashMap<>();
+        graph.edges().forEach(e -> deps.computeIfAbsent(e.to(), k -> new ArrayList<>()).add(e.from()));
+
+        String concrete = GraphProjection.canonicalKey(path);
+        // A row of a list is explained through its [*] rule, with the row's indices put back in.
+        String pattern = byKey.containsKey(concrete) ? concrete : concrete.replaceAll("\\[\\d+]", "[*]");
+        ModelGraph.Node node = byKey.get(pattern);
+        if (node == null) {
+            List<String> known = graph.nodes().stream()
+                    .filter(n -> !n.key().startsWith("$constraint:") && !n.key().startsWith("$effect:"))
+                    .map(ModelGraph.Node::key).limit(30).toList();
+            throw new IllegalArgumentException("This model has no field '" + path + "'. Its fields: "
+                    + String.join(", ", known) + ".");
+        }
+
+        ObjectNode structured = mapper.createObjectNode();
+        structured.put("specHash", hash);
+        structured.put("path", concrete);
+        structured.put("kind", node.kind());
+        structured.put("label", node.label());
+        JsonNode value = valueAt(state, concrete);
+        structured.set("value", value);
+        if ("BASE".equals(node.kind())) {
+            return text(concrete + " is an input the user sets; it is " + value + ".", structured, false);
+        }
+        structured.put("expression", node.expression());
+
+        List<String> direct = deps.getOrDefault(pattern, List.of());
+        ArrayNode inputsNode = structured.putArray("inputs");
+        for (String d : direct) inputsNode.add(explainInput(byKey, state, bindIndices(d, pattern, concrete)));
+
+        // The editable inputs it all comes from, when some direct input is itself computed.
+        Set<String> bases = new LinkedHashSet<>();
+        if (direct.stream().anyMatch(d -> !"BASE".equals(kindOf(byKey, d)))) {
+            ArrayDeque<String> queue = new ArrayDeque<>(direct);
+            Set<String> seen = new HashSet<>();
+            while (!queue.isEmpty()) {
+                String k = queue.poll();
+                if (!seen.add(k)) continue;
+                if ("BASE".equals(kindOf(byKey, k))) bases.add(k);
+                queue.addAll(deps.getOrDefault(k, List.of()));
+            }
+            ArrayNode baseNode = structured.putArray("baseInputs");
+            for (String b : bases) baseNode.add(explainInput(byKey, state, bindIndices(b, pattern, concrete)));
+        }
+
+        StringBuilder sb = new StringBuilder(concrete).append(" = ").append(value)
+                .append(", computed by `").append(node.expression()).append('`');
+        if (!inputsNode.isEmpty()) sb.append(" from ").append(listed(inputsNode));
+        sb.append('.');
+        JsonNode baseInputs = structured.get("baseInputs");
+        if (baseInputs != null && !baseInputs.isEmpty()) {
+            sb.append(" It comes from the inputs ").append(listed(baseInputs)).append('.');
+        }
+        return text(sb.toString(), structured, false);
+    }
+
+    private ObjectNode explainInput(Map<String, ModelGraph.Node> byKey, JsonNode state, String key) {
+        ObjectNode o = mapper.createObjectNode();
+        o.put("path", key);
+        String pattern = byKey.containsKey(key) ? key : key.replaceAll("\\[\\d+]", "[*]");
+        o.put("kind", kindOf(byKey, pattern));
+        o.set("value", valueAt(state, key));
+        return o;
+    }
+
+    private static String kindOf(Map<String, ModelGraph.Node> byKey, String key) {
+        ModelGraph.Node n = byKey.get(key);
+        return n == null ? "BASE" : n.kind();
+    }
+
+    /**
+     * {@code dep} with the row indices of {@code concrete} in place of the [*] it shares with
+     * {@code pattern}: explaining {@code $.items[2].lineTotal} reads {@code $.items[2].qty}, not every row.
+     */
+    static String bindIndices(String dep, String pattern, String concrete) {
+        if (pattern.equals(concrete) || !dep.contains("[*]")) return dep;
+        Matcher idx = Pattern.compile("\\[(\\d+)]").matcher(concrete);
+        String out = dep;
+        int from = 0;
+        while (idx.find()) {
+            int star = pattern.indexOf("[*]", from);
+            if (star < 0) break;
+            String prefix = pattern.substring(0, star) + "[*]";
+            if (out.startsWith(prefix)) {
+                out = pattern.substring(0, star) + "[" + idx.group(1) + "]" + out.substring(prefix.length());
+            }
+            from = star + 3;
+        }
+        return out;
+    }
+
+    /** The value at a canonical path in the merged state; null for a pattern, a meta key or a rule. */
+    private JsonNode valueAt(JsonNode state, String key) {
+        if (key.startsWith("$constraint:") || key.startsWith("$effect:") || key.contains("#") || key.contains("[*]")) {
+            return mapper.nullNode();
+        }
+        try {
+            JsonNode v = state.at(PathConverter.toJsonPointer(key));
+            return v.isMissingNode() ? mapper.nullNode() : v;
+        } catch (RuntimeException e) {
+            return mapper.nullNode();
+        }
+    }
+
+    private static String listed(JsonNode items) {
+        List<String> parts = new ArrayList<>();
+        items.forEach(i -> parts.add(i.path("path").asText() + " = " + i.path("value")));
+        return String.join(", ", parts);
+    }
+
     // ── result building ──────────────────────────────────────────────────────────
+
+    /** The graph the card's "why this number" reads: nodes and edges, without the layout levels. */
+    private ObjectNode graphNode(ModelGraph graph) {
+        ObjectNode g = mapper.createObjectNode();
+        ArrayNode nodes = g.putArray("nodes");
+        for (ModelGraph.Node n : graph.nodes()) {
+            ObjectNode o = nodes.addObject().put("key", n.key()).put("kind", n.kind()).put("label", n.label());
+            if (n.expression() == null) o.putNull("expression"); else o.put("expression", n.expression());
+        }
+        ArrayNode edges = g.putArray("edges");
+        for (ModelGraph.Edge e : graph.edges()) edges.addObject().put("from", e.from()).put("to", e.to());
+        return g;
+    }
 
     /** What the model and the card both read: identity, inputs, computed outputs and flags. */
     private ObjectNode summary(ModelSpec spec, String hash, Map<String, JsonNode> inputs,
@@ -551,6 +752,9 @@ public final class ModelCardTools {
               for values that must never be accepted; a rollback rejects the user's edit.
             - To revise a model, send the whole revised spec to render_model with the inputs the user last
               had; a new card appears with them carried over.
+            - When the user asks why a number is what it is, call explain_value with the field's path,
+              the specHash and the current inputs, and quote the formula and values it returns. The card
+              also shows this when the user hovers a computed value.
             - When render_model returns a share link and the user wants the model outside this chat (an
               artifact, a page to send someone, a bookmark), give them that link unchanged: it opens a live
               copy computed by Valem in any browser. For a web page, put the embed URL in an <iframe>. A

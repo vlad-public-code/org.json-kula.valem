@@ -58,6 +58,19 @@ class StatelessRunnerTest {
     }
 
     @Test
+    void the_graph_of_a_cached_spec_says_what_each_computed_field_reads() throws Exception {
+        String hash = runner.prepare(MAPPER.readTree(QUOTE)).specHash();
+
+        var graph = runner.graph(hash).orElseThrow();
+        assertThat(graph.nodes()).anySatisfy(n -> {
+            assertThat(n.key()).isEqualTo("$.price");
+            assertThat(n.kind()).isEqualTo("DERIVED");
+        });
+        assertThat(graph.edges()).anySatisfy(e -> assertThat(e.to()).isEqualTo("$.price"));
+        assertThat(runner.graph("sha256:unknown")).isEmpty();
+    }
+
+    @Test
     void schema_defaults_apply_when_no_inputs_are_sent_and_flags_report_the_final_state() throws Exception {
         String hash = runner.prepare(MAPPER.readTree(QUOTE)).specHash();
 

@@ -5,7 +5,7 @@ import {
   applyHostFonts,
   applyHostStyleVariables,
 } from '@modelcontextprotocol/ext-apps/app-with-deps';
-import type { McpUiHostContext } from '@modelcontextprotocol/ext-apps/app-with-deps';
+import type { McpUiDisplayMode, McpUiHostContext } from '@modelcontextprotocol/ext-apps/app-with-deps';
 import { payloadOf, summaryText } from './cardModel';
 import type { CardPayload, Inputs, RecomputeResult, ToolResult } from './cardModel';
 import { CardBody } from './CardBody';
@@ -37,6 +37,14 @@ function applyHostContext(ctx: Partial<McpUiHostContext> | undefined) {
  */
 export function Card({ app }: { app: App }) {
   const [status, setStatus] = useState<Status>({ kind: 'waiting' });
+  const [viewId, setViewId] = useState<string | undefined>(undefined);
+  // Fullscreen is offered only where the host says it can do it.
+  const [displayModes, setDisplayModes] = useState<McpUiDisplayMode[]>([]);
+  const [displayMode, setDisplayMode] = useState<McpUiDisplayMode>('inline');
+  const trackDisplay = useCallback((ctx: Partial<McpUiHostContext> | undefined) => {
+    if (ctx?.availableDisplayModes) setDisplayModes(ctx.availableDisplayModes);
+    if (ctx?.displayMode) setDisplayMode(ctx.displayMode);
+  }, []);
 
   const callTool = useCallback(
     async (name: string, args: Record<string, unknown>) =>
@@ -64,17 +72,19 @@ export function Card({ app }: { app: App }) {
       }
       load(p);
       setStatus({ kind: 'ready' });
+      const vd = p.spec.viewDefinition as { defaultView?: string; views?: { id: string }[] } | undefined;
+      setViewId(vd?.defaultView ?? vd?.views?.[0]?.id);
       // A ChatGPT reload of a card the user had edited: bring their edits back.
       const saved = openai()?.widgetState;
       if (saved?.specHash === p.specHash && saved.inputs && JSON.stringify(saved.inputs) !== JSON.stringify(p.inputs)) {
         void recompute(saved.inputs);
       }
     };
-    app.onhostcontextchanged = ctx => applyHostContext(ctx);
+    app.onhostcontextchanged = ctx => { applyHostContext(ctx); trackDisplay(ctx); };
     app.connect()
-      .then(() => applyHostContext(app.getHostContext()))
+      .then(() => { const ctx = app.getHostContext(); applyHostContext(ctx); trackDisplay(ctx); })
       .catch(e => setStatus({ kind: 'failed', message: `Could not connect to the chat: ${e instanceof Error ? e.message : String(e)}` }));
-  }, [app, load, recompute]);
+  }, [app, load, recompute, trackDisplay]);
 
   const committed = card.committed;
   // The link format is the server's: ask it for one carrying the values on screen now.
@@ -91,6 +101,14 @@ export function Card({ app }: { app: App }) {
     }
     await app.openLink({ url }).catch(() => { /* the host declined; nothing to undo */ });
   }, [app, callTool, committed]);
+
+  const fullscreen = displayMode === 'fullscreen';
+  const toggleFullscreen = useCallback(async () => {
+    const mode: McpUiDisplayMode = fullscreen ? 'inline' : 'fullscreen';
+    try {
+      setDisplayMode((await app.requestDisplayMode({ mode })).mode);
+    } catch { /* the host declined; the card stays as it is */ }
+  }, [app, fullscreen]);
 
   if (status.kind === 'failed' && !committed) {
     return (
@@ -109,12 +127,22 @@ export function Card({ app }: { app: App }) {
       rejection={card.rejection}
       busy={card.busy}
       onMutate={card.onMutate}
-      actions={committed.shareUrl && (
-        <button type="button" className="card-action" onClick={() => void openInBrowser()}
-                title="Open a live copy you can share, with the values you have now">
-          Open in browser
-        </button>
-      )}
+      viewId={viewId}
+      onViewChange={setViewId}
+      actions={<>
+        {displayModes.includes('fullscreen') && (
+          <button type="button" className="card-action" onClick={() => void toggleFullscreen()}
+                  aria-pressed={fullscreen}>
+            {fullscreen ? 'Exit full screen' : 'Full screen'}
+          </button>
+        )}
+        {committed.shareUrl && (
+          <button type="button" className="card-action" onClick={() => void openInBrowser()}
+                  title="Open a live copy you can share, with the values you have now">
+            Open in browser
+          </button>
+        )}
+      </>}
     />
   );
 }

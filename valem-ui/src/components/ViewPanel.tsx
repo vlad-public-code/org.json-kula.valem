@@ -3,9 +3,8 @@ import { ViewRenderer, canonicalPath } from 'valem-view-react';
 import type { ViewDefinition, EvaluatedView, ProvenanceSource } from 'valem-view-react';
 import { api, ApiError } from '../api';
 import { buildSubscribeUrl } from '../wsAuth';
-import { buildGraphIndexes, valueAtKey, transitiveInputs, inlineInputPaths } from '../graphProvenance';
+import { buildGraphIndexes, createGraphProvenance } from '../graphProvenance';
 import type { ConstraintViolationItem, ConstraintViolationBody, SchemaViolationBody, ViewDeltaComponent, ModelGraph } from '../types';
-import type { ProvenanceInput } from 'valem-view-react';
 
 interface Props {
   modelId: string;
@@ -101,49 +100,10 @@ export default function ViewPanel({ modelId, readOnly = false, initialView, onSt
 
   // Indexes are a pure function of the graph; only the value lookups depend on live state.
   const graphIndexes = useMemo(() => (graph ? buildGraphIndexes(graph) : null), [graph]);
-  const provenanceSource: ProvenanceSource | undefined = useMemo(() => {
-    if (!provenance || !graphIndexes) return undefined;
-    const { nodesByKey, deps } = graphIndexes;
-    const kindOf = (k: string): string => nodesByKey.get(k)?.kind ?? 'BASE';
-    const inputInfo = (k: string): ProvenanceInput => ({ path: k, label: nodesByKey.get(k)?.label ?? k, value: valueAtKey(state, k) });
-
-    // F3 — transitive base (editable) inputs, attached only when they add information (some direct
-    // input is itself derived), so the popover's "ultimately from" isn't a duplicate of "from".
-    const baseInputsFor = (roots: string[], directPaths: string[]): ProvenanceInput[] | undefined => {
-      const hasDerivedInput = directPaths.some(p => kindOf(p) !== 'BASE');
-      if (!hasDerivedInput) return undefined;
-      const bases = new Set<string>();
-      for (const root of roots) {
-        if (kindOf(root) === 'BASE') bases.add(root);
-        for (const up of transitiveInputs(deps, root)) if (kindOf(up) === 'BASE') bases.add(up);
-      }
-      return [...bases].map(inputInfo);
-    };
-
-    return {
-      explain(bindPath: string) {
-        const key = canonicalPath(bindPath);
-        const node = nodesByKey.get(key);
-        if (!node || node.kind === 'BASE') return null;   // base inputs aren't "why is this number?"
-        const directPaths = deps.get(key) ?? [];
-        const inputs = directPaths.map(inputInfo);
-        return {
-          path: key, kind: node.kind, label: node.label, expression: node.expression,
-          value: valueAtKey(state, key), inputs, baseInputs: baseInputsFor([key], directPaths),
-        };
-      },
-      // F7 — an inline text/value JSONata expression that isn't bound to a single node.
-      explainExpression(expression: string, label: string, value: unknown) {
-        const keys = inlineInputPaths(expression, k => nodesByKey.has(k));
-        if (keys.length === 0) return null;   // reads no model fields → nothing worth explaining
-        const inputs = keys.map(inputInfo);
-        return {
-          path: '', kind: 'DERIVED', label, expression, value, inputs,
-          baseInputs: baseInputsFor(keys, keys),
-        };
-      },
-    };
-  }, [provenance, graphIndexes, state]);
+  const provenanceSource: ProvenanceSource | undefined = useMemo(
+    () => (provenance && graphIndexes ? createGraphProvenance(graphIndexes, state) : undefined),
+    [provenance, graphIndexes, state],
+  );
 
   // F12 — live pulse: paths flash briefly when a mutation recomputes them (own or from a paired agent).
   const [pulsingPaths, setPulsingPaths] = useState<Set<string>>(() => new Set());

@@ -62,6 +62,110 @@ class ModelCardToolsTest {
         assertThat(card.path("specHash").asText()).isEqualTo(structured.path("specHash").asText());
     }
 
+    private static final String INVOICE = """
+            {
+              "id": "invoice",
+              "version": "1.0.0",
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "discount": {"type": "number", "default": 0},
+                  "items": {"type": "array",
+                    "items": {"type": "object", "properties": {"hours": {"type": "number"},
+                      "price": {"type": "number"}, "amount": {"type": "number", "readOnly": true}}}},
+                  "net": {"type": "number", "readOnly": true},
+                  "total": {"type": "number", "readOnly": true}
+                }
+              },
+              "derivations": [
+                {"path": "$.items[*].amount", "expr": "$parent.hours * $parent.price"},
+                {"path": "$.net", "expr": "$sum(items.(hours * price))"},
+                {"path": "$.total", "expr": "net * 1.2 - discount"}
+              ],
+              "tests": [{"description": "two rows", "given": {"$.discount": 0, "$.items": [{"hours": 2, "price": 45}, {"hours": 3, "price": 45}]}, "expect": {"$.total": 270}}],
+              "viewDefinition": {"defaultView": "main", "views": [{"id": "main", "label": "Invoice",
+                "components": [{"id": "discount", "type": "numericField", "label": "Discount", "bind": "$.discount"}]}]}
+            }
+            """;
+
+    private JsonNode explain(JsonNode rendered, String path, String inputsJson) throws Exception {
+        ObjectNode args = MAPPER.createObjectNode()
+                .put("specHash", rendered.path("structuredContent").path("specHash").asText())
+                .put("path", path);
+        if (inputsJson != null) args.set("inputs", MAPPER.readTree(inputsJson));
+        return tools.call(ModelCardTools.EXPLAIN, args);
+    }
+
+    private static final String ROWS = "[{\"hours\": 2, \"price\": 45}, {\"hours\": 3, \"price\": 45}]";
+
+    private JsonNode renderInvoice() throws Exception {
+        ObjectNode args = MAPPER.createObjectNode();
+        args.set("spec", MAPPER.readTree(INVOICE));
+        args.putObject("inputs").set("$.items", MAPPER.readTree(ROWS));
+        JsonNode rendered = tools.call(ModelCardTools.RENDER_MODEL, args);
+        assertThat(rendered.path("isError").asBoolean()).as(rendered.toString()).isFalse();
+        return rendered;
+    }
+
+    @Test
+    void render_model_gives_the_card_the_dependency_graph() throws Exception {
+        JsonNode graph = renderInvoice().path("_meta").path("valem/card").path("graph");
+        List<String> keys = new ArrayList<>();
+        graph.path("nodes").forEach(n -> keys.add(n.path("key").asText()));
+        assertThat(keys).contains("$.discount", "$.net", "$.total");
+        assertThat(graph.path("edges").toString()).contains("{\"from\":\"$.net\",\"to\":\"$.total\"}");
+        assertThat(graph.has("levels")).isFalse();
+    }
+
+    @Test
+    void explain_value_gives_the_formula_its_inputs_and_where_they_come_from() throws Exception {
+        JsonNode result = explain(renderInvoice(), "$.total", "{\"$.items\": " + ROWS + ", \"$.discount\": 30}");
+
+        assertThat(result.path("isError").asBoolean()).as(result.toString()).isFalse();
+        JsonNode s = result.path("structuredContent");
+        assertThat(s.path("value").asDouble()).isEqualTo(240.0);
+        assertThat(s.path("expression").asText()).isEqualTo("net * 1.2 - discount");
+        JsonNode net = null;
+        for (JsonNode i : s.path("inputs")) if ("$.net".equals(i.path("path").asText())) net = i;
+        assertThat(net).as(s.toString()).isNotNull();
+        assertThat(net.path("value").asDouble()).isEqualTo(225.0);
+        assertThat(net.path("kind").asText()).isEqualTo("DERIVED");
+        assertThat(s.path("baseInputs").toString()).contains("$.discount");
+        assertThat(result.path("content").get(0).path("text").asText())
+                .startsWith("$.total = 240").contains("`net * 1.2 - discount`").contains("$.net = 225");
+    }
+
+    @Test
+    void explain_value_explains_one_row_of_a_list_through_its_rule() throws Exception {
+        JsonNode s = explain(renderInvoice(), "$.items[1].amount", "{\"$.items\": " + ROWS + "}").path("structuredContent");
+
+        assertThat(s.path("value").asDouble()).isEqualTo(135.0);
+        assertThat(s.path("expression").asText()).isEqualTo("$parent.hours * $parent.price");
+        assertThat(s.path("inputs").toString()).contains("$.items[1].hours").doesNotContain("[*]");
+    }
+
+    @Test
+    void explain_value_says_an_input_is_set_by_the_user_and_names_the_fields_it_knows() throws Exception {
+        JsonNode rendered = renderInvoice();
+        assertThat(explain(rendered, "$.discount", null).path("content").get(0).path("text").asText())
+                .isEqualTo("$.discount is an input the user sets; it is 0.");
+
+        JsonNode unknown = explain(rendered, "$.vat", null);
+        assertThat(unknown.path("isError").asBoolean()).isTrue();
+        assertThat(unknown.path("content").get(0).path("text").asText()).contains("no field '$.vat'").contains("$.total");
+    }
+
+    @Test
+    void explain_value_asks_for_the_spec_when_the_hash_is_not_cached() throws Exception {
+        ObjectNode args = MAPPER.createObjectNode().put("specHash", "sha256:nope").put("path", "$.total");
+        assertThat(tools.call(ModelCardTools.EXPLAIN, args).path("structuredContent").path("error").asText())
+                .isEqualTo("spec_unknown");
+        args.set("spec", MAPPER.readTree(INVOICE));
+        args.putObject("inputs").set("$.items", MAPPER.readTree(ROWS));
+        assertThat(tools.call(ModelCardTools.EXPLAIN, args).path("structuredContent").path("value").asDouble())
+                .isEqualTo(270.0);
+    }
+
     private static final ModelCardTools.ShareLinks LINKS = (spec, inputs) -> new ModelCardTools.ShareLinks.Links(
             "https://valem.run/#share=" + spec.path("id").asText() + "/" + inputs.size(),
             "https://valem.run/embed.html#e=" + spec.path("id").asText());
@@ -232,13 +336,16 @@ class ModelCardToolsTest {
     void tool_definitions_carry_the_card_link_only_with_ui() {
         JsonNode withUi = tools.toolDefinitions(true);
         assertThat(names(withUi)).containsExactly(ModelCardTools.SPEC_GUIDE, ModelCardTools.RENDER_MODEL,
-                ModelCardTools.RECOMPUTE);
+                ModelCardTools.EXPLAIN, ModelCardTools.RECOMPUTE);
         assertThat(withUi.get(1).path("_meta").path("ui").path("resourceUri").asText())
                 .isEqualTo(ModelCardTools.CARD_URI);
-        assertThat(withUi.get(2).path("_meta").path("ui").path("visibility").get(0).asText()).isEqualTo("app");
+        assertThat(withUi.get(2).has("_meta")).isFalse();   // explain_value answers the assistant in text
+        assertThat(withUi.get(3).path("_meta").path("ui").path("visibility").get(0).asText()).isEqualTo("app");
+        assertThat(tools.cardToolMeta().path("ui").path("resourceUri").asText()).isEqualTo(ModelCardTools.CARD_URI);
 
         JsonNode withoutUi = tools.toolDefinitions(false);
-        assertThat(names(withoutUi)).containsExactly(ModelCardTools.SPEC_GUIDE, ModelCardTools.RENDER_MODEL);
+        assertThat(names(withoutUi)).containsExactly(ModelCardTools.SPEC_GUIDE, ModelCardTools.RENDER_MODEL,
+                ModelCardTools.EXPLAIN);
         assertThat(withoutUi.get(1).has("_meta")).isFalse();
     }
 

@@ -14,6 +14,8 @@ import org.json_kula.valem.core.engine.ExpressionCache;
 import org.json_kula.valem.core.engine.ModelRuntime;
 import org.json_kula.valem.core.engine.SchemaViolationException;
 import org.json_kula.valem.core.graph.CompiledModel;
+import org.json_kula.valem.core.graph.GraphProjection;
+import org.json_kula.valem.core.graph.ModelGraph;
 import org.json_kula.valem.core.graph.ModelSpecCompiler;
 import org.json_kula.valem.core.graph.ModelSpecValidator;
 import org.json_kula.valem.core.model.ConstraintSpec;
@@ -159,6 +161,12 @@ public final class StatelessRunner {
     /** The spec behind a cached hash, if it is still cached. */
     public Optional<ModelSpec> cachedSpec(String specHash) {
         return Optional.ofNullable(compiled.getIfPresent(specHash)).map(CompiledModel::spec);
+    }
+
+    /** The dependency graph of a cached spec (what each derived field reads), if it is still cached. */
+    public Optional<ModelGraph> graph(String specHash) {
+        return Optional.ofNullable(compiled.getIfPresent(specHash))
+                .map(m -> GraphProjection.project(m, m.spec().id()));
     }
 
     /**

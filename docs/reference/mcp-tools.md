@@ -100,7 +100,7 @@ core even in remote mode.
 
 ## Model cards (MCP Apps)
 
-These three tools let a chat assistant hand the user a Valem model as an interactive card inside the
+These four tools let a chat assistant hand the user a Valem model as an interactive card inside the
 chat (Claude, ChatGPT, VS Code — any host that supports the
 [MCP Apps](https://modelcontextprotocol.io/extensions/apps) extension, `io.modelcontextprotocol/ui`).
 They are **stateless**: nothing is registered, the spec travels with the card, and the server keeps
@@ -111,6 +111,7 @@ specs, one hour idle). All computation runs server-side in the Java engine; the 
 |---|---|
 | `valem_spec_guide` | The spec format, view system, JSONata gotchas and card notes in one text — what an assistant reads before authoring. |
 | `render_model` | Args: `spec` (a full ModelSpec with a `viewDefinition`), optional `inputs` (canonical path → value). Validates the spec **and runs its embedded tests** (a failing test is an error), computes it, and returns `structuredContent` `{modelId, version, specHash, inputs, outputs, flags, warnings}` plus the card payload under `_meta["valem/card"]`. An invalid spec returns `isError` with `{valid:false, errors[]}` so the assistant can fix it. Inputs that a rollback rule or the schema rejects fall back to the defaults and are reported as `rejectedInputs`. Limits: 64 KB spec, 200 expressions. |
+| `explain_value` | Args: `path` (canonical, e.g. `$.total` or `$.items[0].lineTotal`), `specHash`, optional `inputs`, and `spec` when the server answers `spec_unknown`. Returns how Valem computed that value for those inputs: `structuredContent` `{path, kind, label, value, expression, inputs[], baseInputs[]}` (`inputs` = the values the expression read, `baseInputs` = the editable inputs it ultimately comes from, present when some direct input is itself computed) and a one-line text the assistant can quote. A row of a list is explained through its `[*]` rule with that row's values. An input the user sets is reported as such; an unknown path lists the model's fields. |
 | `valem_recompute` | **App-only** (`_meta.ui.visibility: ["app"]`; hidden from the assistant). The card calls it on every edit with `{specHash, inputs}` → `{specHash, state, meta, flags}`, or `{specHash, rejected, issues}` when a rollback rule or the schema rejects the edit. When the cache no longer holds the hash it answers `isError` with `{error:"spec_unknown"}`, and the card repeats the call with `spec` attached. |
 
 **Share links.** A published artifact or document cannot run a model, so a server that can open one
@@ -124,7 +125,12 @@ The card itself is `ui://valem/model-card.html` (`text/html;profile=mcp-app`), a
 self-contained HTML file built from `valem-mcp-app` (React + `valem-view-react`) and packaged into the
 `valem-mcp` jar (skip with `-Dskip.frontend=true`). After each recompute it tells the assistant the
 current inputs and results (`ui/update-model-context`), so follow-up questions use the values on
-screen. The server offers the card only to a client that advertises the UI extension, or that sends
+screen. `render_model` also hands the card the model's dependency graph (`_meta["valem/card"].graph`:
+nodes and edges, as `GET /models/{id}/graph` returns them), so hovering a computed value shows its
+formula and inputs (the same *Why is this number?* popover as the developer UI, built by
+`valem-view-react`'s `createGraphProvenance`). A model with several views gets tabs (views reached only
+as a list's `itemView` are left out), and a host that offers fullscreen gets a *Full screen* button
+(`ui/request-display-mode`). The server offers the card only to a client that advertises the UI extension, or that sends
 no `extensions` map at all; a client that lists other extensions but not this one gets `render_model`
 as a text-only tool and no `valem_recompute`.
 

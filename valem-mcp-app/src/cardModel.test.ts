@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeInputs, payloadOf, setAt, splitIssues, summaryText, toCanonical, valueAt } from './cardModel';
+import { mergeInputs, payloadOf, setAt, splitIssues, summaryText, toCanonical, valueAt, viewTabs } from './cardModel';
 
 describe('cardModel', () => {
   it('reads the payload only from a result that carries one', () => {
@@ -50,5 +50,31 @@ describe('cardModel', () => {
     expect(text).toContain('- $.price = 120');
     expect(text).not.toContain('[*]');
     expect(text).toContain('Flagged rules: Below minimum.');
+  });
+});
+
+describe('viewTabs', () => {
+  it('offers every view a user can open on its own, and none for a single view', () => {
+    const vd = {
+      views: [
+        { id: 'main', label: 'Quote', components: [{ type: 'sectionList', bind: '$.items', itemView: 'item' }] },
+        { id: 'item', label: 'Item', components: [] },
+        { id: 'summary', components: [{ type: 'tabs', tabs: [{ components: [] }] }] },
+      ],
+    };
+    expect(viewTabs(vd)).toEqual([{ id: 'main', label: 'Quote' }, { id: 'summary', label: 'summary' }]);
+    expect(viewTabs({ views: [{ id: 'main', components: [] }] })).toEqual([]);
+    expect(viewTabs(undefined)).toEqual([]);
+  });
+
+  it('finds an item view nested inside another container', () => {
+    const vd = {
+      views: [
+        { id: 'a', components: [{ type: 'card', components: [{ type: 'sectionList', itemView: 'row' }] }] },
+        { id: 'b', components: [] },
+        { id: 'row', components: [] },
+      ],
+    };
+    expect(viewTabs(vd).map(t => t.id)).toEqual(['a', 'b']);
   });
 });
