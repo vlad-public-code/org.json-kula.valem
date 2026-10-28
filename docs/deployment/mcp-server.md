@@ -147,7 +147,7 @@ connects by URL and drives a live sandbox session — no download, no Java:
 claude mcp add --transport http valem https://valem.run/mcp
 ```
 
-For Claude Desktop, add it as a custom connector (Settings → Connectors) with that URL; any MCP client
+For Claude (web or desktop app), add it as a custom connector (Settings → Connectors) with that URL; any MCP client
 can connect to the endpoint directly. Then call the **`pair_browser`** tool: it returns a verification
 link and confirmation code — open the link, check the code, click Approve in the sandbox — and from then
 on your agent's `create_model` / `mutate` / `get_state` calls drive that browser's models live. The full
@@ -155,6 +155,11 @@ walkthrough (and what pairing protects) is in
 [Connect your agent]({% link getting-started/connect-your-agent.md %}). This is the same device-flow
 pairing as the jar's `remote_with_browser` mode, but the endpoint runs on the sandbox, so no local
 process is involved.
+
+The sandbox also hosts a second, stateless server at **`https://valem.run/mcp/app`** for chat users:
+the assistant calls `render_model` and the chat shows the model as a live card, with no pairing and no
+session. See [Build models in Claude or ChatGPT]({% link getting-started/chat-cards.md %}), which also
+compares the two endpoints.
 
 ## Find it in MCP directories
 

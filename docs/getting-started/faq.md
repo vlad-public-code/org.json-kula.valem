@@ -1,7 +1,7 @@
 ---
 title: FAQ — and when not to use Valem
 parent: Getting started
-nav_order: 5
+nav_order: 6
 description: "Straight answers: how Valem differs from a rules engine, JSON Schema, or just writing the code — and where it's the wrong tool."
 ---
 

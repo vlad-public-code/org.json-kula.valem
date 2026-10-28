@@ -2,18 +2,19 @@
 title: Getting started
 nav_order: 2
 has_children: true
-description: "What Valem is, how to try it in the browser, how to run it locally, and how to pair it with an AI agent."
+description: "What Valem is, how to try it in the browser, how to use it from Claude or ChatGPT, how to run it locally, and how to pair it with an AI agent."
 ---
 
 # Getting started
 
-Six short pages, in the order most people need them.
+Seven short pages, in the order most people need them.
 
 | Page | You'll get |
 |---|---|
 | [What is Valem?](what-is-valem.md) | The idea in five minutes — models, derivations, constraints, effects. |
 | [Try the sandbox](sandbox.md) | A model built from a plain-language description, in the browser, with no install. |
 | [Quickstart](quickstart.md) | Valem running on your machine: console, backend API, developer UI. |
+| [Build models in Claude or ChatGPT](chat-cards.md) | A live, editable model card right in the conversation: add one connector URL, then just ask. |
 | [Connect your agent (MCP pairing)](connect-your-agent.md) | An AI agent and a browser tab driving **one shared live model**. |
 | [FAQ — and when not to use Valem](faq.md) | How it compares to a rules engine or plain code, and where it's the wrong tool. |
 | [Valem vs alternatives](compared.md) | Valem vs letting the LLM compute, a code interpreter, a rules engine, a form library, and a spreadsheet. |

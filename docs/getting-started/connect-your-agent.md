@@ -1,7 +1,7 @@
 ---
 title: Connect your agent (MCP pairing)
 parent: Getting started
-nav_order: 4
+nav_order: 5
 description: "Pair an AI agent with a browser tab so both drive one shared, live Valem model."
 ---
 
@@ -32,6 +32,11 @@ something, run it, and report back what happened. Paired, the loop closes:
 This is the fastest way to iterate on a domain model with an agent: it writes the rules, you exercise
 them, both of you are looking at the same live object.
 
+{: .note }
+Just want a working model card inside a Claude or ChatGPT conversation, with no browser tab and no
+pairing? Use the chat card server at `{{ site.sandbox_url }}/mcp/app` instead; see
+[Build models in Claude or ChatGPT]({% link getting-started/chat-cards.md %}) for how the two differ.
+
 ## What you need
 
 - An MCP client: Claude Code, Claude Desktop, or any other.
@@ -50,7 +55,7 @@ For **Claude Code**:
 claude mcp add --transport http valem {{ site.sandbox_url }}/mcp
 ```
 
-For **Claude Desktop**: Settings → Connectors → *Add custom connector*, with the URL
+For **Claude** (web or desktop app): Settings → Connectors → *Add custom connector*, with the URL
 `{{ site.sandbox_url }}/mcp`. Any other remote-capable MCP client connects to that same URL.
 
 The `pair_browser` tool now appears alongside the model tools — it exists **only** in browser-pairing

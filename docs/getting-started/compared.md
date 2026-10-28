@@ -1,7 +1,7 @@
 ---
 title: Valem vs alternatives
 parent: Getting started
-nav_order: 6
+nav_order: 7
 description: "Valem vs letting the LLM compute, a code interpreter, a rules engine, a form library with computed fields, and a spreadsheet as a backend: what each is good at and when to pick it instead."
 ---
 
