@@ -167,6 +167,9 @@ public final class DependencyGraph {
             return this;
         }
 
+        /** A snapshot of the node keys registered so far (as nodes or as either end of an edge). */
+        public List<String> nodeKeys() { return List.copyOf(nodes.keySet()); }
+
         /**
          * Adds an edge: {@code dependent} reads from {@code dependency}.
          * Both nodes are registered automatically if not yet present.

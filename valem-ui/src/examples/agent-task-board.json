@@ -1,0 +1,215 @@
+{
+  "_name": "Agent Task Board",
+  "_description": "A plan that several AI agents work through together, kept as reactive state. The plan is data (tasks with dependsOn), so an agent can extend it at run time without changing the spec. Which tasks are ready, which are blocked and by what, progress, and whether the plan is complete or stalled are all derived; agents only claim tasks and post outputs, and constraints refuse a claim or a completion that the dependencies do not allow.",
+  "id": "agent-task-board",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "goal": { "type": "string" },
+      "tasks": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id":        { "type": "string" },
+            "title":     { "type": "string" },
+            "dependsOn": { "type": "array", "items": { "type": "string" } },
+            "status":    { "type": "string", "enum": ["todo", "claimed", "done", "failed"] },
+            "owner":     { "type": "string", "description": "The agent that claimed the task." },
+            "output":    { "type": "string", "description": "The artifact (or a blob reference to it) the task produced." },
+            "ready":     { "type": "boolean", "readOnly": true },
+            "waitingOn": { "type": "array", "readOnly": true, "items": { "type": "string" } }
+          }
+        }
+      },
+      "summary": {
+        "type": "object",
+        "readOnly": true,
+        "properties": {
+          "total":       { "type": "integer", "readOnly": true },
+          "done":        { "type": "integer", "readOnly": true },
+          "readyIds":    { "type": "array",   "readOnly": true, "items": { "type": "string" } },
+          "failedIds":   { "type": "array",   "readOnly": true, "items": { "type": "string" } },
+          "progressPct": { "type": "number",  "readOnly": true },
+          "complete":    { "type": "boolean", "readOnly": true },
+          "stalled":     { "type": "boolean", "readOnly": true }
+        }
+      }
+    }
+  },
+  "defaultValues": [
+    { "path": "$.tasks[*]", "expr": "{ 'status': 'todo', 'dependsOn': [] }",
+      "description": "A task an agent appends starts as todo with no dependencies unless it says otherwise." }
+  ],
+  "derivations": [
+    { "path": "$.tasks[*].waitingOn",
+      "expr": "( $done := $append([], tasks[status = 'done'].id); $append([], $filter($parent.dependsOn, function($d) { $not($d in $done) })) )",
+      "description": "The dependencies of this task that are not done yet. Evaluated per task; the whole board is the root context." },
+    { "path": "$.summary.total", "expr": "$count(tasks)" },
+    { "path": "$.summary.done",  "expr": "$count(tasks[status = 'done'])" },
+    { "path": "$.summary.failedIds", "expr": "$append([], tasks[status = 'failed'].id)" },
+    { "path": "$.summary.progressPct",
+      "expr": "summary.total > 0 ? $round(100 * summary.done / summary.total) : 0" },
+    { "path": "$.summary.complete",
+      "expr": "summary.total > 0 and summary.done = summary.total" },
+    { "path": "$.tasks[*].ready",
+      "expr": "$parent.status = 'todo' and $count($parent.waitingOn) = 0",
+      "description": "Ready = not started and nothing left to wait for. Reads the per-task waitingOn derived one level earlier." },
+    { "path": "$.summary.readyIds", "expr": "$append([], tasks[ready = true].id)" },
+    { "path": "$.summary.stalled",
+      "expr": "summary.total > 0 and summary.complete = false and $count(summary.readyIds) = 0 and $count(tasks[status = 'claimed']) = 0",
+      "description": "Nothing is running and nothing can start, yet the plan is not finished: a failed dependency or a dependency cycle. Detected from state; no watchdog event needed." }
+  ],
+  "constraints": [
+    { "id": "task-ids-unique",
+      "expr": "$count(tasks) = $count($distinct(tasks.id))",
+      "message": "Every task needs a unique id",
+      "policy": "rollback" },
+    { "id": "dependencies-exist",
+      "expr": "( $ids := $append([], tasks.id); $count(tasks[$count(dependsOn[$not($ in $ids)]) > 0]) = 0 )",
+      "message": "dependsOn may only name tasks that exist on the board",
+      "policy": "rollback" },
+    { "id": "start-only-when-ready",
+      "expr": "$count(tasks[(status = 'claimed' or status = 'done') and $count(waitingOn) > 0]) = 0",
+      "message": "A task cannot be claimed or completed while one of its dependencies is unfinished",
+      "policy": "rollback" },
+    { "id": "claim-has-owner",
+      "expr": "$count(tasks[status = 'claimed' and $not($exists(owner))]) = 0",
+      "message": "Claiming a task means writing your agent name into owner",
+      "policy": "rollback" },
+    { "id": "done-has-output",
+      "expr": "$count(tasks[status = 'done' and $not($exists(output))]) = 0",
+      "message": "A task can only be marked done together with its output",
+      "policy": "rollback" },
+    { "id": "no-failures",
+      "expr": "$count(summary.failedIds) = 0",
+      "message": "A task failed; the plan needs a person or a re-plan",
+      "policy": "flag" }
+  ],
+  "effects": [
+    {
+      "id": "announce-ready-work",
+      "executor": "caller",
+      "trigger": "$count(summary.readyIds) > 0",
+      "dedupeKey": "$join(summary.readyIds, ',')",
+      "emit": "board.tasksReady",
+      "payload": { "readyIds": "summary.readyIds" }
+    },
+    {
+      "id": "plan-complete",
+      "executor": "caller",
+      "trigger": "summary.complete = true",
+      "dedupeKey": "summary.total",
+      "emit": "board.complete",
+      "payload": { "outputs": "tasks.{ 'id': id, 'output': output }" }
+    },
+    {
+      "id": "plan-stalled",
+      "executor": "caller",
+      "trigger": "summary.stalled = true",
+      "dedupeKey": "$join(summary.failedIds, ',') & '/' & $string(summary.done)",
+      "emit": "board.stalled",
+      "payload": { "failedIds": "summary.failedIds" }
+    }
+  ],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "Board",
+        "layout": "vertical",
+        "components": [
+          { "id": "goal", "type": "textField", "label": "Goal", "bind": "$.goal" },
+          {
+            "id": "tiles", "type": "group", "layout": "horizontal",
+            "components": [
+              { "id": "progress", "type": "statTile", "label": "Progress", "bind": "$.summary.progressPct", "caption": "percent of tasks done" },
+              { "id": "doneCount", "type": "statTile", "label": "Done", "bind": "$.summary.done", "format": "integer" },
+              { "id": "totalCount", "type": "statTile", "label": "Tasks", "bind": "$.summary.total", "format": "integer" }
+            ]
+          },
+          { "id": "stalledAlert", "type": "alert", "variant": "warning", "label": "Plan is stalled",
+            "text": "$boolean(summary.stalled) ? 'Nothing can start and nothing is running. Failed: ' & $join(summary.failedIds, ', ') : ''" },
+          { "id": "tasksTable", "type": "dataTable", "label": "Tasks", "bind": "$.tasks",
+            "tableColumns": [
+              { "field": "id",     "header": "Id" },
+              { "field": "title",  "header": "Task" },
+              { "field": "status", "header": "Status" },
+              { "field": "owner",  "header": "Agent" },
+              { "field": "ready",  "header": "Ready" },
+              { "field": "output", "header": "Output" }
+            ] }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "tasks with no dependencies are ready; dependants wait",
+      "given": { "$.tasks": [
+        { "id": "outline",  "title": "Outline the report", "status": "todo", "dependsOn": [] },
+        { "id": "data",     "title": "Pull the numbers",   "status": "todo", "dependsOn": [] },
+        { "id": "write",    "title": "Write it",           "status": "todo", "dependsOn": ["outline", "data"] }
+      ] },
+      "expect": {
+        "$.tasks[0].ready": true,
+        "$.tasks[2].ready": false,
+        "$.tasks[2].waitingOn": ["outline", "data"],
+        "$.summary.readyIds": ["outline", "data"],
+        "$.summary.progressPct": 0,
+        "$.summary.stalled": false
+      }
+    },
+    {
+      "description": "finishing one dependency narrows what the dependant waits on",
+      "given": { "$.tasks": [
+        { "id": "outline", "status": "done", "dependsOn": [], "owner": "planner", "output": "1. Intro 2. Costs" },
+        { "id": "data",    "status": "claimed", "dependsOn": [], "owner": "analyst" },
+        { "id": "write",   "status": "todo", "dependsOn": ["outline", "data"] }
+      ] },
+      "expect": {
+        "$.tasks[2].waitingOn": ["data"],
+        "$.tasks[2].ready": false,
+        "$.summary.readyIds": [],
+        "$.summary.progressPct": 33,
+        "$.summary.stalled": false
+      }
+    },
+    {
+      "description": "all dependencies done -> the dependant becomes ready",
+      "given": { "$.tasks": [
+        { "id": "outline", "status": "done", "dependsOn": [], "owner": "planner", "output": "1. Intro 2. Costs" },
+        { "id": "data",    "status": "done", "dependsOn": [], "owner": "analyst", "output": "blob:sha256:9f2c" },
+        { "id": "write",   "status": "todo", "dependsOn": ["outline", "data"] }
+      ] },
+      "expect": { "$.tasks[2].ready": true, "$.summary.readyIds": ["write"], "$.summary.complete": false }
+    },
+    {
+      "description": "everything done -> complete",
+      "given": { "$.tasks": [
+        { "id": "outline", "status": "done", "dependsOn": [], "owner": "planner", "output": "o" },
+        { "id": "write",   "status": "done", "dependsOn": ["outline"], "owner": "writer", "output": "w" }
+      ] },
+      "expect": { "$.summary.complete": true, "$.summary.progressPct": 100, "$.summary.stalled": false }
+    },
+    {
+      "description": "a failed dependency stalls the plan",
+      "given": { "$.tasks": [
+        { "id": "data",  "status": "failed", "dependsOn": [], "owner": "analyst" },
+        { "id": "write", "status": "todo", "dependsOn": ["data"] }
+      ] },
+      "expect": { "$.summary.stalled": true, "$.summary.failedIds": ["data"], "$.tasks[1].ready": false }
+    },
+    {
+      "description": "a dependency cycle is detected as a stall, not a hang",
+      "given": { "$.tasks": [
+        { "id": "a", "status": "todo", "dependsOn": ["b"] },
+        { "id": "b", "status": "todo", "dependsOn": ["a"] }
+      ] },
+      "expect": { "$.summary.stalled": true, "$.summary.readyIds": [] }
+    }
+  ]
+}

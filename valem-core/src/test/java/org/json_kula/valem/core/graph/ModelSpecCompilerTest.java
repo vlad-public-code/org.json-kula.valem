@@ -88,6 +88,36 @@ class ModelSpecCompilerTest {
                 .isLessThan(order.indexOf("$.order.amountDue"));
     }
 
+    @Test
+    void aggregate_over_a_per_element_derivation_is_ordered_after_it() throws Exception {
+        // ready is computed per task; both a projection (tasks.ready) and a predicate
+        // (tasks[ready = true]) read it, so both readers must evaluate in a later level.
+        ModelSpec spec = parse("""
+            {
+              "id": "m", "schema": {},
+              "derivations": [
+                { "path": "$.tasks[*].waitingOn", "expr": "$parent.dependsOn" },
+                { "path": "$.tasks[*].ready",     "expr": "$count($parent.waitingOn) = 0" },
+                { "path": "$.readyIds",          "expr": "tasks[ready = true].id" },
+                { "path": "$.readyCount",        "expr": "$count(tasks.ready[$ = true])" }
+              ]
+            }
+            """);
+
+        CompiledModel cm = ModelSpecCompiler.compile(spec);
+        List<String> order = cm.graph().evaluationOrder();
+        assertThat(order.indexOf("$.tasks[*].ready")).isLessThan(order.indexOf("$.readyIds"));
+        assertThat(order.indexOf("$.tasks[*].ready")).isLessThan(order.indexOf("$.readyCount"));
+        assertThat(levelOf(cm, "$.tasks[*].ready")).isLessThan(levelOf(cm, "$.readyIds"));
+        assertThat(levelOf(cm, "$.tasks[*].ready")).isLessThan(levelOf(cm, "$.readyCount"));
+    }
+
+    private static int levelOf(CompiledModel cm, String node) {
+        List<List<String>> levels = cm.graph().evaluationLevels();
+        for (int i = 0; i < levels.size(); i++) if (levels.get(i).contains(node)) return i;
+        throw new AssertionError(node + " not in any level");
+    }
+
     // ── Meta-derivation wiring ─────────────────────────────────────────────────
 
     @Test

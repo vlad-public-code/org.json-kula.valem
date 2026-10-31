@@ -114,6 +114,24 @@ public final class ModelSpecCompiler {
             }
         }
 
+        // ── Array projections of per-element derivations ───────────────────────────────────
+        // A per-element derived field read through JSONata's implicit array mapping
+        // ($sum(items.lineTotal), tasks.ready) is extracted as "$.items.lineTotal", a different
+        // node key from the derivation "$.items[*].lineTotal". Without an edge between the two,
+        // the reader can land in the same or an earlier topological level and evaluate before
+        // the per-element values exist. Route the projection through the derivation.
+        // Matching ignores where the wildcards sit: tasks.ready[$ = true] reads "$.tasks.ready[*]".
+        for (String derived : derivationByPath.keySet()) {
+            if (!derived.contains("[*]")) continue;
+            String projection = derived.replace("[*]", "");
+            for (String key : graphBuilder.nodeKeys()) {
+                if (!key.equals(derived) && !derivationByPath.containsKey(key)
+                        && key.replace("[*]", "").equals(projection)) {
+                    graphBuilder.addEdge(derived, key);
+                }
+            }
+        }
+
         DependencyGraph graph = graphBuilder.build();
 
         return new CompiledModel(

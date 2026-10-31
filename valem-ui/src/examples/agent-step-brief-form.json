@@ -1,0 +1,98 @@
+{
+  "_name": "Agent Step: Brief Form",
+  "_description": "A workflow step that is its own Valem model: the intake form a person (or an agent) fills in before the Agent Report Pipeline can start. The form validates itself, refuses a submit while anything required is missing, and on a valid submit writes the brief into the pipeline model through a write-link. The pipeline then reacts as it always does. Load agent-report-pipeline first: a link to a model that is not registered yet is rejected unless valem.composition.lazy-binding is on.",
+  "id": "agent-step-brief-form",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "form": {
+        "type": "object",
+        "properties": {
+          "topic":     { "type": "string" },
+          "audience":  { "type": "string", "enum": ["homeowners", "installers", "policy makers"] },
+          "requestedBy": { "type": "string" },
+          "submitted": { "type": "boolean" },
+          "missing":   { "type": "array", "readOnly": true, "items": { "type": "string" } },
+          "valid":     { "type": "boolean", "readOnly": true },
+          "pipelineNext": { "type": "string", "description": "The pipeline's next step, folded back from the write-link reply." }
+        }
+      }
+    }
+  },
+  "defaultValues": [
+    { "path": "$", "expr": "{ 'form': { 'submitted': false } }" }
+  ],
+  "derivations": [
+    { "path": "$.form.missing",
+      "expr": "$append([], [ $exists(form.topic) and $length($trim(form.topic)) > 0 ? undefined : 'topic', $exists(form.audience) ? undefined : 'audience', $exists(form.requestedBy) ? undefined : 'requested by' ])",
+      "description": "What still has to be filled in, in words a person can act on." },
+    { "path": "$.form.valid", "expr": "$count(form.missing) = 0" }
+  ],
+  "constraints": [
+    { "id": "submit-needs-complete-form",
+      "expr": "form.submitted != true or form.valid = true",
+      "message": "Fill in every required field before submitting",
+      "policy": "rollback" }
+  ],
+  "metaDerivations": [
+    { "path": "$.form.topic",       "property": "readOnly", "expr": "form.submitted = true" },
+    { "path": "$.form.audience",    "property": "readOnly", "expr": "form.submitted = true" },
+    { "path": "$.form.requestedBy", "property": "readOnly", "expr": "form.submitted = true" }
+  ],
+  "effects": [
+    {
+      "id": "hand-brief-to-pipeline",
+      "executor": "server",
+      "trigger": "form.submitted = true and form.valid = true",
+      "dedupeKey": "form.topic & '|' & form.audience",
+      "target": { "ref": "agent-report-pipeline", "path": "$.brief" },
+      "body": "{ 'topic': form.topic, 'audience': form.audience }",
+      "response": { "set": { "$.form.pipelineNext": "$response.status.next" } },
+      "statusPath": "$.io.handoff"
+    }
+  ],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "Brief",
+        "layout": "vertical",
+        "components": [
+          { "id": "topic",       "type": "textField",   "label": "Topic",        "bind": "$.form.topic" },
+          { "id": "audience",    "type": "selectField", "label": "Audience",     "bind": "$.form.audience",
+            "options": [
+              { "value": "homeowners",     "label": "Homeowners" },
+              { "value": "installers",     "label": "Installers" },
+              { "value": "policy makers",  "label": "Policy makers" }
+            ] },
+          { "id": "requestedBy", "type": "textField",   "label": "Requested by", "bind": "$.form.requestedBy" },
+          { "id": "missingAlert", "type": "alert", "variant": "warning", "label": "Still needed",
+            "text": "$boolean(form.valid) ? '' : $join(form.missing, ', ')" },
+          { "id": "submitted",   "type": "checkboxField", "label": "Submit to the pipeline", "bind": "$.form.submitted" },
+          { "id": "handoff",     "type": "effectStatus",  "label": "Hand-off", "bind": "$.io.handoff", "effectId": "hand-brief-to-pipeline" },
+          { "id": "pipelineNext", "type": "label", "label": "Pipeline's next step", "bind": "$.form.pipelineNext" }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "an empty form lists everything that is missing",
+      "given":  { "$.form.audience": "installers" },
+      "expect": { "$.form.missing": ["topic", "requested by"], "$.form.valid": false }
+    },
+    {
+      "description": "a complete form is valid",
+      "given":  { "$.form.topic": "Heat pumps", "$.form.audience": "homeowners", "$.form.requestedBy": "Dana" },
+      "expect": { "$.form.missing": [], "$.form.valid": true }
+    },
+    {
+      "description": "a submitted form is locked",
+      "given":  { "$.form.topic": "Heat pumps", "$.form.audience": "homeowners", "$.form.requestedBy": "Dana", "$.form.submitted": true },
+      "expect": { "$.form.topic": { "$meta": { "readOnly": true } } }
+    }
+  ]
+}

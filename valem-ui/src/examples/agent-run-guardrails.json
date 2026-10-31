@@ -1,0 +1,188 @@
+{
+  "_name": "Agent Run Guardrails",
+  "_description": "Spend, step and time limits for an autonomous agent run, enforced by the model instead of by the agent's attention. The agent records each step before it runs it (reserve, then spend); cost per step, totals, remaining budget and the run mode (ok / warn / halt) are derived; a step that would break the hard budget or the step limit is refused, and a timer halts the run when its time is up.",
+  "id": "agent-run-guardrails",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "run": {
+        "type": "object",
+        "properties": {
+          "task":       { "type": "string" },
+          "maxCostUsd": { "type": "number", "minimum": 0 },
+          "maxSteps":   { "type": "integer", "minimum": 0 },
+          "timeLimitMs":{ "type": "integer", "minimum": 1000 },
+          "state":      { "type": "string", "enum": ["running", "timed_out", "finished"] },
+          "mode":       { "type": "string", "readOnly": true, "enum": ["ok", "warn", "halt", "finished"] }
+        }
+      },
+      "steps": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "kind":         { "type": "string", "enum": ["llm", "tool"] },
+            "model":        { "type": "string", "enum": ["small", "large"] },
+            "tool":         { "type": "string" },
+            "inputTokens":  { "type": "integer", "minimum": 0 },
+            "outputTokens": { "type": "integer", "minimum": 0 },
+            "costUsd":      { "type": "number", "readOnly": true }
+          }
+        }
+      },
+      "usage": {
+        "type": "object",
+        "readOnly": true,
+        "properties": {
+          "costUsd":      { "type": "number",  "readOnly": true },
+          "steps":        { "type": "integer", "readOnly": true },
+          "remainingUsd": { "type": "number",  "readOnly": true },
+          "pctOfBudget":  { "type": "number",  "readOnly": true }
+        }
+      }
+    }
+  },
+  "constants": {
+    "pricePerMTok": {
+      "small": { "input": 1,  "output": 5 },
+      "large": { "input": 15, "output": 75 }
+    },
+    "toolCallUsd": 0.01,
+    "warnAtPct": 80
+  },
+  "defaultValues": [
+    { "path": "$", "expr": "{ 'run': { 'maxCostUsd': 2, 'maxSteps': 40, 'timeLimitMs': 1800000, 'state': 'running' }, 'steps': [] }",
+      "description": "A run starts with a $2 budget, 40 steps and 30 minutes, and the clock starts at creation." }
+  ],
+  "derivations": [
+    { "path": "$.steps[*].costUsd",
+      "expr": "$parent.kind = 'tool' ? $const.toolCallUsd : ( $p := $lookup($const.pricePerMTok, $parent.model); $round(($parent.inputTokens * $p.input + $parent.outputTokens * $p.output) / 1000000, 6) )",
+      "description": "Illustrative prices per million tokens; 'small' and 'large' stand in for whatever tiers you use." },
+    { "path": "$.usage.costUsd",      "expr": "$round($sum($append([], steps.costUsd)), 6)" },
+    { "path": "$.usage.steps",        "expr": "$count(steps)" },
+    { "path": "$.usage.remainingUsd", "expr": "$round(run.maxCostUsd - usage.costUsd, 6)" },
+    { "path": "$.usage.pctOfBudget",  "expr": "run.maxCostUsd > 0 ? $round(100 * usage.costUsd / run.maxCostUsd, 1) : 100" },
+    { "path": "$.run.mode",
+      "expr": "run.state = 'finished' ? 'finished' : run.state = 'timed_out' or usage.steps >= run.maxSteps or usage.remainingUsd <= 0 ? 'halt' : usage.pctOfBudget >= $const.warnAtPct ? 'warn' : 'ok'",
+      "description": "The agent reads this one field before every step instead of re-checking three limits itself." }
+  ],
+  "constraints": [
+    { "id": "hard-budget",
+      "expr": "usage.costUsd <= run.maxCostUsd",
+      "message": "This step would exceed the run's budget; it was not recorded, so do not run it",
+      "policy": "rollback" },
+    { "id": "step-limit",
+      "expr": "usage.steps <= run.maxSteps",
+      "message": "The run has used all of its steps",
+      "policy": "rollback" },
+    { "id": "near-budget",
+      "expr": "usage.pctOfBudget < $const.warnAtPct",
+      "message": "Over 80% of the budget is spent",
+      "policy": "flag" }
+  ],
+  "effects": [
+    {
+      "id": "time-limit",
+      "executor": "timer",
+      "trigger": "run.state = 'running'",
+      "dedupeKey": "run.state & '/' & $string(run.timeLimitMs)",
+      "afterMs": "run.timeLimitMs",
+      "response": { "set": { "$.run.state": "'timed_out'", "$.run.maxSteps": "$count(steps)" } },
+      "statusPath": "$.io.timeLimit"
+    },
+    {
+      "id": "tell-agent-to-stop",
+      "executor": "caller",
+      "trigger": "run.mode = 'halt'",
+      "dedupeKey": "run.mode",
+      "emit": "run.halt",
+      "payload": { "reason": "run.state = 'timed_out' ? 'time limit' : usage.remainingUsd <= 0 ? 'budget' : 'step limit'", "spentUsd": "usage.costUsd" }
+    }
+  ],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "Run",
+        "layout": "vertical",
+        "components": [
+          { "id": "task", "type": "textField", "label": "Task", "bind": "$.run.task" },
+          {
+            "id": "limits", "type": "group", "layout": "horizontal",
+            "components": [
+              { "id": "maxCost",  "type": "currencyField", "label": "Budget", "bind": "$.run.maxCostUsd", "currency": "USD" },
+              { "id": "maxSteps", "type": "numericField",  "label": "Max steps", "bind": "$.run.maxSteps" }
+            ]
+          },
+          {
+            "id": "tiles", "type": "group", "layout": "horizontal",
+            "components": [
+              { "id": "spent",     "type": "statTile", "label": "Spent",     "bind": "$.usage.costUsd",      "format": "currency", "currency": "USD" },
+              { "id": "remaining", "type": "statTile", "label": "Remaining", "bind": "$.usage.remainingUsd", "format": "currency", "currency": "USD" },
+              { "id": "stepCount", "type": "statTile", "label": "Steps",     "bind": "$.usage.steps",        "format": "integer" },
+              { "id": "mode",      "type": "label",    "label": "Mode",      "bind": "$.run.mode" }
+            ]
+          },
+          { "id": "budgetBar", "type": "progressBar", "label": "Budget used", "bind": "$.usage.pctOfBudget", "min": 0, "max": 100 },
+          { "id": "timer", "type": "effectStatus", "label": "Time limit", "bind": "$.io.timeLimit", "effectId": "time-limit" },
+          { "id": "stepsTable", "type": "dataTable", "label": "Steps", "bind": "$.steps",
+            "tableColumns": [
+              { "field": "kind",         "header": "Kind" },
+              { "field": "model",        "header": "Model" },
+              { "field": "tool",         "header": "Tool" },
+              { "field": "inputTokens",  "header": "In",  "format": "integer" },
+              { "field": "outputTokens", "header": "Out", "format": "integer" },
+              { "field": "costUsd",      "header": "Cost", "format": "currency" }
+            ] }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "a fresh run is ok with the full budget",
+      "given": { "$.run.task": "Summarise the Q3 incidents" },
+      "expect": { "$.run.mode": "ok", "$.usage.costUsd": 0, "$.usage.remainingUsd": 2 }
+    },
+    {
+      "description": "token steps are priced from the table, tool calls at a flat rate",
+      "given": { "$.steps": [
+        { "kind": "llm", "model": "small", "inputTokens": 100000, "outputTokens": 20000 },
+        { "kind": "tool", "tool": "search" },
+        { "kind": "llm", "model": "large", "inputTokens": 10000, "outputTokens": 2000 }
+      ] },
+      "expect": {
+        "$.steps[0].costUsd": 0.2,
+        "$.steps[1].costUsd": 0.01,
+        "$.steps[2].costUsd": 0.3,
+        "$.usage.costUsd": 0.51,
+        "$.usage.remainingUsd": 1.49,
+        "$.usage.steps": 3,
+        "$.run.mode": "ok"
+      }
+    },
+    {
+      "description": "past 80% of the budget the run warns",
+      "given": { "$.steps": [
+        { "kind": "llm", "model": "large", "inputTokens": 60000, "outputTokens": 10000 }
+      ] },
+      "expect": { "$.usage.costUsd": 1.65, "$.usage.pctOfBudget": 82.5, "$.run.mode": "warn" }
+    },
+    {
+      "description": "the last allowed step halts the run",
+      "given": { "$.run.maxSteps": 2, "$.steps": [
+        { "kind": "tool", "tool": "search" },
+        { "kind": "tool", "tool": "fetch" }
+      ] },
+      "expect": { "$.run.mode": "halt" }
+    },
+    {
+      "description": "a timed-out run halts",
+      "given": { "$.run.state": "timed_out" },
+      "expect": { "$.run.mode": "halt" }
+    }
+  ]
+}
