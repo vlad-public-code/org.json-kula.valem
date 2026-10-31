@@ -99,6 +99,15 @@ class ExpressionPathExtractorTest {
         assertThat(paths).anyMatch(p -> p.contains("status"));
     }
 
+    @Test
+    void predicate_field_refs_are_element_fields_of_the_filtered_array() {
+        // A predicate runs with each element as its context, so "status" here is
+        // order.items[*].status, never a root-level "$.status".
+        Set<String> paths = extract("order.items[status = 'active'].id");
+        assertThat(paths).contains("$.order.items[*].status", "$.order.items[*].id");
+        assertThat(paths).doesNotContain("$.status");
+    }
+
     // ── Nested paths ──────────────────────────────────────────────────────────
 
     @Test

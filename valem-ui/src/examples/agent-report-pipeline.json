@@ -1,0 +1,606 @@
+{
+  "_name": "Agent Report Pipeline",
+  "_description": "An AI agent workflow kept as reactive state, not as an event log: brief -> research -> draft -> review -> human approval. Every artifact records what it was built from, so editing the brief makes everything downstream stale on its own, the next step is derived from state, the step that should run is an effect whose trigger is that derived state, and the approval gate is a constraint the agent cannot talk its way past.",
+  "id": "agent-report-pipeline",
+  "version": "1.0.0",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "brief": {
+        "type": "object",
+        "description": "The only input a person writes. Everything else is an artifact produced from it.",
+        "properties": {
+          "topic": {
+            "type": "string"
+          },
+          "audience": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string",
+            "readOnly": true,
+            "description": "Derived fingerprint of the brief; artifacts record the key they were built from."
+          }
+        }
+      },
+      "research": {
+        "type": "object",
+        "properties": {
+          "notes": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "fromBrief": {
+            "type": "string",
+            "description": "brief.key this research was produced for."
+          }
+        }
+      },
+      "draft": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "fromBrief": {
+            "type": "string",
+            "description": "brief.key this draft was written for."
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Bumped on every (re)write of the draft."
+          }
+        }
+      },
+      "review": {
+        "type": "object",
+        "properties": {
+          "score": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10
+          },
+          "comments": {
+            "type": "string"
+          },
+          "ofDraft": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "draft.version this review is about."
+          }
+        }
+      },
+      "approval": {
+        "type": "object",
+        "properties": {
+          "approvedDraft": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "draft.version a person signed off."
+          },
+          "by": {
+            "type": "string"
+          }
+        }
+      },
+      "status": {
+        "type": "object",
+        "readOnly": true,
+        "properties": {
+          "researchFresh": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "draftFresh": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "reviewFresh": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "reviewPassed": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "approved": {
+            "type": "boolean",
+            "readOnly": true
+          },
+          "next": {
+            "type": "string",
+            "readOnly": true
+          },
+          "progressPct": {
+            "type": "number",
+            "readOnly": true
+          }
+        }
+      }
+    }
+  },
+  "constants": {
+    "passScore": 8,
+    "maxDrafts": 3
+  },
+  "derivations": [
+    {
+      "path": "$.brief.key",
+      "expr": "$exists(brief.topic) ? brief.topic & ' | for: ' & $string(brief.audience) : null",
+      "description": "The brief's identity. A reactive fingerprint instead of a manually bumped revision: change any brief field and every artifact built from the old key is stale."
+    },
+    {
+      "path": "$.status.researchFresh",
+      "expr": "$exists(brief.topic) and research.fromBrief = brief.key"
+    },
+    {
+      "path": "$.status.draftFresh",
+      "expr": "status.researchFresh = true and draft.fromBrief = brief.key",
+      "description": "Freshness is transitive by construction: a draft is only fresh if the research under it is."
+    },
+    {
+      "path": "$.status.reviewFresh",
+      "expr": "status.draftFresh = true and $exists(review.ofDraft) and review.ofDraft = draft.version"
+    },
+    {
+      "path": "$.status.reviewPassed",
+      "expr": "status.reviewFresh = true and review.score >= $const.passScore"
+    },
+    {
+      "path": "$.status.approved",
+      "expr": "status.reviewPassed = true and $exists(approval.approvedDraft) and approval.approvedDraft = draft.version"
+    },
+    {
+      "path": "$.status.next",
+      "expr": "$not($exists(brief.topic)) ? 'write-brief' : status.researchFresh != true ? 'research' : status.draftFresh != true ? 'draft' : status.reviewFresh != true ? 'review' : status.reviewPassed != true ? (draft.version < $const.maxDrafts ? 'revise' : 'escalate') : status.approved != true ? 'approve' : 'done'",
+      "description": "The whole orchestration decision, as one pure function of the artifacts. No event says 'research finished'; the state says research is fresh."
+    },
+    {
+      "path": "$.status.progressPct",
+      "expr": "$round(100 * $count([status.researchFresh, status.draftFresh, status.reviewPassed, status.approved][$ = true]) / 4)"
+    }
+  ],
+  "constraints": [
+    {
+      "id": "approval-needs-passing-review",
+      "expr": "$not($exists(approval.approvedDraft)) or approval.approvedDraft != draft.version or (review.ofDraft = draft.version and review.score >= $const.passScore)",
+      "message": "A draft can only be approved after a review of that exact version scored at least the pass mark",
+      "policy": "rollback"
+    },
+    {
+      "id": "review-targets-existing-draft",
+      "expr": "$not($exists(review.ofDraft)) or ($exists(draft.version) and review.ofDraft <= draft.version)",
+      "message": "A review must refer to a draft version that exists",
+      "policy": "rollback"
+    },
+    {
+      "id": "draft-needs-research",
+      "expr": "$not($exists(draft.text)) or $exists(research.notes)",
+      "message": "A draft needs research under it",
+      "policy": "rollback"
+    }
+  ],
+  "effects": [
+    {
+      "id": "do-research",
+      "executor": "llm",
+      "trigger": "status.next = 'research'",
+      "dedupeKey": "brief.key",
+      "prompt": "'Research this topic for the audience given. Reply with JSON {\"notes\": string, \"sources\": [string]}. Topic: ' & brief.topic & '. Audience: ' & $string(brief.audience)",
+      "responseSchema": {
+        "type": "object",
+        "properties": {
+          "notes": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "notes"
+        ]
+      },
+      "response": {
+        "set": {
+          "$.research.notes": "$response.notes",
+          "$.research.sources": "$response.sources",
+          "$.research.fromBrief": "brief.key"
+        }
+      },
+      "statusPath": "$.io.research"
+    },
+    {
+      "id": "write-draft",
+      "executor": "llm",
+      "trigger": "status.next = 'draft' or status.next = 'revise'",
+      "dedupeKey": "brief.key & '#' & $string(draft.version)",
+      "prompt": "'Write a short report on ' & brief.topic & ' for ' & $string(brief.audience) & '. Use these notes: ' & research.notes & (status.next = 'revise' ? '. Address this review feedback: ' & $string(review.comments) : '') & '. Reply with JSON {\"text\": string}.'",
+      "responseSchema": {
+        "type": "object",
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ]
+      },
+      "response": {
+        "set": {
+          "$.draft.text": "$response.text",
+          "$.draft.fromBrief": "brief.key",
+          "$.draft.version": "$exists(draft.version) ? draft.version + 1 : 1"
+        }
+      },
+      "statusPath": "$.io.draft"
+    },
+    {
+      "id": "review-draft",
+      "executor": "llm",
+      "trigger": "status.next = 'review'",
+      "dedupeKey": "draft.version",
+      "prompt": "'Review this report for the audience ' & $string(brief.audience) & '. Score it 1-10 and give concrete comments. Reply with JSON {\"score\": integer, \"comments\": string}. Report: ' & draft.text",
+      "responseSchema": {
+        "type": "object",
+        "properties": {
+          "score": {
+            "type": "integer"
+          },
+          "comments": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "score",
+          "comments"
+        ]
+      },
+      "response": {
+        "set": {
+          "$.review.score": "$response.score",
+          "$.review.comments": "$response.comments",
+          "$.review.ofDraft": "draft.version"
+        }
+      },
+      "statusPath": "$.io.review"
+    },
+    {
+      "id": "ask-for-approval",
+      "executor": "caller",
+      "trigger": "status.next = 'approve'",
+      "dedupeKey": "draft.version",
+      "emit": "report.awaitingApproval",
+      "payload": {
+        "draftVersion": "draft.version",
+        "score": "review.score"
+      }
+    },
+    {
+      "id": "escalate-to-human",
+      "executor": "caller",
+      "trigger": "status.next = 'escalate'",
+      "dedupeKey": "draft.version",
+      "emit": "report.needsHuman",
+      "payload": {
+        "message": "'Draft ' & $string(draft.version) & ' still scores ' & $string(review.score) & ' after the revision budget'"
+      }
+    }
+  ],
+  "viewDefinition": {
+    "renderer": "builtin",
+    "defaultView": "main",
+    "views": [
+      {
+        "id": "main",
+        "label": "Pipeline",
+        "layout": "vertical",
+        "components": [
+          {
+            "id": "topic",
+            "type": "textField",
+            "label": "Topic",
+            "bind": "$.brief.topic",
+            "placeholder": "e.g. Heat pumps for older houses"
+          },
+          {
+            "id": "audience",
+            "type": "textField",
+            "label": "Audience",
+            "bind": "$.brief.audience",
+            "placeholder": "e.g. homeowners"
+          },
+          {
+            "id": "sep1",
+            "type": "separatorLine"
+          },
+          {
+            "id": "statusRow",
+            "type": "group",
+            "layout": "horizontal",
+            "components": [
+              {
+                "id": "next",
+                "type": "label",
+                "label": "Next step",
+                "bind": "$.status.next"
+              },
+              {
+                "id": "progress",
+                "type": "progressBar",
+                "label": "Progress",
+                "bind": "$.status.progressPct",
+                "min": 0,
+                "max": 100
+              }
+            ]
+          },
+          {
+            "id": "freshness",
+            "type": "summaryList",
+            "label": "Artifacts",
+            "items": [
+              {
+                "label": "Research is current",
+                "bind": "$.status.researchFresh"
+              },
+              {
+                "label": "Draft is current",
+                "bind": "$.status.draftFresh"
+              },
+              {
+                "label": "Draft version",
+                "bind": "$.draft.version",
+                "format": "integer"
+              },
+              {
+                "label": "Review score",
+                "bind": "$.review.score",
+                "format": "integer"
+              },
+              {
+                "label": "Review passed",
+                "bind": "$.status.reviewPassed"
+              },
+              {
+                "label": "Approved",
+                "bind": "$.status.approved"
+              }
+            ]
+          },
+          {
+            "id": "researchIo",
+            "type": "effectStatus",
+            "label": "Research step",
+            "bind": "$.io.research",
+            "effectId": "do-research"
+          },
+          {
+            "id": "draftIo",
+            "type": "effectStatus",
+            "label": "Draft step",
+            "bind": "$.io.draft",
+            "effectId": "write-draft"
+          },
+          {
+            "id": "reviewIo",
+            "type": "effectStatus",
+            "label": "Review step",
+            "bind": "$.io.review",
+            "effectId": "review-draft"
+          },
+          {
+            "id": "sep2",
+            "type": "separatorLine"
+          },
+          {
+            "id": "draftText",
+            "type": "textAreaField",
+            "label": "Draft",
+            "bind": "$.draft.text",
+            "rows": 8
+          },
+          {
+            "id": "reviewComments",
+            "type": "textAreaField",
+            "label": "Review comments",
+            "bind": "$.review.comments",
+            "rows": 3
+          },
+          {
+            "id": "approvedDraft",
+            "type": "numericField",
+            "label": "Approve draft version",
+            "bind": "$.approval.approvedDraft"
+          },
+          {
+            "id": "approver",
+            "type": "textField",
+            "label": "Approved by",
+            "bind": "$.approval.by"
+          }
+        ]
+      }
+    ]
+  },
+  "tests": [
+    {
+      "description": "an empty pipeline asks for a brief",
+      "given": {
+        "$.brief.audience": "homeowners"
+      },
+      "expect": {
+        "$.status.next": "write-brief",
+        "$.status.progressPct": 0
+      }
+    },
+    {
+      "description": "a new brief makes research the next step",
+      "given": {
+        "$.brief.topic": "Heat pumps",
+        "$.brief.audience": "homeowners"
+      },
+      "expect": {
+        "$.brief.key": "Heat pumps | for: homeowners",
+        "$.status.next": "research",
+        "$.status.researchFresh": false
+      }
+    },
+    {
+      "description": "fresh research, no draft yet -> draft",
+      "given": {
+        "$.brief.topic": "Heat pumps",
+        "$.brief.audience": "homeowners",
+        "$.research.notes": "COP 3-4 in mild climates",
+        "$.research.fromBrief": "Heat pumps | for: homeowners"
+      },
+      "expect": {
+        "$.status.researchFresh": true,
+        "$.status.next": "draft",
+        "$.status.draftFresh": false,
+        "$.status.progressPct": 25
+      }
+    },
+    {
+      "description": "a fresh draft with no review -> review",
+      "given": {
+        "$.brief.topic": "Heat pumps",
+        "$.brief.audience": "homeowners",
+        "$.research.notes": "COP 3-4 in mild climates",
+        "$.research.fromBrief": "Heat pumps | for: homeowners",
+        "$.draft.text": "Heat pumps ...",
+        "$.draft.fromBrief": "Heat pumps | for: homeowners",
+        "$.draft.version": 1
+      },
+      "expect": {
+        "$.status.draftFresh": true,
+        "$.status.next": "review"
+      }
+    },
+    {
+      "description": "a passing review of the current draft -> waits for a person to approve",
+      "given": {
+        "$.brief.topic": "Heat pumps",
+        "$.brief.audience": "homeowners",
+        "$.research.notes": "COP 3-4 in mild climates",
+        "$.research.fromBrief": "Heat pumps | for: homeowners",
+        "$.draft.text": "Heat pumps ...",
+        "$.draft.fromBrief": "Heat pumps | for: homeowners",
+        "$.draft.version": 1,
+        "$.review.score": 9,
+        "$.review.ofDraft": 1
+      },
+      "expect": {
+        "$.status.reviewPassed": true,
+        "$.status.next": "approve",
+        "$.status.progressPct": 75
+      }
+    },
+    {
+      "description": "approved current draft -> done",
+      "given": {
+        "$.brief.topic": "Heat pumps",
+        "$.brief.audience": "homeowners",
+        "$.research.notes": "COP 3-4 in mild climates",
+        "$.research.fromBrief": "Heat pumps | for: homeowners",
+        "$.draft.text": "Heat pumps ...",
+        "$.draft.fromBrief": "Heat pumps | for: homeowners",
+        "$.draft.version": 1,
+        "$.review.score": 9,
+        "$.review.ofDraft": 1,
+        "$.approval.approvedDraft": 1,
+        "$.approval.by": "Dana"
+      },
+      "expect": {
+        "$.status.approved": true,
+        "$.status.next": "done",
+        "$.status.progressPct": 100
+      }
+    },
+    {
+      "description": "a failing review within the revision budget -> revise",
+      "given": {
+        "$.brief.topic": "Heat pumps",
+        "$.brief.audience": "homeowners",
+        "$.research.notes": "COP 3-4 in mild climates",
+        "$.research.fromBrief": "Heat pumps | for: homeowners",
+        "$.draft.text": "Heat pumps ...",
+        "$.draft.fromBrief": "Heat pumps | for: homeowners",
+        "$.draft.version": 1,
+        "$.review.score": 5,
+        "$.review.ofDraft": 1
+      },
+      "expect": {
+        "$.status.reviewPassed": false,
+        "$.status.next": "revise"
+      }
+    },
+    {
+      "description": "still failing after the last allowed draft -> escalate to a person",
+      "given": {
+        "$.brief.topic": "Heat pumps",
+        "$.brief.audience": "homeowners",
+        "$.research.notes": "COP 3-4 in mild climates",
+        "$.research.fromBrief": "Heat pumps | for: homeowners",
+        "$.draft.text": "Heat pumps ...",
+        "$.draft.fromBrief": "Heat pumps | for: homeowners",
+        "$.draft.version": 3,
+        "$.review.score": 6,
+        "$.review.ofDraft": 3
+      },
+      "expect": {
+        "$.status.next": "escalate"
+      }
+    },
+    {
+      "description": "a review of an older draft does not count for the new one",
+      "given": {
+        "$.brief.topic": "Heat pumps",
+        "$.brief.audience": "homeowners",
+        "$.research.notes": "COP 3-4 in mild climates",
+        "$.research.fromBrief": "Heat pumps | for: homeowners",
+        "$.draft.text": "Heat pumps ...",
+        "$.draft.fromBrief": "Heat pumps | for: homeowners",
+        "$.draft.version": 2,
+        "$.review.score": 9,
+        "$.review.ofDraft": 1
+      },
+      "expect": {
+        "$.status.reviewFresh": false,
+        "$.status.next": "review"
+      }
+    },
+    {
+      "description": "editing the brief after approval makes every artifact stale at once",
+      "given": {
+        "$.brief.topic": "Heat pumps",
+        "$.brief.audience": "installers",
+        "$.research.notes": "COP 3-4 in mild climates",
+        "$.research.fromBrief": "Heat pumps | for: homeowners",
+        "$.draft.text": "Heat pumps ...",
+        "$.draft.fromBrief": "Heat pumps | for: homeowners",
+        "$.draft.version": 1,
+        "$.review.score": 9,
+        "$.review.ofDraft": 1,
+        "$.approval.approvedDraft": 1
+      },
+      "expect": {
+        "$.status.researchFresh": false,
+        "$.status.draftFresh": false,
+        "$.status.approved": false,
+        "$.status.next": "research",
+        "$.status.progressPct": 0
+      }
+    }
+  ]
+}

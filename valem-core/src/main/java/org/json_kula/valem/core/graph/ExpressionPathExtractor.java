@@ -330,8 +330,10 @@ public final class ExpressionPathExtractor {
                 return sourcePath;
             }
             default -> {
-                // items[type = "x"] — walk predicate for its field refs
-                walk(pe.predicate(), "", parentPrefix, out);
+                // items[type = "x"] — a predicate is evaluated with each element as its
+                // context, so its field refs are element fields: "$.items[*].type", not a
+                // root-level "$.type" that no derivation or write ever produces.
+                walk(pe.predicate(), sourcePath + "[*]", parentPrefix, out);
                 return sourcePath + "[*]";
             }
         }

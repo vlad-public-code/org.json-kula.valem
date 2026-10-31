@@ -68,6 +68,25 @@ Together the two featured models split the teaching surface: insurance-quote dem
 meta-derivation and a rollback constraint; benefits-eligibility demonstrates a soft-flag constraint
 and household-driven threshold scaling.
 
+## Featured: agent workflows as reactive state
+
+Four models that keep an AI agent workflow as **state the engine keeps consistent**, not as a log
+of events an orchestrator has to replay correctly. Agents write inputs and artifacts; what is stale,
+what runs next, and what is allowed are derived from that state. The pattern is described in
+[Structured state for AI agents](agent-state.md#workflow-state-not-workflow-events).
+
+| File | Demonstrates |
+|---|---|
+| `agent-report-pipeline.json` | brief → research → draft → review → human approval. Each artifact records the brief fingerprint or draft version it was built from, so **editing the brief makes every artifact downstream stale at once**. `status.next` is one derivation over the artifacts; each step is an `llm` effect whose trigger is that derived state (a stale in-flight result is superseded, not applied); approval is a rollback constraint that needs a passing review of that exact draft; a revision budget escalates to a person. |
+| `agent-task-board.json` | A plan that several agents work through, held **as data** (`tasks[*].dependsOn`), so an agent can extend it at run time without a spec change. Per-task `waitingOn` / `ready`, progress, completion, and **stall detection** (a failed dependency or a cycle) are derived; constraints refuse a claim or a completion the dependencies do not allow, a duplicate id, or a dangling dependency. |
+| `agent-run-guardrails.json` | Spend, step and time limits for an autonomous run. The agent records a step before running it; per-step cost (from a `$const` price table), totals and the run `mode` (`ok` / `warn` / `halt`) are derived; a step that would break the budget or the step limit is **refused**. The time-limit `timer` freezes the step budget, so the same constraint stops the run. |
+| `agent-step-brief-form.json` | **A workflow step that is its own model**: the intake form for the report pipeline. It validates itself, locks on submit, and hands the brief to `agent-report-pipeline` through a `server` effect **write-link** (`target: { ref, path }`); the pipeline's reply folds back. Create the pipeline first (a link to an unregistered model is rejected unless `valem.composition.lazy-binding` is on). |
+
+`AgentWorkflowExamplesTest` (valem-core) drives the first three mutation by mutation, asserting which
+effect the engine dispatches next and which writes the gates refuse;
+[`AgentStepFormLinkExampleTest`](https://github.com/vlad-public-code/org.json-kula.valem/blob/main/valem-api/src/test/java/org/json_kula/valem/api/composition/AgentStepFormLinkExampleTest.java)
+(valem-api) submits the form and watches the pipeline start through the link.
+
 ## The rest of the gallery
 
 | File | Demonstrates |
