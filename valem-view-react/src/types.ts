@@ -315,6 +315,8 @@ export interface DataChartSpec extends ComponentSpecBase {
 export interface KeyValueItemSpec {
   label?: string;
   bind?: string;
+  /** Alias for `bind`; `bind` wins when both are set. */
+  value?: string;
   text?: string;
   format?: string;
   currency?: string;

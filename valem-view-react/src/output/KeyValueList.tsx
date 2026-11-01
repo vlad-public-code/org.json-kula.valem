@@ -38,12 +38,14 @@ export function KeyValueList({ component: c }: BaseComponentProps<KeyValueListSp
 }
 
 function Row({ item, state, testId }: { item: KeyValueItemSpec; state: ModelState; testId: string }) {
-  const bindPath = item.bind?.replace(/^\$\./, '');
+  // `value` is an alias for `bind` (the server's KeyValueItemSpec normalises it the same way).
+  const bind = item.bind ?? item.value;
+  const bindPath = bind?.replace(/^\$\./, '');
   const bound = bindPath ? getByPath(state, bindPath) : undefined;
   // Mirrors the server: bind wins, so a row never shows two different things depending on which
   // field the reader happened to look at.
-  const text = useJSONataText(item.bind ? undefined : item.text, state);
-  const display = item.bind ? formatValue(bound, item.format, item.currency) : text ?? '';
+  const text = useJSONataText(bind ? undefined : item.text, state);
+  const display = bind ? formatValue(bound, item.format, item.currency) : text ?? '';
 
   return (
     <>

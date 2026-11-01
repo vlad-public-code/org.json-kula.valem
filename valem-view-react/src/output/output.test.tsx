@@ -29,6 +29,18 @@ describe('KeyValueList', () => {
     expect(screen.getByTestId('kv-row-1')).toHaveTextContent('£');
   });
 
+  it('reads `value` as an alias for `bind`, with bind winning when both are set', () => {
+    renderComponent(
+      spec({ items: [
+        { label: 'Total', value: '$.total' },
+        { label: 'Name', bind: '$.name', value: '$.total' },
+      ] }),
+      { state: { total: 1440, name: 'Alice' } },
+    );
+    expect(screen.getByTestId('kv-row-0')).toHaveTextContent('1440');
+    expect(screen.getByTestId('kv-row-1')).toHaveTextContent('Alice');
+  });
+
   it('shows a dash for a missing path rather than "undefined"', () => {
     renderComponent(spec({ items: [{ label: 'Nope', bind: '$.absent' }] }), { state: {} });
     expect(screen.getByTestId('kv-row-0')).toHaveTextContent('—');
