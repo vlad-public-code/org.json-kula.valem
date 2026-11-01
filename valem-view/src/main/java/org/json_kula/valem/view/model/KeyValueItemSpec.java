@@ -24,13 +24,23 @@ public record KeyValueItemSpec(
         String format,
         String currency
 ) {
+    public static KeyValueItemSpec of(String label, String bind, JsonNode text, String format, String currency) {
+        return new KeyValueItemSpec(label, bind, text, format, currency);
+    }
+
+    /**
+     * {@code value} is accepted as an alias for {@code bind}: the evaluated row reports its resolved
+     * result as {@code value}, so authors naturally write {@code "value": "$.total"} in the spec too —
+     * and before the alias such a row rendered as an empty dash. {@code bind} wins when both are set.
+     */
     @JsonCreator
     public static KeyValueItemSpec of(
             @JsonProperty("label")    String label,
             @JsonProperty("bind")     String bind,
+            @JsonProperty("value")    String value,
             @JsonProperty("text")     JsonNode text,
             @JsonProperty("format")   String format,
             @JsonProperty("currency") String currency) {
-        return new KeyValueItemSpec(label, bind, text, format, currency);
+        return new KeyValueItemSpec(label, bind != null ? bind : value, text, format, currency);
     }
 }

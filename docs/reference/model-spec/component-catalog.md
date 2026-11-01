@@ -582,6 +582,7 @@ model most often ends on. Rows come from `items`, **not** from `bind`.
 |---|---|
 | `label` | Row caption |
 | `bind` | Path to read the value from (the usual choice) |
+| `value` | Alias for `bind` — a path, not an expression or literal. `bind` wins when both are set |
 | `text` | JSONata expression, for a row with no single path behind it. Subject to the **`$` rule** — needs a `$` to evaluate; a plain string is shown literally |
 | `format` | `"currency"`, `"percent"`, `"number"`, `"integer"` |
 | `currency` | ISO-4217 code. Per **row**, because a summary legitimately mixes them — a quoted price beside its converted equivalent. A `currency` format with no code falls back to the renderer's default |

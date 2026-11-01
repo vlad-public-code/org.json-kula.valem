@@ -244,6 +244,18 @@ class ViewEvaluatorComponentTypesTest {
     }
 
     @Test
+    void value_is_an_alias_for_bind_and_bind_wins_when_both_are_set() throws Exception {
+        // Specs mirror the evaluated row's `value` field; before the alias such a row rendered "—".
+        KeyValueItemSpec alias = MAPPER.readValue("{\"label\":\"Total\",\"value\":\"$.total\"}", KeyValueItemSpec.class);
+        KeyValueItemSpec both = MAPPER.readValue("{\"label\":\"Name\",\"bind\":\"$.name\",\"value\":\"$.total\"}", KeyValueItemSpec.class);
+        assertThat(alias.bind()).isEqualTo("$.total");
+
+        List<EvaluatedKeyValueItem> rows = ((EvaluatedKeyValueList) eval(keyValueList(alias, both))).items();
+        assertThat(rows.get(0).value().doubleValue()).isEqualTo(1250.5);
+        assertThat(rows.get(1).value().asText()).isEqualTo("Alice");
+    }
+
+    @Test
     void a_missing_bound_path_yields_a_null_value_rather_than_failing() {
         KeyValueListSpec spec = keyValueList(KeyValueItemSpec.of("Nope", "$.absent", null, null, null));
         assertThat(((EvaluatedKeyValueList) eval(spec)).items().getFirst().value()).isNull();
