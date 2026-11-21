@@ -95,6 +95,33 @@ model whose state *is* the answer:
 
 Working examples of each are in the [gallery](examples-gallery.md#featured-agent-workflows-as-reactive-state).
 
+### Walkthrough: an agent under guardrails
+
+The `agent-run-guardrails` example gives a run a budget ($2), a step limit (40) and a time limit.
+Per-step cost, the total, the remaining budget and the run `mode` (`ok` / `warn` / `halt` /
+`finished`) are derivations; going over the budget or the step limit is a rollback constraint. The
+agent's whole loop is: read `$.run.mode`, record the step it is about to run, read back the result.
+It never adds up a cost.
+
+Over MCP, the agent calls `create_model` with the spec, then one `patch_model` per step
+(`{"op": "add", "path": "/steps/-", "value": {"kind": "llm", "model": "large", "inputTokens": 20000, "outputTokens": 4000}}`):
+
+| Who | Writes | Model answers |
+|---|---|---|
+| Agent | 3 cheap steps (small-model plan, search, fetch) | spent $0.05, 3 steps, `ok` |
+| Agent | large-model analysis (40k in, 8k out) | spent $1.25 (62.5%), `ok` |
+| Agent | large-model draft (20k in, 4k out) | spent $1.85 (92.5%), `warn`; `near-budget` flagged |
+| Agent | another large pass ($0.60) | **refused** by `hard-budget`: nothing recorded, so the agent does not run it |
+| Agent | the same pass on the small model ($0.04) | spent $1.89, `warn` |
+| Person | `$.run.maxSteps` = 6 | `halt`; the `caller` effect emits `run.halt` with reason `step limit` |
+| Person | budget $3, 10 steps | `ok` (63%) |
+| Agent | large-model fact check, then `$.run.state` = `finished` | spent $2.49 (83%), `finished` |
+
+The person's two writes are the same mutations an edit on the model's card makes, so watching and
+steering the run needs no extra UI. `explain` on `$.usage.costUsd` lists every evaluation, including
+the $2.45 total of the refused step that was rolled back. The sequence is replayed as a test in
+`valem-mcp` (`AgentGuardrailsWalkthroughTest`).
+
 Limits of the pattern today:
 
 - **Cross-model links are effects, not dependencies.** A parent cannot derive from a child's
