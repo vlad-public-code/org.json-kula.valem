@@ -70,6 +70,70 @@ live registry.
 That inverts the usual reliability problem. The agent is allowed to be creative; the runtime decides
 what is admissible.
 
+## Workflow state, not workflow events
+
+The same mechanism scales from one agent's scratch state to a whole multi-step workflow. Instead
+of an orchestrator that listens for "research finished" and decides what to do, the workflow is a
+model whose state *is* the answer:
+
+- **Artifacts record their inputs.** A draft stores the brief fingerprint it was written for; a
+  review stores the draft version it scored. Freshness is a derivation, so changing an input makes
+  everything built from it stale in one cycle, with no invalidation events to get wrong.
+- **The next step is derived.** One expression over the artifacts says what should happen next.
+  Each step is an [effect](workflows-and-effects.md) whose trigger is that derived state: an `llm`
+  effect for a model call, a `caller` effect to hand work to an outside agent or a person, a
+  `timer` for deadlines. Because fold-backs are compare-and-swap, a step whose input changed while
+  it ran is superseded instead of overwriting newer work.
+- **Gates are constraints.** "Approve only after a passing review of this exact version", "claim a
+  task only when its dependencies are done", "no step past the budget" are rollback constraints.
+  The agent gets a structured refusal; it does not have to remember the rule.
+- **Plans can be data.** A task list with `dependsOn` lets agents grow the plan at run time while
+  readiness, progress and stalls (a failed dependency or a cycle) stay derived.
+- **A step can be its own model.** A form that collects a step's input, or a whole sub-workflow,
+  is a separate model that hands its result to the parent through a write-link when its own
+  derived "done" becomes true. To the parent, it is one more artifact.
+
+Working examples of each are in the [gallery](examples-gallery.md#featured-agent-workflows-as-reactive-state).
+
+### Walkthrough: an agent under guardrails
+
+The `agent-run-guardrails` example gives a run a budget ($2), a step limit (40) and a time limit.
+Per-step cost, the total, the remaining budget and the run `mode` (`ok` / `warn` / `halt` /
+`finished`) are derivations; going over the budget or the step limit is a rollback constraint. The
+agent's whole loop is: read `$.run.mode`, record the step it is about to run, read back the result.
+It never adds up a cost.
+
+Over MCP, the agent calls `create_model` with the spec, then one `patch_model` per step
+(`{"op": "add", "path": "/steps/-", "value": {"kind": "llm", "model": "large", "inputTokens": 20000, "outputTokens": 4000}}`):
+
+| Who | Writes | Model answers |
+|---|---|---|
+| Agent | 3 cheap steps (small-model plan, search, fetch) | spent $0.05, 3 steps, `ok` |
+| Agent | large-model analysis (40k in, 8k out) | spent $1.25 (62.5%), `ok` |
+| Agent | large-model draft (20k in, 4k out) | spent $1.85 (92.5%), `warn`; `near-budget` flagged |
+| Agent | another large pass ($0.60) | **refused** by `hard-budget`: nothing recorded, so the agent does not run it |
+| Agent | the same pass on the small model ($0.04) | spent $1.89, `warn` |
+| Person | `$.run.maxSteps` = 6 | `halt`; the `caller` effect emits `run.halt` with reason `step limit` |
+| Person | budget $3, 10 steps | `ok` (63%) |
+| Agent | large-model fact check, then `$.run.state` = `finished` | spent $2.49 (83%), `finished` |
+
+The person's two writes are the same mutations an edit on the model's card makes, so watching and
+steering the run needs no extra UI. `explain` on `$.usage.costUsd` lists every evaluation, including
+the $2.45 total of the refused step that was rolled back. The sequence is replayed as a test in
+`valem-mcp` (`AgentGuardrailsWalkthroughTest`).
+
+Limits of the pattern today:
+
+- **Cross-model links are effects, not dependencies.** A parent cannot derive from a child's
+  field; the child pushes its result (write-link) or the parent pulls once when a trigger fires
+  (read-link). Each link has a status machine, not a dependency edge.
+- **A link targets an existing model.** Nothing in a spec creates a fresh step model per run; an
+  agent or the shell creates it (for example by branching a template) before the link fires.
+- **The `llm` effect is one completion, not an agent loop.** Multi-turn work with tools happens in
+  an outside agent that writes its output back, or in a custom effect kind.
+- **No identity.** Constraints can require that an approval names an approver, but not that the
+  caller is that person: any caller with model access can write any field.
+
 ## Worth knowing before you build on it
 
 - There is **no per-field access control**. Any caller with model access can read and mutate every
